@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// web-test run v1.3 — CLI runner for 1C web client automation
+// web-test run v1.4 — CLI runner for 1C web client automation
 // Source: https://github.com/Nikolay-Shirokov/cc-1c-skills
 /**
  * CLI runner for 1C web client automation.
@@ -14,11 +14,12 @@
  *   node src/run.mjs shot [file]            — take screenshot
  *   node src/run.mjs stop                   — logout + close browser
  *   node src/run.mjs status                 — check session
+ *   node src/run.mjs test [url] <dir|file>  — run regression tests
  */
 import http from 'http';
 import * as browser from './browser.mjs';
-import { readFileSync, writeFileSync, unlinkSync, existsSync } from 'fs';
-import { resolve, dirname } from 'path';
+import { readFileSync, writeFileSync, unlinkSync, existsSync, readdirSync } from 'fs';
+import { resolve, dirname, basename, relative } from 'path';
 import { fileURLToPath } from 'url';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
@@ -35,6 +36,7 @@ switch (cmd) {
   case 'shot':   await cmdShot(args[0]); break;
   case 'stop':   await cmdStop(); break;
   case 'status': cmdStatus(); break;
+  case 'test':   await cmdTest(rawArgs); break;
   default:       usage();
 }
 
@@ -101,6 +103,72 @@ async function handleRequest(req, res) {
   }
 }
 
+// ============================================================
+// buildContext: assemble browser API with error wrapping
+// ============================================================
+
+function buildContext({ noRecord = false } = {}) {
+  const ctx = {};
+  for (const [k, v] of Object.entries(browser)) {
+    if (k !== 'default') ctx[k] = v;
+  }
+  ctx.writeFileSync = writeFileSync;
+  ctx.readFileSync = readFileSync;
+
+  // --no-record: stub recording/narration functions to return safe defaults
+  if (noRecord) {
+    const noop = async () => {};
+    ctx.startRecording = noop;
+    ctx.stopRecording = async () => ({ file: null, duration: 0, size: 0 });
+    ctx.addNarration = async () => ({ file: null, duration: 0, size: 0, captions: 0 });
+    for (const fn of ['showCaption', 'hideCaption']) {
+      ctx[fn] = noop;
+    }
+    ctx.isRecording = () => false;
+    ctx.getCaptions = () => [];
+  }
+
+  // Wrap action functions to auto-detect 1C errors (modal, balloon)
+  // and stop execution immediately with diagnostic info
+  const ACTION_FNS = [
+    'clickElement', 'fillFields', 'fillField', 'selectValue', 'fillTableRow',
+    'deleteTableRow', 'openCommand', 'navigateSection', 'navigateLink', 'openFile',
+    'closeForm', 'filterList', 'unfilterList'
+  ];
+  for (const name of ACTION_FNS) {
+    if (typeof ctx[name] !== 'function') continue;
+    const orig = ctx[name];
+    ctx[name] = async (...args) => {
+      const result = await orig(...args);
+      const errors = result?.errors;
+      if (errors?.modal || errors?.balloon) {
+        // Screenshot while the error modal is still visible (before fetchErrorStack closes it)
+        let errorShot;
+        try {
+          const png = await ctx.screenshot();
+          errorShot = resolve(__dirname, '..', 'error-shot.png');
+          writeFileSync(errorShot, png);
+        } catch {}
+        // Try to fetch call stack for modal errors before throwing
+        let stack = null;
+        if (errors?.modal && typeof ctx.fetchErrorStack === 'function') {
+          try {
+            stack = await ctx.fetchErrorStack(errors.modal.formNum, errors.modal.hasReport);
+          } catch { /* don't fail if stack fetch fails */ }
+        }
+        const msg = errors.modal?.message || errors.balloon?.message || 'Unknown 1C error';
+        const err = new Error(msg);
+        err.onecError = { step: name, args, errors, formState: result, stack, screenshot: errorShot };
+        throw err;
+      }
+      return result;
+    };
+  }
+
+  return ctx;
+}
+
+
 async function executeScript(code, { noRecord } = {}) {
   const output = [];
   const origLog = console.log;
@@ -110,71 +178,15 @@ async function executeScript(code, { noRecord } = {}) {
 
   const t0 = Date.now();
   try {
-    // Build sandbox: all browser.mjs exports + useful Node globals
-    const exports = {};
-    for (const [k, v] of Object.entries(browser)) {
-      if (k !== 'default') exports[k] = v;
-    }
-    exports.writeFileSync = writeFileSync;
-    exports.readFileSync = readFileSync;
-
-    // --no-record: stub recording/narration functions to return safe defaults
-    if (noRecord) {
-      const noop = async () => {};
-      exports.startRecording = noop;
-      exports.stopRecording = async () => ({ file: null, duration: 0, size: 0 });
-      exports.addNarration = async () => ({ file: null, duration: 0, size: 0, captions: 0 });
-      for (const fn of ['showCaption', 'hideCaption']) {
-        exports[fn] = noop;
-      }
-      exports.isRecording = () => false;
-      exports.getCaptions = () => [];
-    }
-
-    // Wrap action functions to auto-detect 1C errors (modal, balloon)
-    // and stop execution immediately with diagnostic info
-    const ACTION_FNS = [
-      'clickElement', 'fillFields', 'fillField', 'selectValue', 'fillTableRow',
-      'deleteTableRow', 'openCommand', 'navigateSection', 'navigateLink', 'openFile',
-      'closeForm', 'filterList', 'unfilterList'
-    ];
-    for (const name of ACTION_FNS) {
-      if (typeof exports[name] !== 'function') continue;
-      const orig = exports[name];
-      exports[name] = async (...args) => {
-        const result = await orig(...args);
-        const errors = result?.errors;
-        if (errors?.modal || errors?.balloon) {
-          // Screenshot while the error modal is still visible (before fetchErrorStack closes it)
-          let errorShot;
-          try {
-            const png = await exports.screenshot();
-            errorShot = resolve(__dirname, '..', 'error-shot.png');
-            writeFileSync(errorShot, png);
-          } catch {}
-          // Try to fetch call stack for modal errors before throwing
-          let stack = null;
-          if (errors?.modal && typeof exports.fetchErrorStack === 'function') {
-            try {
-              stack = await exports.fetchErrorStack(errors.modal.formNum, errors.modal.hasReport);
-            } catch { /* don't fail if stack fetch fails */ }
-          }
-          const msg = errors.modal?.message || errors.balloon?.message || 'Unknown 1C error';
-          const err = new Error(msg);
-          err.onecError = { step: name, args, errors, formState: result, stack, screenshot: errorShot };
-          throw err;
-        }
-        return result;
-      };
-    }
+    const ctx = buildContext({ noRecord });
 
     // Normalize Windows backslash paths to prevent JS parse errors
     // (e.g. C:\Users\... → \u triggers "Invalid Unicode escape sequence")
     code = code.replace(/[A-Za-z]:\\[^\s'"`;\n)}\]]+/g, m => m.replace(/\\/g, '/'));
 
     const AsyncFunction = Object.getPrototypeOf(async function(){}).constructor;
-    const fn = new AsyncFunction(...Object.keys(exports), code);
-    await fn(...Object.values(exports));
+    const fn = new AsyncFunction(...Object.keys(ctx), code);
+    await fn(...Object.values(ctx));
 
     console.log = origLog;
     console.error = origErr;
@@ -318,6 +330,375 @@ function cmdStatus() {
 
 
 // ============================================================
+// test: run regression tests
+// ============================================================
+
+async function cmdTest(rawArgs) {
+  // Parse flags
+  const opts = { bail: false, retry: 0, timeout: 30000, report: null, format: 'json' };
+  let tags = null, grep = null;
+  const positional = [];
+  for (const a of rawArgs) {
+    if (a.startsWith('--tags='))       tags = a.slice(7).split(',');
+    else if (a.startsWith('--grep='))  grep = new RegExp(a.slice(7), 'i');
+    else if (a === '--bail')           opts.bail = true;
+    else if (a.startsWith('--retry=')) opts.retry = parseInt(a.slice(8)) || 0;
+    else if (a.startsWith('--timeout=')) opts.timeout = parseInt(a.slice(10)) || 30000;
+    else if (a.startsWith('--report=')) opts.report = a.slice(9);
+    else if (a.startsWith('--format=')) opts.format = a.slice(9);
+    else if (!a.startsWith('--'))      positional.push(a);
+  }
+
+  // Determine URL and test path
+  let url, testPath;
+  if (positional.length === 2) {
+    url = positional[0];
+    testPath = resolve(positional[1]);
+  } else if (positional.length === 1) {
+    testPath = resolve(positional[0]);
+  } else {
+    die('Usage: node run.mjs test [url] <dir|file> [--tags=...] [--bail] [--retry=N] [--timeout=ms] [--report=path]');
+  }
+
+  // Load config if exists
+  const testDir = existsSync(testPath) && readdirSync(testPath, { withFileTypes: true }).length >= 0
+    ? testPath : dirname(testPath);
+  const configPath = resolve(testDir, 'webtest.config.mjs');
+  let config = {};
+  if (existsSync(configPath)) {
+    const mod = await import('file:///' + configPath.replace(/\\/g, '/'));
+    config = mod.default || {};
+  }
+  if (!url) {
+    url = config.url || config.contexts?.[config.defaultContext || Object.keys(config.contexts || {})[0]]?.url;
+  }
+  if (!url) die('No URL provided and no webtest.config.mjs found');
+
+  // Apply config defaults (CLI flags override)
+  if (!tags && config.tags) tags = config.tags;
+  opts.timeout = rawArgs.some(a => a.startsWith('--timeout=')) ? opts.timeout : (config.timeout || opts.timeout);
+  opts.retry = rawArgs.some(a => a.startsWith('--retry=')) ? opts.retry : (config.retries || opts.retry);
+
+  // Discover test files
+  const testFiles = discoverTests(testPath);
+  if (!testFiles.length) die(`No *.test.mjs files found in ${testPath}`);
+
+  // Import and filter tests
+  const tests = [];
+  let hasOnly = false;
+  for (const file of testFiles) {
+    const mod = await import('file:///' + file.replace(/\\/g, '/'));
+    const t = {
+      file: relative(testDir, file).replace(/\\/g, '/'),
+      name: mod.name || basename(file, '.test.mjs'),
+      tags: mod.tags || [],
+      timeout: mod.timeout || opts.timeout,
+      skip: mod.skip || false,
+      only: mod.only || false,
+      setup: mod.setup,
+      teardown: mod.teardown,
+      fn: mod.default,
+    };
+    if (t.only) hasOnly = true;
+    tests.push(t);
+  }
+
+  // Filter
+  const filtered = tests.filter(t => {
+    if (hasOnly && !t.only) return false;
+    if (tags && !tags.some(tag => t.tags.includes(tag))) return false;
+    if (grep && !grep.test(t.name)) return false;
+    return true;
+  });
+
+  // Load hooks
+  const hooksPath = resolve(testDir, '_hooks.mjs');
+  let hooks = {};
+  if (existsSync(hooksPath)) {
+    hooks = await import('file:///' + hooksPath.replace(/\\/g, '/'));
+  }
+
+  // Console header
+  const W = process.stderr;
+  W.write(`\nweb-test -- ${url}\n`);
+  W.write(`Running ${filtered.length} tests from ${relative(process.cwd(), testDir).replace(/\\/g, '/') || '.'}/\n\n`);
+
+  const startedAt = new Date().toISOString();
+  const results = [];
+  let passCount = 0, failCount = 0, skipCount = 0;
+
+  // Prepare: infrastructure hooks (no browser)
+  if (hooks.prepare) await hooks.prepare();
+
+  try {
+    // Connect
+    await browser.connect(url);
+
+    // Build context
+    const ctx = buildContext({ noRecord: true });
+    ctx.assert = createAssertions();
+    ctx.log = (...a) => { /* per-test, overridden below */ };
+
+    // beforeAll
+    if (hooks.beforeAll) await hooks.beforeAll(ctx);
+
+    // Execute tests
+    for (const t of filtered) {
+      if (t.skip) {
+        const reason = typeof t.skip === 'string' ? t.skip : '';
+        W.write(`  \u25CB ${t.name}${reason ? ` (skip: ${reason})` : ' (skip)'}\n`);
+        results.push({ name: t.name, file: t.file, tags: t.tags, status: 'skipped', duration: 0, attempts: 0, steps: [], output: '', error: null, screenshot: null });
+        skipCount++;
+        continue;
+      }
+
+      let lastError = null;
+      let testResult = null;
+      const maxAttempts = 1 + opts.retry;
+
+      for (let attempt = 1; attempt <= maxAttempts; attempt++) {
+        const output = [];
+        let steps = [];
+        let currentSteps = steps;
+        const t0 = Date.now();
+
+        // Wire up per-test log and step
+        ctx.log = (...a) => output.push(a.map(String).join(' '));
+        ctx.step = async (name, fn) => {
+          const s = { name, start: Date.now(), status: 'passed', steps: [] };
+          currentSteps.push(s);
+          const prev = currentSteps;
+          currentSteps = s.steps;
+          try {
+            await fn();
+          } catch (e) {
+            s.status = 'failed';
+            s.error = e.message;
+            throw e;
+          } finally {
+            s.stop = Date.now();
+            currentSteps = prev;
+          }
+        };
+
+        try {
+          // beforeEach
+          if (hooks.beforeEach) await hooks.beforeEach(ctx);
+          // per-test setup
+          if (t.setup) await t.setup(ctx);
+
+          // Run test with timeout
+          await Promise.race([
+            t.fn(ctx),
+            new Promise((_, reject) => setTimeout(() => reject(new Error(`Timeout (${t.timeout}ms)`)), t.timeout)),
+          ]);
+
+          // per-test teardown
+          if (t.teardown) try { await t.teardown(ctx); } catch {}
+          // afterEach
+          if (hooks.afterEach) try { await hooks.afterEach(ctx); } catch {}
+          // Built-in state reset
+          await resetState(ctx);
+
+          const dur = elapsed(t0);
+          testResult = { name: t.name, file: t.file, tags: t.tags, status: 'passed', duration: dur, attempts: attempt, steps, output: output.join('\n'), error: null, screenshot: null };
+          lastError = null;
+          break;
+
+        } catch (e) {
+          // per-test teardown (always)
+          if (t.teardown) try { await t.teardown(ctx); } catch {}
+          // afterEach (always)
+          if (hooks.afterEach) try { await hooks.afterEach(ctx); } catch {}
+          // Built-in state reset
+          await resetState(ctx);
+
+          // Screenshot on failure
+          let shotFile = e.onecError?.screenshot;
+          if (!shotFile) {
+            try {
+              const png = await browser.screenshot();
+              shotFile = resolve(__dirname, '..', `error-shot-${t.file.replace(/[/\\]/g, '-')}.png`);
+              writeFileSync(shotFile, png);
+            } catch {}
+          }
+
+          lastError = { message: e.message, step: e.onecError?.step, screenshot: shotFile };
+          const dur = elapsed(t0);
+          testResult = { name: t.name, file: t.file, tags: t.tags, status: 'failed', duration: dur, attempts: attempt, steps, output: output.join('\n'), error: lastError, screenshot: shotFile };
+        }
+      }
+
+      results.push(testResult);
+
+      // Console output
+      if (testResult.status === 'passed') {
+        passCount++;
+        W.write(`  \u2713 ${t.name} (${testResult.duration}s)\n`);
+      } else {
+        failCount++;
+        W.write(`  \u2717 ${t.name} (${testResult.duration}s)\n`);
+        // Show failed steps
+        printSteps(W, testResult.steps, '    ');
+        if (lastError?.message) W.write(`    ${lastError.message}\n`);
+        if (lastError?.screenshot) W.write(`    screenshot: ${lastError.screenshot}\n`);
+      }
+
+      if (opts.bail && testResult.status === 'failed') break;
+    }
+
+    // afterAll
+    if (hooks.afterAll) try { await hooks.afterAll(ctx); } catch {}
+
+  } finally {
+    // Disconnect
+    try { await browser.disconnect(); } catch {}
+    // Cleanup: infrastructure hooks
+    if (hooks.cleanup) try { await hooks.cleanup(); } catch {}
+  }
+
+  const finishedAt = new Date().toISOString();
+  const totalDuration = results.reduce((s, r) => s + r.duration, 0);
+
+  // Summary
+  W.write(`\n${passCount} passed, ${failCount} failed, ${skipCount} skipped (${formatDuration(totalDuration)})\n\n`);
+
+  // JSON report
+  const report = {
+    runner: 'web-test', url, startedAt, finishedAt,
+    duration: totalDuration,
+    summary: { total: results.length, passed: passCount, failed: failCount, skipped: skipCount },
+    tests: results,
+  };
+  out(report);
+
+  if (opts.report) {
+    writeFileSync(resolve(opts.report), JSON.stringify(report, null, 2));
+  }
+
+  if (failCount > 0) process.exit(1);
+}
+
+function discoverTests(testPath) {
+  if (testPath.endsWith('.test.mjs')) return existsSync(testPath) ? [testPath] : [];
+  const files = [];
+  function walk(dir) {
+    for (const entry of readdirSync(dir, { withFileTypes: true })) {
+      if (entry.name.startsWith('_') || entry.name.startsWith('.')) continue;
+      const full = resolve(dir, entry.name);
+      if (entry.isDirectory()) walk(full);
+      else if (entry.name.endsWith('.test.mjs')) files.push(full);
+    }
+  }
+  walk(testPath);
+  return files.sort();
+}
+
+async function resetState(ctx) {
+  try { if (typeof ctx.dismissPendingErrors === 'function') await ctx.dismissPendingErrors(); } catch {}
+  for (let i = 0; i < 10; i++) {
+    try {
+      const state = await ctx.getFormState();
+      if (!state.form) break;
+      await ctx.closeForm({ save: false });
+    } catch { break; }
+  }
+}
+
+function printSteps(W, steps, indent) {
+  for (let i = 0; i < steps.length; i++) {
+    const s = steps[i];
+    const last = i === steps.length - 1;
+    const prefix = last ? '\u2514' : '\u251C';
+    const mark = s.status === 'failed' ? '\u2717 ' : '';
+    W.write(`${indent}${prefix} ${mark}${s.name} (${elapsed2(s.start, s.stop)}s)\n`);
+    if (s.error && s.status === 'failed') {
+      W.write(`${indent}  ${s.error}\n`);
+    }
+    if (s.steps.length) printSteps(W, s.steps, indent + '  ');
+  }
+}
+
+function elapsed2(start, stop) {
+  return Math.round(((stop || Date.now()) - start) / 100) / 10;
+}
+
+function formatDuration(seconds) {
+  if (seconds < 60) return `${Math.round(seconds * 10) / 10}s`;
+  const m = Math.floor(seconds / 60);
+  const s = Math.round((seconds - m * 60) * 10) / 10;
+  return `${m}m ${s}s`;
+}
+
+
+// ============================================================
+// assertions
+// ============================================================
+
+function createAssertions() {
+  class AssertionError extends Error {
+    constructor(msg, actual, expected) {
+      super(msg);
+      this.name = 'AssertionError';
+      this.actual = actual;
+      this.expected = expected;
+    }
+  }
+
+  return {
+    ok(value, msg) {
+      if (!value) throw new AssertionError(msg || `Expected truthy, got ${JSON.stringify(value)}`, value, true);
+    },
+    equal(actual, expected, msg) {
+      if (actual !== expected) throw new AssertionError(msg || `Expected ${JSON.stringify(expected)}, got ${JSON.stringify(actual)}`, actual, expected);
+    },
+    notEqual(actual, expected, msg) {
+      if (actual === expected) throw new AssertionError(msg || `Expected not ${JSON.stringify(expected)}`, actual, expected);
+    },
+    deepEqual(actual, expected, msg) {
+      const a = JSON.stringify(actual), b = JSON.stringify(expected);
+      if (a !== b) throw new AssertionError(msg || `Deep equal failed:\n  actual:   ${a}\n  expected: ${b}`, actual, expected);
+    },
+    includes(haystack, needle, msg) {
+      const h = Array.isArray(haystack) ? haystack : String(haystack);
+      if (!h.includes(needle)) throw new AssertionError(msg || `Expected ${JSON.stringify(h)} to include ${JSON.stringify(needle)}`, haystack, needle);
+    },
+    match(string, regex, msg) {
+      if (!regex.test(string)) throw new AssertionError(msg || `Expected ${JSON.stringify(string)} to match ${regex}`, string, regex);
+    },
+    async throws(fn, msg) {
+      try { await fn(); } catch { return; }
+      throw new AssertionError(msg || 'Expected function to throw');
+    },
+    // 1C-specific
+    formHasField(state, fieldName, msg) {
+      if (!state?.fields?.[fieldName]) throw new AssertionError(msg || `Field "${fieldName}" not found in form. Available: ${Object.keys(state?.fields || {}).join(', ')}`, null, fieldName);
+    },
+    formTitle(state, expected, msg) {
+      if (!state?.title?.includes(expected)) throw new AssertionError(msg || `Form title "${state?.title}" does not contain "${expected}"`, state?.title, expected);
+    },
+    tableHasRow(table, predicate, msg) {
+      const rows = table?.rows || [];
+      let found;
+      if (typeof predicate === 'function') {
+        found = rows.some(predicate);
+      } else {
+        found = rows.some(r => Object.entries(predicate).every(([k, v]) => r[k] === v));
+      }
+      if (!found) throw new AssertionError(msg || `No row matching predicate in table (${rows.length} rows)`, null, predicate);
+    },
+    tableRowCount(table, expected, msg) {
+      const actual = table?.rows?.length ?? 0;
+      if (actual !== expected) throw new AssertionError(msg || `Expected ${expected} rows, got ${actual}`, actual, expected);
+    },
+    noErrors(state, msg) {
+      if (state?.errors) throw new AssertionError(msg || `Form has errors: ${JSON.stringify(state.errors)}`, state.errors, null);
+    },
+  };
+}
+
+
+// ============================================================
 // helpers
 // ============================================================
 
@@ -363,7 +744,7 @@ function die(msg) {
 }
 
 function usage() {
-  die(`Usage: node src/run.mjs <command> [args]
+  die(`Usage: node run.mjs <command> [args]
 
 Commands:
   start <url>              Launch browser and connect to 1C web client
@@ -372,7 +753,16 @@ Commands:
   shot [file]              Take screenshot (default: shot.png)
   stop                     Logout and close browser
   status                   Check session status
+  test [url] <dir|file>    Run regression tests (*.test.mjs)
 
 Options for exec:
-  --no-record              Skip video recording (record() becomes no-op)`);
+  --no-record              Skip video recording (record() becomes no-op)
+
+Options for test:
+  --tags=smoke,crud        Filter tests by tags
+  --grep=pattern           Filter tests by name (regex)
+  --bail                   Stop on first failure
+  --retry=N                Retry failed tests N times
+  --timeout=ms             Per-test timeout (default: 30000)
+  --report=path            Write JSON report to file`);
 }
