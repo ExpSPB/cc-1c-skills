@@ -4,7 +4,7 @@ export const timeout = 60000;
 
 const findField = (state, name) => state.fields?.find(f => f.name === name || f.label === name);
 
-export default async function({ navigateSection, openCommand, clickElement, fillFields, closeForm, getFormState, assert, step, log }) {
+export default async function({ navigateSection, openCommand, clickElement, fillFields, filterList, closeForm, getFormState, assert, step, log }) {
 
   await step('text+checkbox+date+dropdown: fillFields на Номенклатура', async () => {
     await navigateSection('Склад');
@@ -33,21 +33,42 @@ export default async function({ navigateSection, openCommand, clickElement, fill
     await closeForm({ save: false });
   });
 
-  await step('reference-dropdown: Контрагент → CatalogRef.Контрагенты в новой накладной', async () => {
+  await step('reference-dropdown: Организация → CatalogRef.Организации (quickChoice=true)', async () => {
     await navigateSection('Склад');
     await openCommand('Приходная накладная');
     await clickElement('Создать');
 
     const fillRes = await fillFields({
-      'Контрагент': 'ООО Север',
+      'Организация': 'Альфа',
     });
     log('reference method: ' + fillRes.filled[0]?.method);
-    assert.ok(fillRes.filled[0]?.ok, 'Контрагент fillField должен сработать');
+    assert.ok(fillRes.filled[0]?.ok, 'Организация fillField должна сработать');
 
     const state = await getFormState();
-    const contractor = findField(state, 'Контрагент');
-    log(`Контрагент value='${contractor?.value}'`);
-    assert.includes(contractor?.value || '', 'Север', 'Контрагент должен показать выбранное значение');
+    const org = findField(state, 'Организация');
+    log(`Организация value='${org?.value}'`);
+    assert.includes(org?.value || '', 'Альфа', 'Организация должна показать выбранное значение');
+
+    await closeForm({ save: false });
+  });
+
+  await step('radio: КатегорияЦены (RadioButtonField, представление RadioButtons)', async () => {
+    // Tumbler-представление (СпособУчёта) пока не покрыто — getFormState не
+    // возвращает Tumbler в fields[]. См. upload/web-test-bugs.md пункт «radio
+    // Tumbler не распознаётся».
+    await navigateSection('Склад');
+    await openCommand('Номенклатура');
+    await filterList('Товар 02');
+    await clickElement('Товар 02', { dblclick: true });
+
+    const result = await fillFields({ 'Категория цены': 'Оптовая' });
+    log('method: ' + result.filled[0]?.method + ', value: ' + result.filled[0]?.value);
+    assert.ok(result.filled[0]?.ok, 'КатегорияЦены fillField должна сработать');
+    assert.equal(result.filled[0]?.method, 'radio', 'КатегорияЦены должна использовать method=radio');
+
+    // Note: getFormState().fields для RadioButtonField возвращает value='' —
+    // выбранный вариант проще проверить через result.filled[].value.
+    assert.includes(result.filled[0]?.value || '', 'Оптовая', 'КатегорияЦены = Оптовая');
 
     await closeForm({ save: false });
   });
