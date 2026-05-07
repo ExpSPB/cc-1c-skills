@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-# switch.py v1.4 — Переключение навыков 1С между AI-платформами и рантаймами
+# switch.py v1.5 — Переключение навыков 1С между AI-платформами и рантаймами
 # Source: https://github.com/Nikolay-Shirokov/cc-1c-skills
 """
 Копирует (или создаёт ссылки на) навыки из .claude/skills/ на другие AI-платформы
@@ -61,8 +61,10 @@ GITIGNORE_RECOMMENDATIONS = [
 # ---------------------------------------------------------------------------
 # Runtime regex patterns (from switch-to-python.py / switch-to-powershell.py)
 # ---------------------------------------------------------------------------
-RX_PS = re.compile(r'powershell\.exe\s+(?:-NoProfile\s+)?-File\s+(.+?)\.ps1')
-RX_PY = re.compile(r"python\s+('?[\w./_-]+?)\.py")
+# Capture optional surrounding quote (group 'q') and bare path (group 'path').
+# Path matches non-whitespace non-quote chars to support ${CLAUDE_SKILL_DIR}/...
+RX_PS = re.compile(r'powershell\.exe\s+(?:-NoProfile\s+)?-File\s+(?P<q>["\']?)(?P<path>[^"\s]+?)\.ps1(?P=q)?')
+RX_PY = re.compile(r"python\s+(?P<q>[\"']?)(?P<path>[^\"\s]+?)\.py(?P=q)?")
 
 
 # ---------------------------------------------------------------------------
@@ -153,23 +155,40 @@ def classify_skill_runtime(skill_dir):
     return 'ps' if has_ps else ('py' if has_py else 'none')
 
 
+def expand_skill_path(path, skill_name, source_prefix=SOURCE_PREFIX):
+    """Expand ${CLAUDE_SKILL_DIR} placeholder to a path relative to source_prefix.
+
+    ${CLAUDE_SKILL_DIR}/<rest>            -> <source_prefix>/<skill_name>/<rest>
+    ${CLAUDE_SKILL_DIR}/../<other>/<rest> -> <source_prefix>/<other>/<rest>
+    Anything else returned as-is (legacy literal path).
+    """
+    var = '${CLAUDE_SKILL_DIR}/'
+    if not path.startswith(var):
+        return path
+    rest = path[len(var):]
+    if rest.startswith('../'):
+        return f'{source_prefix}/{rest[3:]}'
+    return f'{source_prefix}/{skill_name}/{rest}'
+
+
 def check_missing_files(skill_dir, target_runtime, root):
     """Check if target runtime script files exist for a skill.
 
     Returns list of missing file paths (relative to root).
     """
     missing = []
+    skill_name = os.path.basename(os.path.normpath(skill_dir))
     for md_path in collect_md_files(skill_dir):
         with open(md_path, 'r', encoding='utf-8') as f:
             content = f.read()
         if target_runtime == 'python':
-            for m in RX_PS.findall(content):
-                py_path = m.lstrip("'") + '.py'
+            for m in RX_PS.finditer(content):
+                py_path = expand_skill_path(m.group('path'), skill_name) + '.py'
                 if not os.path.isfile(os.path.join(root, py_path)):
                     missing.append(py_path)
         elif target_runtime == 'powershell':
-            for m in RX_PY.findall(content):
-                ps1_path = m.lstrip("'") + '.ps1'
+            for m in RX_PY.finditer(content):
+                ps1_path = expand_skill_path(m.group('path'), skill_name) + '.ps1'
                 if not os.path.isfile(os.path.join(root, ps1_path)):
                     missing.append(ps1_path)
     return missing
@@ -205,9 +224,15 @@ def rewrite_paths(content, platform, target_prefix, skill_name):
 def switch_runtime_content(content, target_runtime):
     """Switch runtime invocations in .md content. Returns (new_content, switched)."""
     if target_runtime == 'python':
-        new = RX_PS.sub(r'python \1.py', content)
+        def to_py(m):
+            q = m.group('q')
+            return f"python {q}{m.group('path')}.py{q}"
+        new = RX_PS.sub(to_py, content)
     elif target_runtime == 'powershell':
-        new = RX_PY.sub(r'powershell.exe -NoProfile -File \1.ps1', content)
+        def to_ps(m):
+            q = m.group('q')
+            return f"powershell.exe -NoProfile -File {q}{m.group('path')}.ps1{q}"
+        new = RX_PY.sub(to_ps, content)
     else:
         return content, False
     return new, new != content
