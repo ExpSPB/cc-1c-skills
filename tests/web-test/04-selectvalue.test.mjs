@@ -37,4 +37,23 @@ export default async function({ navigateSection, openCommand, clickElement, sele
 
     await closeForm({ save: false });
   });
+
+  await step('clear: selectValue с пустым search → Shift+F4', async () => {
+    await navigateSection('Склад');
+    await openCommand('Приходная накладная');
+    await clickElement('Создать');
+
+    await selectValue('Организация', 'Альфа');
+    const before = await selectValue('Организация', '');  // empty → clear
+    const field = findField(before, 'Организация');
+    log(`Организация after clear value='${field?.value}'`);
+    assert.equal(field?.value, '', 'Организация должна быть очищена');
+
+    await closeForm({ save: false });
+  });
+
 }
+// show-all-form ветка (P1 в матрице) требует quickChoice=true каталога с
+// количеством > порога dropdown, чтобы появилась ссылка "Показать все".
+// В текущей синтетике такого каталога нет (Организации ~2 элемента, остальные
+// quickChoice=false). Откладывается до расширения синтетики.

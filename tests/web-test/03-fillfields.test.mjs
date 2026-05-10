@@ -52,6 +52,47 @@ export default async function({ navigateSection, openCommand, clickElement, fill
     await closeForm({ save: false });
   });
 
+  await step('clear: fillFields пустым значением очищает текстовое поле', async () => {
+    await navigateSection('Склад');
+    await openCommand('Контрагенты');
+    await clickElement('ООО Север', { dblclick: true });
+    const before = await getFormState();
+    const phoneBefore = findField(before, 'Телефон')?.value;
+    log(`phone before clear='${phoneBefore}'`);
+
+    const r = await fillFields({ 'Телефон': '' });
+    log('clear method: ' + r.filled[0]?.method);
+    assert.ok(r.filled[0]?.ok, 'clear должен вернуть ok=true');
+    assert.equal(r.filled[0]?.method, 'clear', 'method должен быть clear (Shift+F4)');
+
+    const state = await getFormState();
+    assert.equal(findField(state, 'Телефон')?.value, '', 'Телефон должен быть пустым');
+
+    await closeForm({ save: false });
+  });
+
+  await step('reference-non-quickchoice: fillFields на Контрагент (quickChoice=false)', async () => {
+    // Поле имеет DLB+CB → fillFields идёт через fillReferenceField (method=dropdown/typeahead).
+    // Чистый method='form' путь требует поля без DLB (hasPick && !hasSelect) — в синтетике
+    // такого поля нет, поэтому проверяем сам факт корректного заполнения через DLB.
+    await navigateSection('Склад');
+    await openCommand('Приходная накладная');
+    await clickElement('Создать');
+
+    const r = await fillFields({ 'Контрагент': 'ООО Север' });
+    log('reference method: ' + r.filled[0]?.method);
+    assert.ok(r.filled[0]?.ok, 'fillFields на Контрагент должен сработать');
+    assert.ok(['dropdown', 'typeahead', 'form'].includes(r.filled[0]?.method),
+      `method=${r.filled[0]?.method} должен быть один из dropdown|typeahead|form`);
+
+    const state = await getFormState();
+    const v = findField(state, 'Контрагент')?.value || '';
+    log(`Контрагент value='${v}'`);
+    assert.includes(v, 'Север', 'Контрагент должен содержать "Север"');
+
+    await closeForm({ save: false });
+  });
+
   await step('radio: КатегорияЦены (RadioButtons) через fillFields, СпособУчёта (Tumbler) через clickElement', async () => {
     // Tumbler-представление не парсится fillFields как radio-поле (см.
     // upload/web-test-bugs.md пункт 5). Но варианты тумблера видны в

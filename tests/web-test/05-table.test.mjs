@@ -48,6 +48,35 @@ export default async function({ navigateSection, openCommand, clickElement, fill
     assert.equal(t.rows[1]['Цена'], '150,00', 'Цена строки 1 = 150');
   });
 
+  await step('checkbox: переключить Согласовано в строке 1 через fillTableRow', async () => {
+    const r = await fillTableRow(
+      { 'Согласовано': true },
+      { table: 'Товары', row: 1 }
+    );
+    log(`checkbox result: ${JSON.stringify(r.filled || r)}`);
+    const t = await readTable({ table: 'Товары' });
+    log(`row 1 Согласовано='${t.rows[1]['Согласовано']}'`);
+    assert.equal(t.rows[1]['Согласовано'], 'true', 'Согласовано должно стать true');
+  });
+
+  await step('clear: очистить ссылочную ячейку Номенклатура через fillTableRow с пустым значением', async () => {
+    // Используем строку 0 (Товар 01)
+    const r = await fillTableRow(
+      { 'Номенклатура': '' },
+      { table: 'Товары', row: 0 }
+    );
+    log(`clear result: ${JSON.stringify(r.filled || r)}`);
+    const t = await readTable({ table: 'Товары' });
+    log(`row 0 Номенклатура after clear='${t.rows[0]['Номенклатура']}'`);
+    assert.equal(t.rows[0]['Номенклатура'], '', 'Номенклатура должна быть очищена (Shift+F4)');
+
+    // Восстанавливаем Товар 01 чтобы последующий delete мог работать с предсказуемым состоянием
+    await fillTableRow(
+      { 'Номенклатура': 'Товар 01' },
+      { table: 'Товары', row: 0 }
+    );
+  });
+
   await step('delete: удалить первую строку', async () => {
     await deleteTableRow(0, { table: 'Товары' });
     const t = await readTable({ table: 'Товары' });

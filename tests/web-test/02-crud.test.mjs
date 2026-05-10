@@ -2,7 +2,7 @@ export const name = 'CRUD: открытие, чтение, закрытие с �
 export const tags = ['crud', 'smoke'];
 export const timeout = 60000;
 
-export default async function({ navigateSection, openCommand, clickElement, closeForm, readTable, fillField, getFormState, assert, step, log }) {
+export default async function({ navigateSection, openCommand, clickElement, closeForm, readTable, fillField, getFormState, getPage, assert, step, log }) {
 
   await step('read: список Контрагентов отдаёт колонки/строки/total', async () => {
     await navigateSection('Склад');
@@ -55,6 +55,54 @@ export default async function({ navigateSection, openCommand, clickElement, clos
     const phoneField = state.fields?.find(f => f.name === 'Телефон' || f.label === 'Телефон');
     log(`Re-opened phone='${phoneField?.value}'`);
     assert.equal(phoneField?.value, newPhone, 'Телефон должен сохраниться');
+    await closeForm();
+  });
+
+  await step('confirm-save-no: closeForm({save:false}) → изменения откатываются', async () => {
+    await navigateSection('Склад');
+    await openCommand('Контрагенты');
+    await clickElement('ООО Восток', { dblclick: true });
+    const before = await getFormState();
+    const origPhone = before.fields?.find(f => f.name === 'Телефон')?.value;
+    log(`origPhone='${origPhone}'`);
+    await fillField('Телефон', '+7 (000) 000-00-00');
+    const closed = await closeForm({ save: false });
+    assert.ok(closed.closed, 'Форма должна закрыться через "Нет"');
+
+    await navigateSection('Склад');
+    await openCommand('Контрагенты');
+    await clickElement('ООО Восток', { dblclick: true });
+    const state = await getFormState();
+    const phone = state.fields?.find(f => f.name === 'Телефон')?.value;
+    log(`Re-opened phone after save:false='${phone}'`);
+    assert.equal(phone, origPhone, 'Телефон не должен измениться (save:false откатил)');
+    await closeForm();
+  });
+
+  await step('confirm-pending: closeForm() без решения → confirmation в state', async () => {
+    await navigateSection('Склад');
+    await openCommand('Контрагенты');
+    await clickElement('ООО Север', { dblclick: true });
+    await fillField('Телефон', '+7 (123) 456-78-90');
+    const pending = await closeForm();
+    log(`pending: closed=${pending.closed} confirmation=${JSON.stringify(pending.confirmation)}`);
+    assert.ok(!pending.closed, 'Форма НЕ должна закрыться без решения');
+    assert.ok(pending.confirmation, 'state.confirmation должен присутствовать');
+    // Закрыть через явный отказ от сохранения
+    await closeForm({ save: false });
+  });
+
+  await step('more-menu: clickElement("Ещё") возвращает submenu[]', async () => {
+    await navigateSection('Склад');
+    await openCommand('Контрагенты');
+    const r = await clickElement('Ещё');
+    const items = r.submenu || [];
+    log(`submenu items: ${items.length} sample=${items.slice(0, 5).join(', ')}`);
+    assert.ok(Array.isArray(r.submenu), 'clickElement("Ещё") должен вернуть submenu[]');
+    assert.ok(items.length >= 1, 'submenu не должен быть пустым');
+    // Закрыть submenu
+    const page = await getPage();
+    await page.keyboard.press('Escape');
     await closeForm();
   });
 }
