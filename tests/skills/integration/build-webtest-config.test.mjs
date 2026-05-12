@@ -147,6 +147,10 @@ export const steps = [
         // Источник — составной тип (для 03-fillfields/composite).
         // Платформа покажет селектор типа в UI перед выбором значения.
         { name: 'Источник', type: 'CatalogRef.Контрагенты + CatalogRef.Номенклатура + CatalogRef.Организации' },
+        // Поставщик — обычная ссылка, но на форме элемент с textEdit:false
+        // (для 03-fillfields/direct-edit-form). Ручной ввод запрещён,
+        // выбор только через pick-кнопку → форма выбора.
+        { name: 'Поставщик', type: 'CatalogRef.Контрагенты' },
         { name: 'Комментарий', type: 'String', length: 200 },
       ],
       tabularSections: [{
@@ -601,6 +605,8 @@ export const steps = [
         { input: 'Контрагент', path: 'Объект.Контрагент', title: 'Контрагент' },
         { input: 'Склад', path: 'Объект.Склад', title: 'Склад' },
         { input: 'Источник', path: 'Объект.Источник', title: 'Источник' },
+        // textEdit:false — ручной ввод запрещён, только pick → форма выбора
+        { input: 'Поставщик', path: 'Объект.Поставщик', title: 'Поставщик', textEdit: false },
         { input: 'Комментарий', path: 'Объект.Комментарий', title: 'Комментарий' },
         { table: 'Товары', path: 'Объект.Товары', title: 'Товары', changeRowSet: true, columns: [
           { input: 'Номенклатура', path: 'Объект.Товары.Номенклатура', title: 'Номенклатура' },

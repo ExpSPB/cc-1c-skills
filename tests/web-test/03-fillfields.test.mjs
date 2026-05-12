@@ -154,4 +154,25 @@ export default async function({ navigateSection, openCommand, clickElement, fill
 
     await closeForm({ save: false });
   });
+
+  await step('direct-edit-form: textEdit:false → fillFields method=form', async () => {
+    // ПриходнаяНакладная.Поставщик — обычный CatalogRef.Контрагенты, но
+    // элемент формы с textEdit:false: ручной ввод запрещён, выбор только
+    // через форму выбора (не через paste/typeahead/dropdown).
+    await navigateSection('Склад');
+    await openCommand('Приходная накладная');
+    await clickElement('Создать');
+
+    const r = await fillFields({ 'Поставщик': 'ООО Юг' });
+    log('Поставщик method=' + r.filled[0]?.method);
+    assert.equal(r.filled[0]?.ok, true, 'Поставщик заполнен');
+    assert.equal(r.filled[0]?.method, 'form',
+      'textEdit:false принуждает к method=form (минуя paste/typeahead/dropdown)');
+
+    const state = await getFormState();
+    const p = state.fields?.find(f => f.name === 'Поставщик');
+    assert.equal(p?.value, 'ООО Юг', 'значение Поставщик установилось');
+
+    await closeForm({ save: false });
+  });
 }
