@@ -1,4 +1,4 @@
-// web-test browser v1.9 — Playwright browser management for 1C web client
+// web-test browser v1.12 — Playwright browser management for 1C web client
 // Source: https://github.com/Nikolay-Shirokov/cc-1c-skills
 /**
  * Playwright browser management for 1C web client.
@@ -36,6 +36,16 @@ let recorder = null; // { cdp, ffmpeg, startTime, outputPath, ffmpegError, capti
 let lastCaptions = []; // captions from the last completed recording (for addNarration)
 let lastRecordingDuration = null; // wall-clock duration of the last recording (seconds)
 let highlightMode = false;
+
+// Multi-context registry: name → { context, page, sessionPrefix, seanceId, recorder, lastCaptions, lastRecordingDuration, highlightMode }
+// Populated by createContext(); module-level vars above mirror the active slot.
+// connect() does NOT use this Map — it preserves legacy single-session behavior for exec/run/start.
+const contexts = new Map();
+let activeContextName = null;
+// Isolation mode for the current cmdTest session — set by the first createContext call.
+// 'tab': all contexts share one persistent context (one window, multiple tabs, extension loads reliably).
+// 'window': each context gets its own BrowserContext (separate window per context, full cookie isolation, extension may not load).
+let activeMode = null;
 
 const LOAD_TIMEOUT = 60000;
 const INIT_TIMEOUT = 60000;
@@ -159,30 +169,50 @@ export async function connect(url, { extensionPath } = {}) {
 }
 
 /**
+ * Best-effort POST /e1cib/logout on a slot to release the 1C session license.
+ * Silent — if page is closed or session info missing, just returns.
+ * @param {object} slot   { page, sessionPrefix, seanceId } from contexts Map
+ * @param {number} [waitMs=500]  pause after logout fetch (gives 1C time to process)
+ */
+async function _logoutSlot(slot, waitMs = 500) {
+  if (!slot?.page || slot.page.isClosed() || !slot.seanceId || !slot.sessionPrefix) return;
+  try {
+    const logoutUrl = `${slot.sessionPrefix}/e1cib/logout?seanceId=${slot.seanceId}`;
+    await slot.page.evaluate(async (url) => {
+      await fetch(url, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: '{"root":{}}' });
+    }, logoutUrl);
+    await slot.page.waitForTimeout(waitMs);
+  } catch {}
+}
+
+/**
  * Gracefully terminate the 1C session and close the browser.
  * Sends POST /e1cib/logout to release the license before closing.
  */
 export async function disconnect() {
-  // Auto-stop recording if active (prevents orphaned ffmpeg)
+  // Multi-context path: stop recording + logout each slot before closing browser
+  if (contexts.size > 0) {
+    _saveActiveSlot();
+    // Recorder is global — one stop covers all contexts
+    if (recorder) {
+      try { await stopRecording(); } catch {}
+    }
+    for (const [, slot] of contexts.entries()) {
+      await _logoutSlot(slot);
+    }
+    contexts.clear();
+    activeContextName = null;
+    activeMode = null;
+  }
+
+  // Single-session path (connect): auto-stop recording if active
   if (recorder) {
     try { await stopRecording(); } catch {}
   }
 
   if (browser) {
-    // Graceful logout — release the 1C license
-    if (page && !page.isClosed() && seanceId && sessionPrefix) {
-      try {
-        const logoutUrl = `${sessionPrefix}/e1cib/logout?seanceId=${seanceId}`;
-        await page.evaluate(async (url) => {
-          await fetch(url, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: '{"root":{}}'
-          });
-        }, logoutUrl);
-        await page.waitForTimeout(1000);
-      } catch {}
-    }
+    // Graceful logout — release the 1C license (single-session connect path)
+    await _logoutSlot({ page, sessionPrefix, seanceId }, 1000);
     await browser.close().catch(() => {});
     browser = null;
     page = null;
@@ -226,6 +256,203 @@ export function detach() {
 /** Get current session state (for saving between reconnections). */
 export function getSession() {
   return { sessionPrefix, seanceId };
+}
+
+// ============================================================
+// Multi-context support (used by run.mjs cmdTest only)
+// ============================================================
+
+/**
+ * Save current module-level state into the active slot before switching.
+ * No-op if no active slot.
+ */
+function _saveActiveSlot() {
+  if (!activeContextName) return;
+  const slot = contexts.get(activeContextName);
+  if (!slot) return;
+  slot.page = page;
+  slot.sessionPrefix = sessionPrefix;
+  slot.seanceId = seanceId;
+  slot.highlightMode = highlightMode;
+  // Note: `recorder`, `lastCaptions`, `lastRecordingDuration` are intentionally NOT
+  // mirrored per-slot. A multi-context recording produces one continuous output file —
+  // the recorder follows the active page via recorder._attachPage(), not per-slot state.
+}
+
+/** Load a slot's state into module-level vars and mark it active. */
+function _activateSlot(name) {
+  const slot = contexts.get(name);
+  if (!slot) throw new Error(`Context "${name}" not found. Create it via createContext() first.`);
+  page = slot.page;
+  sessionPrefix = slot.sessionPrefix;
+  seanceId = slot.seanceId;
+  highlightMode = slot.highlightMode || false;
+  activeContextName = name;
+}
+
+/** Attach 1C session listeners to a page, writing into the given slot. */
+function _attachSessionListeners(pg, slot, name) {
+  pg.on('dialog', dialog => dialog.accept().catch(() => {}));
+  pg.on('request', req => {
+    if (slot.seanceId) return;
+    const m = req.url().match(/^(https?:\/\/[^/]+\/[^/]+\/[^/]+)\/e1cib\/.+[?&]seanceId=([^&]+)/);
+    if (m) {
+      slot.sessionPrefix = m[1];
+      slot.seanceId = m[2];
+      if (activeContextName === name) {
+        sessionPrefix = m[1];
+        seanceId = m[2];
+      }
+    }
+  });
+}
+
+/**
+ * Create (or navigate) a named browser context.
+ * First call launches Chromium via chromium.launch() (NOT launchPersistentContext) so that
+ * subsequent calls can create additional isolated BrowserContexts in the same process.
+ * Trade-off: 1C browser extension is loaded via --load-extension (process-level) rather than
+ * persistent profile.
+ *
+ * Use this from run.mjs cmdTest only — exec/run/start use connect() and stay on the
+ * legacy persistent-context path.
+ */
+export async function createContext(name, url, { extensionPath, isolation = 'tab' } = {}) {
+  if (contexts.has(name)) {
+    await setActiveContext(name);
+    await page.goto(url, { waitUntil: 'domcontentloaded', timeout: LOAD_TIMEOUT });
+    try { await page.waitForSelector('#themesCell_theme_0', { timeout: INIT_TIMEOUT }); }
+    catch { await page.waitForTimeout(5000); }
+    await closeModals();
+    return await getPageState();
+  }
+
+  if (!['tab', 'window'].includes(isolation)) {
+    throw new Error(`createContext: invalid isolation "${isolation}", expected 'tab' or 'window'`);
+  }
+  if (activeMode && activeMode !== isolation) {
+    throw new Error(`createContext: cannot mix isolation modes — first context used "${activeMode}", "${name}" requested "${isolation}". Use the same mode for all contexts in one run.`);
+  }
+
+  // First context: launch browser. Subsequent: reuse existing.
+  let isFirstContext = !browser;
+  if (isFirstContext) {
+    const extPath = findExtension(extensionPath);
+    const launchArgs = ['--start-maximized'];
+    if (extPath) {
+      launchArgs.push('--disable-extensions-except=' + extPath, '--load-extension=' + extPath);
+    }
+    if (isolation === 'tab') {
+      // Persistent context: extension loads reliably, one window with tabs per context
+      persistentUserDataDir = pathJoin(tmpdir(), 'pw-1c-test-' + Date.now());
+      mkdirSync(persistentUserDataDir, { recursive: true });
+      browser = await chromium.launchPersistentContext(persistentUserDataDir, {
+        headless: false,
+        args: launchArgs,
+        viewport: null,
+        permissions: ['clipboard-read', 'clipboard-write'],
+      });
+    } else {
+      // Window mode: separate BrowserContext per slot, full cookie isolation
+      browser = await chromium.launch({ headless: false, args: launchArgs });
+    }
+    activeMode = isolation;
+  }
+
+  // Save current active before switching
+  _saveActiveSlot();
+
+  // Create slot — page differs by mode
+  let newCtx, newPage;
+  if (activeMode === 'tab') {
+    // Reuse the persistent context for all slots; each slot gets its own page (tab)
+    newCtx = browser;
+    if (isFirstContext) {
+      newPage = browser.pages()[0] || await browser.newPage();
+    } else {
+      newPage = await browser.newPage();
+    }
+  } else {
+    // Window mode: each slot owns its BrowserContext + page
+    newCtx = await browser.newContext({
+      viewport: null,
+      permissions: ['clipboard-read', 'clipboard-write'],
+    });
+    newPage = await newCtx.newPage();
+  }
+
+  const slot = {
+    context: newCtx,
+    page: newPage,
+    sessionPrefix: null,
+    seanceId: null,
+    highlightMode: false,
+  };
+  contexts.set(name, slot);
+
+  _attachSessionListeners(newPage, slot, name);
+  _activateSlot(name);
+
+  await page.goto(url, { waitUntil: 'domcontentloaded', timeout: LOAD_TIMEOUT });
+  try { await page.waitForSelector('#themesCell_theme_0', { timeout: INIT_TIMEOUT }); }
+  catch { await page.waitForTimeout(5000); }
+  await closeModals();
+
+  return await getPageState();
+}
+
+/** Switch the active context. Subsequent browser API calls operate on this context's page. */
+export async function setActiveContext(name) {
+  if (activeContextName === name) return;
+  if (!contexts.has(name)) throw new Error(`Context "${name}" not found. Available: [${[...contexts.keys()].join(', ')}]`);
+  // If a recording is active, flush the outgoing page's last frame so the gap is filled
+  // up to the moment of the switch (avoids a "jump" in video time).
+  if (recorder && recorder._flushFrames) recorder._flushFrames();
+  _saveActiveSlot();
+  _activateSlot(name);
+  // If the recording is still alive (it lives across slots — we keep the same ffmpeg/output),
+  // re-attach its screencast to the newly active page.
+  if (recorder && recorder._attachPage) {
+    await recorder._attachPage(page);
+  }
+}
+
+export function listContexts() {
+  return [...contexts.keys()];
+}
+
+export function getActiveContext() {
+  return activeContextName;
+}
+
+export function hasContext(name) {
+  return contexts.has(name);
+}
+
+/**
+ * Close a named context: logout, close its page (tab mode) or BrowserContext
+ * (window mode), remove from registry. Cannot close the currently active
+ * context — caller must setActiveContext to another first. This keeps the
+ * recorder/page invariants simple: recorder is always attached to the
+ * active slot, which closeContext never touches.
+ *
+ * @throws if name is not registered or equals the active context.
+ */
+export async function closeContext(name) {
+  if (!contexts.has(name)) {
+    throw new Error(`Context "${name}" not found. Available: [${[...contexts.keys()].join(', ')}]`);
+  }
+  if (name === activeContextName) {
+    throw new Error(`closeContext: cannot close the active context "${name}". setActiveContext to another context first.`);
+  }
+  const slot = contexts.get(name);
+  await _logoutSlot(slot);
+  if (activeMode === 'tab') {
+    try { await slot.page.close(); } catch {}
+  } else {
+    try { await slot.context.close(); } catch {}
+  }
+  contexts.delete(name);
 }
 
 /**
@@ -4861,10 +5088,7 @@ export async function startRecording(outputPath, opts = {}) {
   const resolvedPath = resolveProjectPath(outputPath);
   mkdirSync(dirname(resolvedPath), { recursive: true });
 
-  // Create CDP session for screencast
-  const cdp = await page.context().newCDPSession(page);
-
-  // Spawn ffmpeg process
+  // Spawn ffmpeg process — single output file across context switches
   const ffmpeg = spawn(ffmpegPath, [
     '-y',                          // overwrite output
     '-f', 'image2pipe',            // input: piped images
@@ -4880,71 +5104,86 @@ export async function startRecording(outputPath, opts = {}) {
     resolvedPath
   ], { stdio: ['pipe', 'ignore', 'pipe'] });
 
-  let ffmpegError = '';
-  ffmpeg.stderr.on('data', d => { ffmpegError += d.toString(); });
-  ffmpeg.on('error', err => { ffmpegError += err.message; });
+  ffmpeg.on('error', err => { if (recorder) recorder.ffmpegError += err.message; });
 
-  // Listen for screencast frames and pipe to ffmpeg
-  // CDP sends frames only on screen changes, so we duplicate frames
-  // to fill gaps and maintain real-time playback speed
   const frameDuration = 1000 / fps;
-  let lastFrameTime = null;
-  let lastFrameBuf = null;
+  const speechRate = opts.speechRate || 70; // ms per character for smart TTS wait
 
-  cdp.on('Page.screencastFrame', async ({ data, sessionId }) => {
+  // Frame handler shared across CDP sessions (lives in recorder, not closure):
+  // when the active context switches, we attach a new CDP session and route its
+  // frames to the same ffmpeg pipe — preserving a single continuous timeline.
+  const frameHandler = async ({ data, sessionId }, cdp) => {
+    if (!recorder) return;
     const buf = Buffer.from(data, 'base64');
     const now = Date.now();
-
     if (!ffmpeg.stdin.destroyed) {
       let framesWritten = 0;
-      if (lastFrameTime && lastFrameBuf) {
-        // Fill the gap with duplicates of the previous frame
-        const gap = now - lastFrameTime;
+      if (recorder.lastFrameTime && recorder.lastFrameBuf) {
+        const gap = now - recorder.lastFrameTime;
         const dupes = Math.round(gap / frameDuration) - 1;
         for (let i = 0; i < dupes && i < fps * 30; i++) {
-          ffmpeg.stdin.write(lastFrameBuf);
+          ffmpeg.stdin.write(recorder.lastFrameBuf);
           framesWritten++;
         }
       }
       ffmpeg.stdin.write(buf);
       framesWritten++;
-      // Track actual video timeline position (accounts for frame duplication)
-      if (recorder) recorder.videoTimeMs += framesWritten * frameDuration;
+      recorder.videoTimeMs += framesWritten * frameDuration;
     }
-
-    lastFrameTime = now;
-    lastFrameBuf = buf;
+    recorder.lastFrameTime = now;
+    recorder.lastFrameBuf = buf;
     try { await cdp.send('Page.screencastFrameAck', { sessionId }); } catch {}
-  });
-
-  // Start the screencast
-  await cdp.send('Page.startScreencast', {
-    format: 'jpeg',
-    quality,
-    everyNthFrame: 1
-  });
-
-  // Expose a frame-writing helper on the recorder object.
-  // During static periods (e.g. smart TTS pauses), CDP may not send screencast
-  // frames. Call _flushFrames() to fill the gap with duplicates of the last frame,
-  // keeping video timeline in sync with wall-clock time.
-  const _flushFrames = () => {
-    if (!lastFrameBuf || !lastFrameTime || ffmpeg.stdin.destroyed) return;
-    const now = Date.now();
-    const gap = now - lastFrameTime;
-    const dupes = Math.round(gap / frameDuration);
-    for (let i = 0; i < dupes; i++) {
-      ffmpeg.stdin.write(lastFrameBuf);
-      if (recorder) recorder.videoTimeMs += frameDuration;
-    }
-    if (dupes > 0) lastFrameTime = now;
   };
 
-  const speechRate = opts.speechRate || 70; // ms per character for smart TTS wait
-  recorder = { cdp, ffmpeg, startTime: Date.now(), outputPath: resolvedPath, ffmpegError: '', captions: [], videoTimeMs: 0, _flushFrames, speechRate };
-  // Redirect stderr accumulation to the recorder object
-  ffmpeg.stderr.removeAllListeners('data');
+  // Duplicate the last frame to fill wall-clock gaps (static periods, context switches).
+  const _flushFrames = () => {
+    if (!recorder || !recorder.lastFrameBuf || !recorder.lastFrameTime || ffmpeg.stdin.destroyed) return;
+    const now = Date.now();
+    const gap = now - recorder.lastFrameTime;
+    const dupes = Math.round(gap / frameDuration);
+    for (let i = 0; i < dupes; i++) {
+      ffmpeg.stdin.write(recorder.lastFrameBuf);
+      recorder.videoTimeMs += frameDuration;
+    }
+    if (dupes > 0) recorder.lastFrameTime = now;
+  };
+
+  // Attach screencast to a specific page. Stops the old CDP first (if any).
+  // Called by startRecording for the initial page, and by setActiveContext when
+  // the active context changes mid-recording.
+  const _attachPage = async (targetPage) => {
+    if (recorder.cdp) {
+      _flushFrames(); // freeze the last frame of the outgoing page up to "now"
+      try { await recorder.cdp.send('Page.stopScreencast'); } catch {}
+      try { await recorder.cdp.detach(); } catch {}
+      recorder.cdp = null;
+    }
+    const cdp = await targetPage.context().newCDPSession(targetPage);
+    cdp.on('Page.screencastFrame', (ev) => frameHandler(ev, cdp));
+    await cdp.send('Page.startScreencast', { format: 'jpeg', quality, everyNthFrame: 1 });
+    recorder.cdp = cdp;
+    recorder.activePage = targetPage;
+  };
+
+  recorder = {
+    cdp: null,
+    activePage: null,
+    ffmpeg,
+    startTime: Date.now(),
+    outputPath: resolvedPath,
+    ffmpegError: '',
+    captions: [],
+    videoTimeMs: 0,
+    frameDuration,
+    lastFrameTime: null,
+    lastFrameBuf: null,
+    _flushFrames,
+    _attachPage,
+    speechRate,
+  };
   ffmpeg.stderr.on('data', d => { recorder.ffmpegError += d.toString(); });
+
+  await _attachPage(page);
 }
 
 /**

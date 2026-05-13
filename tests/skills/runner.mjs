@@ -217,8 +217,14 @@ function createWorkspace(fixturePath, readOnly) {
 }
 
 function cleanupWorkspace(ws) {
-  if (!ws.readOnly) {
-    rmSync(ws.path, { recursive: true, force: true });
+  if (ws.readOnly) return;
+  // On Windows, file handles from db-update (1cv8) may linger briefly after the
+  // process exits — rmSync then throws EBUSY. Retry a few times, then swallow:
+  // a leaked tmp dir is preferable to crashing the entire runner.
+  try {
+    rmSync(ws.path, { recursive: true, force: true, maxRetries: 10, retryDelay: 200 });
+  } catch (e) {
+    console.warn(`Warning: failed to clean workspace ${ws.path}: ${e.message}`);
   }
 }
 
@@ -943,6 +949,22 @@ async function runIntegrationTest(test, opts) {
     for (let i = 0; i < test.steps.length; i++) {
       const step = test.steps[i];
       const stepT0 = performance.now();
+
+      // writeFile step: записать содержимое (обычно .bsl модуля) в workDir
+      if (step.writeFile) {
+        try {
+          const target = replacePlaceholders(step.writeFile);
+          const abs = target.includes(':') || target.startsWith('/') ? target : join(workDir, target);
+          mkdirSync(dirname(abs), { recursive: true });
+          writeFileSync(abs, step.content ?? '', 'utf8');
+          const stepElapsed = ((performance.now() - stepT0) / 1000).toFixed(1);
+          stepResults.push({ name: step.name, passed: true, elapsed: `${stepElapsed}s` });
+        } catch (e) {
+          stepResults.push({ name: step.name, passed: false, error: `writeFile failed: ${e.message}` });
+          break;
+        }
+        continue;
+      }
 
       // Write input if provided
       let inputFile = null;
