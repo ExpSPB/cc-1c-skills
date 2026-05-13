@@ -1,4 +1,4 @@
-// _hooks.mjs v0.2 — автономный тестовый стенд для web-test
+// _hooks.mjs v0.3 — автономный тестовый стенд для web-test + testlevel-хуки
 //
 // `prepare()` поднимает изолированный стенд по smart-логике:
 //   1) Если нужно пересоздавать БД (config-rebuild или --reload-data) — web-stop
@@ -292,4 +292,52 @@ export async function cleanup({ log }) {
   // MVP: оставляем стенд поднятым для отладки. Для full-shutdown — ручной /web-stop
   // или следующий запуск с --rebuild-stand.
   log('cleanup: stand left running (use /web-stop or run with `-- --rebuild-stand` to reset)');
+}
+
+// ── Testlevel hooks (M7.4) ────────────────────────────────────────────────────
+//
+// Shared mutable state, импортируется индикатором `00-hooks.test.mjs` для
+// проверки порядка вызовов. Хуки — counter-only, никакой реальной работы:
+// `prepare()` уже подготовил стенд, дефолтное приземление 1С после входа
+// уже показывает панель разделов (разведка 2026-05-13: navigateSection
+// в beforeAll не нужен).
+//
+// `events` — последовательность строк, по которой индикатор восстанавливает
+// порядок (`beforeAll`, `beforeEach:01-navigation.test.mjs`, ...).
+
+export const _state = {
+  beforeAll: 0,
+  afterAll: 0,
+  beforeEach: 0,
+  afterEach: 0,
+  events: [],
+  lastTestResult: null,
+};
+
+export async function beforeAll(_ctx) {
+  _state.beforeAll++;
+  _state.events.push('beforeAll');
+}
+
+export async function afterAll(_ctx) {
+  _state.afterAll++;
+  _state.events.push('afterAll');
+}
+
+export async function beforeEach(ctx) {
+  _state.beforeEach++;
+  _state.events.push(`beforeEach:${ctx.testInfo?.file || '?'}`);
+}
+
+export async function afterEach(ctx) {
+  _state.afterEach++;
+  // Снимок testResult без тяжёлого steps[]: индикатор проверяет только
+  // status/duration/attempts/error.
+  if (ctx.testResult) {
+    const { status, duration, attempts, error } = ctx.testResult;
+    _state.lastTestResult = { status, duration, attempts, error };
+  } else {
+    _state.lastTestResult = null;
+  }
+  _state.events.push(`afterEach:${ctx.testInfo?.file || '?'}:${ctx.testResult?.status || '?'}`);
 }
