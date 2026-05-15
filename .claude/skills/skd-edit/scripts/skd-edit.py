@@ -1,4 +1,4 @@
-# skd-edit v1.17 — Atomic 1C DCS editor (Python port)
+# skd-edit v1.18 — Atomic 1C DCS editor (Python port)
 # Source: https://github.com/Nikolay-Shirokov/cc-1c-skills
 import argparse
 import os
@@ -20,7 +20,7 @@ VALID_OPS = [
     "set-query", "patch-query", "set-outputParameter", "set-structure",
     "modify-field", "modify-filter", "modify-dataParameter", "modify-parameter", "modify-structure", "set-field-role",
     "rename-parameter", "reorder-parameters",
-    "clear-selection", "clear-order", "clear-filter",
+    "clear-selection", "clear-order", "clear-filter", "clear-conditionalAppearance",
     "remove-field", "remove-total", "remove-calculated-field", "remove-parameter", "remove-filter",
 ]
 
@@ -2379,6 +2379,16 @@ elif operation == "clear-filter":
         print(f'[OK] Filter cleared in variant "{var_name}"')
     else:
         print(f'[INFO] No filter section in variant "{var_name}"')
+
+elif operation == "clear-conditionalAppearance":
+    settings = resolve_variant_settings()
+    var_name = get_variant_name()
+    ca_el = find_first_element(settings, ["conditionalAppearance"], SET_NS)
+    if ca_el is not None:
+        clear_container_children(ca_el)
+        print(f'[OK] ConditionalAppearance cleared in variant "{var_name}"')
+    else:
+        print(f'[INFO] No conditionalAppearance section in variant "{var_name}"')
 
 elif operation == "modify-filter":
     settings = resolve_variant_settings()

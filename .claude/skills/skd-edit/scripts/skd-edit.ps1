@@ -1,4 +1,4 @@
-﻿# skd-edit v1.17 — Atomic 1C DCS editor
+﻿# skd-edit v1.18 — Atomic 1C DCS editor
 # Source: https://github.com/Nikolay-Shirokov/cc-1c-skills
 param(
 	[Parameter(Mandatory)]
@@ -13,7 +13,7 @@ param(
 		"set-query","patch-query","set-outputParameter","set-structure",
 		"modify-field","modify-filter","modify-dataParameter","modify-parameter","modify-structure","set-field-role",
 		"rename-parameter","reorder-parameters",
-		"clear-selection","clear-order","clear-filter",
+		"clear-selection","clear-order","clear-filter","clear-conditionalAppearance",
 		"remove-field","remove-total","remove-calculated-field","remove-parameter","remove-filter")]
 	[string]$Operation,
 
@@ -2855,6 +2855,18 @@ switch ($Operation) {
 			Write-Host "[OK] Filter cleared in variant `"$varName`""
 		} else {
 			Write-Host "[INFO] No filter section in variant `"$varName`""
+		}
+	}
+
+	"clear-conditionalAppearance" {
+		$settings = Resolve-VariantSettings
+		$varName = Get-VariantName
+		$caEl = Find-FirstElement $settings @("conditionalAppearance") $setNs
+		if ($caEl) {
+			Clear-ContainerChildren $caEl
+			Write-Host "[OK] ConditionalAppearance cleared in variant `"$varName`""
+		} else {
+			Write-Host "[INFO] No conditionalAppearance section in variant `"$varName`""
 		}
 	}
 
