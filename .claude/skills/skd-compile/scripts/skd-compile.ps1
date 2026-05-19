@@ -1,4 +1,4 @@
-﻿# skd-compile v1.22 — Compile 1C DCS from JSON
+﻿# skd-compile v1.23 — Compile 1C DCS from JSON
 # Source: https://github.com/Nikolay-Shirokov/cc-1c-skills
 param(
 	[string]$DefinitionFile,
@@ -55,7 +55,7 @@ function X {
 
 function Esc-Xml {
 	param([string]$s)
-	return $s.Replace('&','&amp;').Replace('<','&lt;').Replace('>','&gt;').Replace('"','&quot;')
+	return $s.Replace('&','&amp;').Replace('<','&lt;').Replace('>','&gt;')
 }
 
 function Resolve-QueryValue {

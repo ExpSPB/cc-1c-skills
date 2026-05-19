@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-# skd-compile v1.22 — Compile 1C DCS from JSON
+# skd-compile v1.23 — Compile 1C DCS from JSON
 # Source: https://github.com/Nikolay-Shirokov/cc-1c-skills
 import argparse
 import json
@@ -10,7 +10,7 @@ import uuid
 
 
 def esc_xml(s):
-    return s.replace('&', '&amp;').replace('<', '&lt;').replace('>', '&gt;').replace('"', '&quot;')
+    return s.replace('&', '&amp;').replace('<', '&lt;').replace('>', '&gt;')
 
 def fmt_dec(v):
     """Format decimal: 30.0 → '30', 16.625 → '16.625' (match PS1 output)."""
