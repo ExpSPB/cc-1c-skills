@@ -434,6 +434,15 @@ if stopped:
 if len(calc_field_nodes) > 0:
     cf_ok = True
     cf_seen = {}
+    # Collect totalField dataPaths — an empty calculatedField is legitimate if a
+    # totalField with the same dataPath provides the expression (real-world
+    # pattern in vendor ERP/БП reports for fields visible only in totals).
+    tf_paths = set()
+    for tf in total_field_nodes:
+        tf_dp = find(tf, "s:dataPath")
+        if tf_dp is not None and inner_text(tf_dp):
+            tf_paths.add(inner_text(tf_dp))
+
     for cf in calc_field_nodes:
         dp = find(cf, "s:dataPath")
         expr = find(cf, "s:expression")
@@ -451,8 +460,14 @@ if len(calc_field_nodes) > 0:
             cf_seen[path] = True
 
         if expr is None or not text_of(expr):
-            report_error(f"CalculatedField '{path}' has empty expression")
-            cf_ok = False
+            # Empty expression is legitimate in several vendor patterns:
+            #   - totalField with same dataPath provides the calculation
+            #   - groupTemplate uses the field as group name (declarative only)
+            #   - field is referenced only by settingsVariants for grouping
+            # Surface as warning, not error, to avoid false positives on real
+            # ERP/БП reports while still flagging the unusual shape.
+            if path not in tf_paths:
+                report_warn(f"CalculatedField '{path}' has empty expression (declarative-only?)")
 
         # Warn if collides with a dataset field
         if path in all_field_paths:
@@ -526,12 +541,14 @@ if len(template_nodes) > 0:
             continue
         t_name = inner_text(name_node)
         if t_name in tpl_seen:
-            report_error(f"Duplicate template name: {t_name}")
-            tpl_ok = False
+            # Vendor configs (ERP/БП) ship templates with repeating names — the
+            # platform identifies them by position/context, not by <name>. Demote
+            # to warning so the check still surfaces the collision without failing.
+            report_warn(f"Duplicate template name: {t_name} (allowed by platform but ambiguous)")
         else:
             tpl_seen[t_name] = True
     if tpl_ok:
-        report_ok(f"{len(template_nodes)} template(s): names unique")
+        report_ok(f"{len(template_nodes)} template(s) found")
 
 # ── 13. GroupTemplate checks ─────────────────────────────────
 
@@ -558,7 +575,8 @@ if stopped:
 
 valid_comparison_types = (
     "Equal", "NotEqual", "Greater", "GreaterOrEqual", "Less", "LessOrEqual",
-    "InList", "NotInList", "InHierarchy", "InListByHierarchy",
+    "InList", "NotInList", "InHierarchy", "NotInHierarchy",
+    "InListByHierarchy", "NotInListByHierarchy",
     "Contains", "NotContains", "BeginsWith", "NotBeginsWith",
     "Filled", "NotFilled",
 )

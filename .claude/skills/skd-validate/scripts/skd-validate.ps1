@@ -438,6 +438,17 @@ if ($script:stopped) { & $finalize; exit 1 }
 if ($calcFieldNodes.Count -gt 0) {
 	$cfOk = $true
 	$cfSeen = @{}
+	# Collect totalField dataPaths — an empty calculatedField is legitimate if a
+	# totalField with the same dataPath provides the expression (real-world
+	# pattern in vendor ERP/БП reports for fields visible only in totals).
+	$tfPaths = @{}
+	foreach ($tf in $totalFieldNodes) {
+		$tfDp = $tf.SelectSingleNode("s:dataPath", $ns)
+		if ($tfDp -and $tfDp.InnerText) {
+			$tfPaths[$tfDp.InnerText] = $true
+		}
+	}
+
 	foreach ($cf in $calcFieldNodes) {
 		$dp = $cf.SelectSingleNode("s:dataPath", $ns)
 		$expr = $cf.SelectSingleNode("s:expression", $ns)
@@ -457,8 +468,15 @@ if ($calcFieldNodes.Count -gt 0) {
 		}
 
 		if (-not $expr -or -not $expr.InnerText.Trim()) {
-			Report-Error "CalculatedField '$path' has empty expression"
-			$cfOk = $false
+			# Empty expression is legitimate in several vendor patterns:
+			#   - totalField with same dataPath provides the calculation
+			#   - groupTemplate uses the field as group name (declarative only)
+			#   - field is referenced only by settingsVariants for grouping
+			# Surface as warning, not error, to avoid false positives on real
+			# ERP/БП reports while still flagging the unusual shape.
+			if (-not $tfPaths.ContainsKey($path)) {
+				Report-Warn "CalculatedField '$path' has empty expression (declarative-only?)"
+			}
 		}
 
 		# Warn if collides with a dataset field
@@ -542,14 +560,16 @@ if ($templateNodes.Count -gt 0) {
 		}
 		$tName = $nameNode.InnerText
 		if ($tplSeen.ContainsKey($tName)) {
-			Report-Error "Duplicate template name: $tName"
-			$tplOk = $false
+			# Vendor configs (ERP/БП) ship templates with repeating names — the
+			# platform identifies them by position/context, not by <name>. Demote
+			# to warning so the check still surfaces the collision without failing.
+			Report-Warn "Duplicate template name: $tName (allowed by platform but ambiguous)"
 		} else {
 			$tplSeen[$tName] = $true
 		}
 	}
 	if ($tplOk) {
-		Report-OK "$($templateNodes.Count) template(s): names unique"
+		Report-OK "$($templateNodes.Count) template(s) found"
 	}
 }
 
@@ -581,7 +601,8 @@ if ($script:stopped) { & $finalize; exit 1 }
 
 $validComparisonTypes = @(
 	"Equal","NotEqual","Greater","GreaterOrEqual","Less","LessOrEqual",
-	"InList","NotInList","InHierarchy","InListByHierarchy",
+	"InList","NotInList","InHierarchy","NotInHierarchy",
+	"InListByHierarchy","NotInListByHierarchy",
 	"Contains","NotContains","BeginsWith","NotBeginsWith",
 	"Filled","NotFilled"
 )
