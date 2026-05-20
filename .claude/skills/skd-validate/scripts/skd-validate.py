@@ -1,4 +1,4 @@
-# skd-validate v1.1 — Validate 1C DCS structure (Python port)
+# skd-validate v1.2 — Validate 1C DCS structure (Python port)
 # Source: https://github.com/Nikolay-Shirokov/cc-1c-skills
 import argparse
 import os
@@ -684,6 +684,146 @@ else:
 
     if v_ok:
         report_ok(f"{len(variant_nodes)} settingsVariant(s) found")
+
+# ── 16. valueType structural checks ───────────────────────────
+# Catches broken XDTO that XML/structural checks miss (decimal without xs:,
+# missing qualifiers, mismatched qualifier blocks, unknown sign/length tokens).
+
+import re as _re_vt
+
+_VALID_TYPE_QUALIFIER = {
+    'xs:decimal':        'v8:NumberQualifiers',
+    'xs:string':         'v8:StringQualifiers',
+    'xs:dateTime':       'v8:DateQualifiers',
+    'xs:boolean':        '',
+    'v8:StandardPeriod': '',
+    'v8:UUID':           '',
+}
+_VALID_SIGN      = ('Any', 'Nonnegative', 'Negative')
+_VALID_LENGTH    = ('Variable', 'Fixed')
+_VALID_FRACTIONS = ('Date', 'DateTime', 'Time')
+_V8_NS_URI       = 'http://v8.1c.ru/8.1/data/core'
+_CONFIG_NS_URI   = 'http://v8.1c.ru/8.1/data/enterprise/current-config'
+
+vt_nodes = find_all(root, "//s:valueType")
+vt_checked = 0
+vt_ok = True
+for vt in vt_nodes:
+    vt_checked += 1
+    last_type = None  # short form 'xs:decimal' or '' (ref — no qualifiers)
+    for child in vt:
+        if not isinstance(child.tag, str):
+            continue  # comments etc.
+        qname_local = etree.QName(child.tag).localname
+        qname_ns = etree.QName(child.tag).namespace
+
+        if qname_local == 'Type' and qname_ns == _V8_NS_URI:
+            t = (child.text or '').strip()
+            if not t:
+                report_error("valueType: <v8:Type> is empty")
+                vt_ok = False
+                last_type = None
+                continue
+            m = _re_vt.match(r'^([A-Za-z][A-Za-z0-9]*):(.+)$', t)
+            if not m:
+                report_error(f"valueType: type '{t}' has no namespace prefix (expected xs:/v8:/d5p1: — e.g. xs:decimal not decimal)")
+                vt_ok = False
+                last_type = None
+                continue
+            prefix, local = m.group(1), m.group(2)
+            last_type = t
+            if prefix in ('xs', 'v8'):
+                if t not in _VALID_TYPE_QUALIFIER:
+                    report_error(f"valueType: unknown type '{t}' (allowed: xs:decimal/xs:string/xs:dateTime/xs:boolean/v8:StandardPeriod or <prefix>:*Ref.X)")
+                    vt_ok = False
+                    last_type = None
+            else:
+                # Inline-declared prefix — must resolve to current-config namespace
+                prefix_ns = child.nsmap.get(prefix)
+                if prefix_ns != _CONFIG_NS_URI:
+                    report_error(f"valueType: type '{t}' uses prefix '{prefix}' which is not bound to enterprise/current-config namespace")
+                    vt_ok = False
+                    last_type = None
+                elif not _re_vt.match(r'^[A-Za-z]+(Ref)?\.', local):
+                    report_error(f"valueType: ref type '{t}' must look like '<prefix>:<Kind>.<Name>' (e.g. d5p1:CatalogRef.X)")
+                    vt_ok = False
+                    last_type = ''
+                else:
+                    last_type = ''  # ref — no qualifier expected
+
+        elif qname_local.endswith('Qualifiers') and qname_ns == _V8_NS_URI:
+            q_name = f"v8:{qname_local}"
+            expected = _VALID_TYPE_QUALIFIER.get(last_type) if last_type else None
+            if expected is None or expected == '':
+                report_error(f"valueType: <{q_name}> after <v8:Type>{last_type}</v8:Type> — this type has no qualifiers")
+                vt_ok = False
+            elif q_name != expected:
+                report_error(f"valueType: <{q_name}> doesn't match <v8:Type>{last_type}</v8:Type> (expected <{expected}>)")
+                vt_ok = False
+            else:
+                if q_name == 'v8:NumberQualifiers':
+                    digits = find(child, "v8:Digits")
+                    frac   = find(child, "v8:FractionDigits")
+                    sign   = find(child, "v8:AllowedSign")
+                    if digits is None or not _re_vt.match(r'^\d+$', text_of(digits)):
+                        report_error("v8:NumberQualifiers: <v8:Digits> missing or not a non-negative integer")
+                        vt_ok = False
+                    if frac is None or not _re_vt.match(r'^\d+$', text_of(frac)):
+                        report_error("v8:NumberQualifiers: <v8:FractionDigits> missing or not a non-negative integer")
+                        vt_ok = False
+                    if sign is not None and text_of(sign) and text_of(sign) not in _VALID_SIGN:
+                        report_error(f"v8:NumberQualifiers: <v8:AllowedSign>{text_of(sign)}</v8:AllowedSign> — must be one of: {', '.join(_VALID_SIGN)}")
+                        vt_ok = False
+                elif q_name == 'v8:StringQualifiers':
+                    length = find(child, "v8:Length")
+                    al     = find(child, "v8:AllowedLength")
+                    if length is None or not _re_vt.match(r'^\d+$', text_of(length)):
+                        report_error("v8:StringQualifiers: <v8:Length> missing or not a non-negative integer")
+                        vt_ok = False
+                    if al is not None and text_of(al) and text_of(al) not in _VALID_LENGTH:
+                        report_error(f"v8:StringQualifiers: <v8:AllowedLength>{text_of(al)}</v8:AllowedLength> — must be one of: {', '.join(_VALID_LENGTH)}")
+                        vt_ok = False
+                elif q_name == 'v8:DateQualifiers':
+                    df = find(child, "v8:DateFractions")
+                    if df is not None and text_of(df) and text_of(df) not in _VALID_FRACTIONS:
+                        report_error(f"v8:DateQualifiers: <v8:DateFractions>{text_of(df)}</v8:DateFractions> — must be one of: {', '.join(_VALID_FRACTIONS)}")
+                        vt_ok = False
+            last_type = None  # consumed
+
+if vt_checked > 0 and vt_ok:
+    report_ok(f"{vt_checked} valueType block(s): structure and qualifiers OK")
+
+if stopped:
+    finalize()
+    sys.exit(1)
+
+# ── 17. value content checks ──────────────────────────────────
+# Catches literal placeholders ('_') and empty strings in DesignTimeValue refs
+# that XDTO would reject at db-load-xml.
+
+value_nodes = find_all(root, "//s:value[@xsi:type]") + find_all(root, "//dcscor:value[@xsi:type]")
+v_checked = 0
+v_ok = True
+for vn in value_nodes:
+    if vn is None:
+        continue
+    v_checked += 1
+    xsi_type = vn.get(XSI_TYPE) or ''
+    text = vn.text or ''
+    if xsi_type == 'dcscor:DesignTimeValue':
+        stripped = text.strip()
+        if not stripped or stripped == '_':
+            report_error(f"<value xsi:type=\"dcscor:DesignTimeValue\">{text}</value> — DesignTimeValue must be a reference path (e.g. Перечисление.X.Y), not '{text}'")
+            v_ok = False
+        elif not _re_vt.match(r'^[A-Za-zА-Яа-яЁё]+\.[A-Za-zА-Яа-яЁё0-9_]+', stripped):
+            report_warn(f"<value xsi:type=\"dcscor:DesignTimeValue\">{text}</value> — doesn't look like a typical ref path")
+
+if v_checked > 0 and v_ok:
+    report_ok(f"{v_checked} <value> element(s) with xsi:type: content OK")
+
+if stopped:
+    finalize()
+    sys.exit(1)
 
 # ── Final output ──────────────────────────────────────────────
 

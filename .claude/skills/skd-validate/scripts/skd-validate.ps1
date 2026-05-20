@@ -1,4 +1,4 @@
-﻿# skd-validate v1.1 — Validate 1C DCS structure
+﻿# skd-validate v1.2 — Validate 1C DCS structure
 # Source: https://github.com/Nikolay-Shirokov/cc-1c-skills
 param(
 	[Parameter(Mandatory)]
@@ -733,6 +733,160 @@ if ($variantNodes.Count -eq 0) {
 		Report-OK "$($variantNodes.Count) settingsVariant(s) found"
 	}
 }
+
+# --- 16. valueType structural checks ---
+# Catches broken XDTO that XML/structural checks miss (decimal without xs:,
+# missing qualifiers, mismatched qualifier blocks, unknown sign/length tokens).
+
+$validTypeQualifier = @{
+	'xs:decimal'        = 'v8:NumberQualifiers'
+	'xs:string'         = 'v8:StringQualifiers'
+	'xs:dateTime'       = 'v8:DateQualifiers'
+	'xs:boolean'        = ''
+	'v8:StandardPeriod' = ''
+	'v8:UUID'           = ''
+}
+$validSign       = @('Any', 'Nonnegative', 'Negative')
+$validLength     = @('Variable', 'Fixed')
+$validFractions  = @('Date', 'DateTime', 'Time')
+
+$valueTypeNodes = $root.SelectNodes("//s:valueType", $ns)
+$vtChecked = 0
+$vtOk = $true
+foreach ($vt in $valueTypeNodes) {
+	$vtChecked++
+	# Walk children in document order
+	$children = @($vt.ChildNodes | Where-Object { $_.NodeType -eq 'Element' })
+	$lastType = $null   # short form like 'xs:decimal' or '' (ref types resolved to '')
+
+	foreach ($child in $children) {
+		$qName = "$($child.Prefix):$($child.LocalName)"
+		if ($child.LocalName -eq 'Type' -and $child.NamespaceURI -eq 'http://v8.1c.ru/8.1/data/core') {
+			$t = $child.InnerText.Trim()
+			if (-not $t) {
+				Report-Error "valueType: <v8:Type> is empty"
+				$vtOk = $false
+				$lastType = $null
+				continue
+			}
+			# Must have a known prefix — xs:, v8:, or any prefix bound to current-config namespace
+			if ($t -match '^([A-Za-z][A-Za-z0-9]*):(.+)$') {
+				$prefix = $Matches[1]
+				$localName = $Matches[2]
+				$lastType = $t
+				if ($prefix -eq 'xs' -or $prefix -eq 'v8') {
+					if (-not $validTypeQualifier.ContainsKey($t)) {
+						Report-Error "valueType: unknown type '$t' (allowed: xs:decimal/xs:string/xs:dateTime/xs:boolean/v8:StandardPeriod or <prefix>:*Ref.X)"
+						$vtOk = $false
+						$lastType = $null
+					}
+				} else {
+					# Inline-declared prefix — should resolve to current-config namespace
+					$prefixNs = $child.GetNamespaceOfPrefix($prefix)
+					if ($prefixNs -ne 'http://v8.1c.ru/8.1/data/enterprise/current-config') {
+						Report-Error "valueType: type '$t' uses prefix '$prefix' which is not bound to enterprise/current-config namespace"
+						$vtOk = $false
+						$lastType = $null
+					} elseif (-not ($localName -match '^[A-Za-z]+(Ref)?\.')) {
+						Report-Error "valueType: ref type '$t' must look like '<prefix>:<Kind>.<Name>' (e.g. d5p1:CatalogRef.X)"
+						$vtOk = $false
+						$lastType = ''
+					} else {
+						$lastType = ''   # ref type — no qualifier expected
+					}
+				}
+			} else {
+				Report-Error "valueType: type '$t' has no namespace prefix (expected xs:/v8:/d5p1: — e.g. xs:decimal not decimal)"
+				$vtOk = $false
+				$lastType = $null
+			}
+		} elseif ($child.LocalName -match 'Qualifiers$' -and $child.NamespaceURI -eq 'http://v8.1c.ru/8.1/data/core') {
+			# Qualifier block — must match preceding Type
+			$expected = if ($lastType -and $validTypeQualifier.ContainsKey($lastType)) {
+				$validTypeQualifier[$lastType]
+			} else { $null }
+
+			if ($null -eq $expected -or $expected -eq '') {
+				Report-Error "valueType: <$qName> after <v8:Type>$lastType</v8:Type> — this type has no qualifiers"
+				$vtOk = $false
+			} elseif ($qName -ne $expected) {
+				Report-Error "valueType: <$qName> doesn't match <v8:Type>$lastType</v8:Type> (expected <$expected>)"
+				$vtOk = $false
+			} else {
+				# Validate qualifier internals
+				if ($qName -eq 'v8:NumberQualifiers') {
+					$digits = $child.SelectSingleNode("v8:Digits", $ns)
+					$frac   = $child.SelectSingleNode("v8:FractionDigits", $ns)
+					$sign   = $child.SelectSingleNode("v8:AllowedSign", $ns)
+					if (-not $digits -or -not ($digits.InnerText -match '^\d+$')) {
+						Report-Error "v8:NumberQualifiers: <v8:Digits> missing or not a non-negative integer"
+						$vtOk = $false
+					}
+					if (-not $frac -or -not ($frac.InnerText -match '^\d+$')) {
+						Report-Error "v8:NumberQualifiers: <v8:FractionDigits> missing or not a non-negative integer"
+						$vtOk = $false
+					}
+					if ($sign -and $sign.InnerText -and $sign.InnerText -notin $validSign) {
+						Report-Error "v8:NumberQualifiers: <v8:AllowedSign>$($sign.InnerText)</v8:AllowedSign> — must be one of: $($validSign -join ', ')"
+						$vtOk = $false
+					}
+				} elseif ($qName -eq 'v8:StringQualifiers') {
+					$len = $child.SelectSingleNode("v8:Length", $ns)
+					$al  = $child.SelectSingleNode("v8:AllowedLength", $ns)
+					if (-not $len -or -not ($len.InnerText -match '^\d+$')) {
+						Report-Error "v8:StringQualifiers: <v8:Length> missing or not a non-negative integer"
+						$vtOk = $false
+					}
+					if ($al -and $al.InnerText -and $al.InnerText -notin $validLength) {
+						Report-Error "v8:StringQualifiers: <v8:AllowedLength>$($al.InnerText)</v8:AllowedLength> — must be one of: $($validLength -join ', ')"
+						$vtOk = $false
+					}
+				} elseif ($qName -eq 'v8:DateQualifiers') {
+					$df = $child.SelectSingleNode("v8:DateFractions", $ns)
+					if ($df -and $df.InnerText -and $df.InnerText -notin $validFractions) {
+						Report-Error "v8:DateQualifiers: <v8:DateFractions>$($df.InnerText)</v8:DateFractions> — must be one of: $($validFractions -join ', ')"
+						$vtOk = $false
+					}
+				}
+			}
+			$lastType = $null   # qualifier consumed; next must be another Type or end
+		}
+	}
+}
+if ($vtChecked -gt 0 -and $vtOk) {
+	Report-OK "$vtChecked valueType block(s): structure and qualifiers OK"
+}
+
+if ($script:stopped) { & $finalize; exit 1 }
+
+# --- 17. value content checks ---
+# Catches literal placeholders ("_") and empty strings in DesignTimeValue refs
+# that XDTO would reject at db-load-xml.
+
+$valueNodes = @()
+$valueNodes += @($root.SelectNodes("//s:value[@xsi:type]", $ns))
+$valueNodes += @($root.SelectNodes("//dcscor:value[@xsi:type]", $ns))
+$vChecked = 0
+$vOk = $true
+foreach ($vn in $valueNodes) {
+	if (-not $vn) { continue }
+	$vChecked++
+	$xsiType = $vn.GetAttribute("type", "http://www.w3.org/2001/XMLSchema-instance")
+	$text = $vn.InnerText
+	if ($xsiType -eq 'dcscor:DesignTimeValue') {
+		if (-not $text -or $text.Trim() -eq '' -or $text.Trim() -eq '_') {
+			Report-Error "<value xsi:type=`"dcscor:DesignTimeValue`">$text</value> — DesignTimeValue must be a reference path (e.g. Перечисление.X.Y), not '$text'"
+			$vOk = $false
+		} elseif (-not ($text -match '^[A-Za-zА-Яа-яЁё]+\.[A-Za-zА-Яа-яЁё0-9_]+')) {
+			Report-Warn "<value xsi:type=`"dcscor:DesignTimeValue`">$text</value> — doesn't look like a typical ref path"
+		}
+	}
+}
+if ($vChecked -gt 0 -and $vOk) {
+	Report-OK "$vChecked <value> element(s) with xsi:type: content OK"
+}
+
+if ($script:stopped) { & $finalize; exit 1 }
 
 # --- Final output ---
 
