@@ -1,4 +1,4 @@
-﻿# skd-decompile v0.6 — Decompile 1C DCS Template.xml to JSON DSL (draft)
+﻿# skd-decompile v0.7 — Decompile 1C DCS Template.xml to JSON DSL (draft)
 # Source: https://github.com/Nikolay-Shirokov/cc-1c-skills
 param(
 	[Parameter(Mandatory)]
@@ -28,7 +28,7 @@ $root = $xmlDoc.DocumentElement
 
 # Ring 3: not a DataCompositionSchema → fail-fast
 if ($root.LocalName -ne 'DataCompositionSchema') {
-	Write-Error "Root element <$($root.LocalName)> is not <DataCompositionSchema>. This is not a SKD template (perhaps a spreadsheet — use /mxl-decompile)."
+	[Console]::Error.WriteLine("skd-decompile: корневой элемент <$($root.LocalName)> не <DataCompositionSchema> — это не схема СКД (возможно, табличный документ — используй /mxl-decompile).")
 	exit 2
 }
 
@@ -55,6 +55,36 @@ $ns.AddNamespace("v8",     $NS_V8)
 $ns.AddNamespace("v8ui",   $NS_V8UI)
 $ns.AddNamespace("xs",     $NS_XS)
 $ns.AddNamespace("xsi",    $NS_XSI)
+
+# --- 1b. Ring 3 scan: bail out on unsupported constructs ---
+
+function Fail-Ring3 {
+	param([string]$kind, [string]$loc)
+	[Console]::Error.WriteLine("skd-decompile: декомпиляция не поддерживает $kind (path: $loc)")
+	[Console]::Error.WriteLine("Для точечной работы с этим отчётом используй /skd-edit.")
+	exit 3
+}
+
+# Picture cells in templates
+foreach ($el in $xmlDoc.SelectNodes("//*[local-name()='item']")) {
+	$xsi = $el.GetAttribute("type", "http://www.w3.org/2001/XMLSchema-instance")
+	if ($xsi -match 'Picture$' -and $el.NamespaceURI -eq "http://v8.1c.ru/8.1/data-composition-system/area-template") {
+		Fail-Ring3 -kind "Picture cell в шаблоне" -loc "template/.../item[@xsi:type=Picture]"
+	}
+}
+
+# ValueStorage parameter type
+foreach ($vt in $xmlDoc.SelectNodes("//*[local-name()='Type']")) {
+	$inner = $vt.InnerText
+	if ($inner -match '^v8:ValueStorage$|:ValueStorage$') {
+		Fail-Ring3 -kind "параметр типа ХранилищеЗначения" -loc "valueType[v8:Type=ValueStorage]"
+	}
+}
+
+# templateCondition (variant templates) — top-level <template> with <templateCondition>
+foreach ($t in $xmlDoc.SelectNodes("//*[local-name()='templateCondition']")) {
+	Fail-Ring3 -kind "templateCondition (вариативные шаблоны)" -loc "template/templateCondition"
+}
 
 # --- 2. Warnings accumulator ---
 
