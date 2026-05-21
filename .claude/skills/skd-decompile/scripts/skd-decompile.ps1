@@ -1,4 +1,4 @@
-﻿# skd-decompile v0.14 — Decompile 1C DCS Template.xml to JSON DSL (draft)
+﻿# skd-decompile v0.15 — Decompile 1C DCS Template.xml to JSON DSL (draft)
 # Source: https://github.com/Nikolay-Shirokov/cc-1c-skills
 param(
 	[Parameter(Mandatory)]
@@ -646,124 +646,201 @@ function Render-Parameter {
 	return $obj
 }
 
-# --- 3b. Built-in style fingerprints ---
+# --- 3b. Built-in style presets (preset-shape: 11 полей) ---
 
-# Fingerprints for built-in styles (header/data/subheader/total).
-# Each is the set of "shape-defining" appearance items the style emits.
-# Width/Height/merge flags are excluded — they're per-cell.
-$script:builtinStyleFingerprints = @{
-	'header' = @{
-		ЦветФона                 = 'd8p1:ReportHeaderBackColor'
-		ЦветГраницы              = 'd8p1:ReportLineColor'
-		СтильГраницы             = 'None|0'
-		'СтильГраницы.Слева'     = 'Solid|1'
-		'СтильГраницы.Сверху'    = 'Solid|1'
-		'СтильГраницы.Справа'    = 'Solid|1'
-		'СтильГраницы.Снизу'     = 'Solid|1'
-		Шрифт                    = 'Arial|10|false|false|false|false'
-		ГоризонтальноеПоложение  = 'Center'
-		Размещение               = 'Wrap'
+# Имена 5 встроенных стилей. Совпадает с compile presets.
+$script:builtinPresetNames = @('none','data','header','subheader','total')
+
+# Преобразовать compile-style preset hashtable в наш canonical preset shape.
+# Canonical поля: font, fontSize, bold, italic, hAlign, vAlign, wrap, bgColor, textColor, borderColor, borders.
+$script:builtinPresets = @{
+	'none' = @{
+		font = $null; fontSize = $null; bold = $false; italic = $false
+		hAlign = $null; vAlign = $null; wrap = $false
+		bgColor = $null; textColor = $null
+		borderColor = $null; borders = $false
 	}
 	'data' = @{
-		ЦветФона                 = 'd8p1:ReportGroup1BackColor'
-		ЦветГраницы              = 'd8p1:ReportLineColor'
-		СтильГраницы             = 'None|0'
-		'СтильГраницы.Слева'     = 'Solid|1'
-		'СтильГраницы.Сверху'    = 'Solid|1'
-		'СтильГраницы.Справа'    = 'Solid|1'
-		'СтильГраницы.Снизу'     = 'Solid|1'
-		Шрифт                    = 'Arial|10|false|false|false|false'
+		font = 'Arial'; fontSize = 10; bold = $false; italic = $false
+		hAlign = $null; vAlign = $null; wrap = $false
+		bgColor = 'style:ReportGroup1BackColor'; textColor = $null
+		borderColor = 'style:ReportLineColor'; borders = $true
+	}
+	'header' = @{
+		font = 'Arial'; fontSize = 10; bold = $false; italic = $false
+		hAlign = 'Center'; vAlign = $null; wrap = $true
+		bgColor = 'style:ReportHeaderBackColor'; textColor = $null
+		borderColor = 'style:ReportLineColor'; borders = $true
 	}
 	'subheader' = @{
-		ЦветГраницы              = 'd8p1:ReportLineColor'
-		СтильГраницы             = 'None|0'
-		'СтильГраницы.Слева'     = 'Solid|1'
-		'СтильГраницы.Сверху'    = 'Solid|1'
-		'СтильГраницы.Справа'    = 'Solid|1'
-		'СтильГраницы.Снизу'     = 'Solid|1'
-		Шрифт                    = 'Arial|10|false|false|false|false'
-		ГоризонтальноеПоложение  = 'Center'
+		font = 'Arial'; fontSize = 10; bold = $false; italic = $false
+		hAlign = 'Center'; vAlign = $null; wrap = $true
+		bgColor = $null; textColor = $null
+		borderColor = 'style:ReportLineColor'; borders = $true
 	}
 	'total' = @{
-		ЦветГраницы              = 'd8p1:ReportLineColor'
-		СтильГраницы             = 'None|0'
-		'СтильГраницы.Слева'     = 'Solid|1'
-		'СтильГраницы.Сверху'    = 'Solid|1'
-		'СтильГраницы.Справа'    = 'Solid|1'
-		'СтильГраницы.Снизу'     = 'Solid|1'
-		Шрифт                    = 'Arial|10|false|false|false|false'
+		font = 'Arial'; fontSize = 10; bold = $false; italic = $false
+		hAlign = $null; vAlign = $null; wrap = $false
+		bgColor = $null; textColor = $null
+		borderColor = 'style:ReportLineColor'; borders = $true
 	}
 }
 
-# Normalize an <dcsat:appearance> node to a hashtable of "shape" keys (excluding
-# per-cell items: widths, heights, merge flags, drilldown). Used for style matching.
-function Get-AppearanceFingerprint {
+# effectivePresets = built-in + любые user-переопределения, загруженные из skd-styles.json
+$script:effectivePresets = @{}
+foreach ($k in $script:builtinPresets.Keys) {
+	$copy = @{}
+	foreach ($f in $script:builtinPresets[$k].Keys) { $copy[$f] = $script:builtinPresets[$k][$f] }
+	$script:effectivePresets[$k] = $copy
+}
+
+# existingUserPresetsRaw — копия загруженного skd-styles.json (PSCustomObject) для merge при записи.
+$script:existingUserPresetsRaw = $null
+
+# customStylesAccumulator — новые customN, накопленные в текущем прогоне, для записи в skd-styles.json.
+$script:customStylesAccumulator = [ordered]@{}
+
+# Счётчик customN
+$script:customStyleCounter = 0
+
+# Normalize color value: 'd8p1:ReportHeaderBackColor' → 'style:ReportHeaderBackColor'
+function Normalize-Color {
+	param($valNode)
+	if (-not $valNode) { return $null }
+	$txt = $valNode.InnerText
+	if ($txt -match '^d\d+p\d+:(.+)$') { return 'style:' + $matches[1] }
+	return $txt
+}
+
+# Build preset hashtable (11 полей) из <dcsat:appearance>.
+# Возвращает $null если у ячейки нет ни одного стилевого атрибута (только per-cell).
+function Extract-CellPreset {
 	param($appNode)
-	$fp = @{}
-	if (-not $appNode) { return $fp }
-	# Top-level dcscor:item children
+	if (-not $appNode) { return $null }
+	$preset = @{
+		font = $null; fontSize = $null; bold = $false; italic = $false
+		hAlign = $null; vAlign = $null; wrap = $false
+		bgColor = $null; textColor = $null
+		borderColor = $null; borders = $false
+	}
+	$hasAnyStyle = $false
 	foreach ($it in $appNode.SelectNodes("dcscor:item", $ns)) {
 		$pName = Get-Text $it "dcscor:parameter"
 		$val = $it.SelectSingleNode("dcscor:value", $ns)
-		if (-not $pName -or -not $val) { continue }
-		# Skip per-cell keys
+		if (-not $pName) { continue }
 		if ($pName -in @('МинимальнаяШирина','МаксимальнаяШирина','МинимальнаяВысота','ОбъединятьПоВертикали','ОбъединятьПоГоризонтали','Расшифровка')) { continue }
-		$valType = Get-LocalXsiType $val
-		switch ($valType) {
-			'Color'    { $fp[$pName] = $val.InnerText }
-			'Line'     {
-				$w = $val.GetAttribute("width")
-				$styleNode = $val.SelectSingleNode("v8ui:style", $ns)
-				$lineStyle = if ($styleNode) { $styleNode.InnerText } else { '' }
-				$fp[$pName] = "$lineStyle|$w"
+		switch ($pName) {
+			'Шрифт' {
+				if ($val) {
+					$preset.font = $val.GetAttribute("faceName")
+					$h = $val.GetAttribute("height")
+					if ($h) { $preset.fontSize = [int]$h }
+					$preset.bold = ($val.GetAttribute("bold") -eq 'true')
+					$preset.italic = ($val.GetAttribute("italic") -eq 'true')
+					$hasAnyStyle = $true
+				}
 			}
-			'Font'     {
-				$face = $val.GetAttribute("faceName")
-				$h = $val.GetAttribute("height")
-				$b = $val.GetAttribute("bold")
-				$i = $val.GetAttribute("italic")
-				$u = $val.GetAttribute("underline")
-				$s = $val.GetAttribute("strikeout")
-				$fp[$pName] = "$face|$h|$b|$i|$u|$s"
+			'ЦветФона'    { if ($val) { $preset.bgColor = Normalize-Color $val; $hasAnyStyle = $true } }
+			'ЦветТекста'  { if ($val) { $preset.textColor = Normalize-Color $val; $hasAnyStyle = $true } }
+			'ЦветГраницы' { if ($val) { $preset.borderColor = Normalize-Color $val; $hasAnyStyle = $true } }
+			'СтильГраницы' {
+				# borders = true если есть sub-items для 4 сторон со style=Solid
+				$sidesFound = 0
+				foreach ($sub in $it.SelectNodes("dcscor:item", $ns)) {
+					$subName = Get-Text $sub "dcscor:parameter"
+					if ($subName -match '^СтильГраницы\.(Слева|Сверху|Справа|Снизу)$') { $sidesFound++ }
+				}
+				if ($sidesFound -gt 0) { $preset.borders = $true; $hasAnyStyle = $true }
 			}
-			default    { $fp[$pName] = $val.InnerText }
-		}
-		# Nested sub-items under СтильГраницы (left/top/right/bottom)
-		foreach ($sub in $it.SelectNodes("dcscor:item", $ns)) {
-			$subName = Get-Text $sub "dcscor:parameter"
-			$subVal = $sub.SelectSingleNode("dcscor:value", $ns)
-			if (-not $subName -or -not $subVal) { continue }
-			$subType = Get-LocalXsiType $subVal
-			if ($subType -eq 'Line') {
-				$w = $subVal.GetAttribute("width")
-				$styleNode = $subVal.SelectSingleNode("v8ui:style", $ns)
-				$lineStyle = if ($styleNode) { $styleNode.InnerText } else { '' }
-				$fp[$subName] = "$lineStyle|$w"
-			}
+			'ГоризонтальноеПоложение' { if ($val) { $preset.hAlign = $val.InnerText; $hasAnyStyle = $true } }
+			'ВертикальноеПоложение'   { if ($val) { $preset.vAlign = $val.InnerText; $hasAnyStyle = $true } }
+			'Размещение' { if ($val -and $val.InnerText -eq 'Wrap') { $preset.wrap = $true; $hasAnyStyle = $true } }
 		}
 	}
-	# Translate d8p1: colors to canonical "d8p1:Name" form (InnerText already contains prefix)
-	return $fp
+	if (-not $hasAnyStyle) { return $null }
+	return $preset
 }
 
-# Check if appearance fingerprint matches a built-in style.
-# Returns style name or $null.
-function Match-BuiltinStyle {
-	param($fp)
-	foreach ($styleName in $script:builtinStyleFingerprints.Keys) {
-		$expected = $script:builtinStyleFingerprints[$styleName]
-		$match = $true
-		# All expected keys must be present with matching value
-		foreach ($k in $expected.Keys) {
-			if (-not $fp.ContainsKey($k) -or $fp[$k] -ne $expected[$k]) { $match = $false; break }
-		}
-		if (-not $match) { continue }
-		# Must not have extra keys that aren't in the expected fingerprint
-		$extras = @($fp.Keys | Where-Object { -not $expected.ContainsKey($_) })
-		if ($extras.Count -ne 0) { continue }
-		return $styleName
+# Deep-equality двух preset hashtables (11 полей).
+function Compare-Preset {
+	param($a, $b)
+	foreach ($key in @('font','fontSize','bold','italic','hAlign','vAlign','wrap','bgColor','textColor','borderColor','borders')) {
+		if ($a[$key] -ne $b[$key]) { return $false }
+	}
+	return $true
+}
+
+# Найти имя preset'а в effectivePresets по shape. Возвращает имя или $null.
+function Match-PresetByShape {
+	param($cellPreset)
+	if (-not $cellPreset) { return $null }
+	foreach ($name in $script:effectivePresets.Keys) {
+		if (Compare-Preset $cellPreset $script:effectivePresets[$name]) { return $name }
 	}
 	return $null
+}
+
+# Аллокация customN для нового, не-matched preset'а. Регистрирует в effectivePresets+accumulator.
+function Allocate-CustomStyle {
+	param($cellPreset)
+	# Поиск свободного customN
+	$script:customStyleCounter++
+	$name = "custom$($script:customStyleCounter)"
+	while ($script:effectivePresets.ContainsKey($name)) {
+		$script:customStyleCounter++
+		$name = "custom$($script:customStyleCounter)"
+	}
+	$script:effectivePresets[$name] = $cellPreset
+	$script:customStylesAccumulator[$name] = $cellPreset
+	return $name
+}
+
+# Загрузка skd-styles.json рядом с outputPath (если есть) и наслоение на effectivePresets.
+function Load-UserStyles {
+	param([string]$dirPath)
+	if (-not $dirPath) { return }
+	$stylesPath = Join-Path $dirPath 'skd-styles.json'
+	if (-not (Test-Path $stylesPath)) { return }
+	$raw = Get-Content -Raw -Encoding UTF8 $stylesPath | ConvertFrom-Json
+	$script:existingUserPresetsRaw = $raw
+	foreach ($prop in $raw.PSObject.Properties) {
+		# Compile-логика: data defaults → built-in if name match → user keys
+		$preset = @{}
+		foreach ($k in $script:builtinPresets['data'].Keys) { $preset[$k] = $script:builtinPresets['data'][$k] }
+		if ($script:builtinPresets.ContainsKey($prop.Name)) {
+			foreach ($k in $script:builtinPresets[$prop.Name].Keys) { $preset[$k] = $script:builtinPresets[$prop.Name][$k] }
+		}
+		foreach ($up in $prop.Value.PSObject.Properties) {
+			$preset[$up.Name] = $up.Value
+		}
+		$script:effectivePresets[$prop.Name] = $preset
+	}
+}
+
+# Запись skd-styles.json: preserved existing user presets + новые customN.
+function Save-UserStyles {
+	param([string]$dirPath)
+	if (-not $dirPath) { return }
+	if ($script:customStylesAccumulator.Count -eq 0 -and -not $script:existingUserPresetsRaw) { return }
+	$stylesPath = Join-Path $dirPath 'skd-styles.json'
+	$out = [ordered]@{}
+	# Сначала existing (preserve порядок и значения)
+	if ($script:existingUserPresetsRaw) {
+		foreach ($prop in $script:existingUserPresetsRaw.PSObject.Properties) {
+			$out[$prop.Name] = $prop.Value
+		}
+	}
+	# Потом новые customN
+	foreach ($name in $script:customStylesAccumulator.Keys) {
+		if ($out.Contains($name)) { continue }
+		$out[$name] = $script:customStylesAccumulator[$name]
+	}
+	if ($out.Count -eq 0) { return }
+	$json = $out | ConvertTo-Json -Depth 8
+	$json = [regex]::Replace($json, '\\u([0-9a-fA-F]{4})', { param($m) [char][int]("0x" + $m.Groups[1].Value) })
+	$enc = New-Object System.Text.UTF8Encoding($false)
+	[System.IO.File]::WriteAllText($stylesPath, $json, $enc)
+	[Console]::Error.WriteLine("Saved skd-styles.json (custom styles: $($script:customStylesAccumulator.Count))")
 }
 
 # Extract per-cell width/minHeight/merge from appearance.
@@ -875,18 +952,21 @@ function Build-Template {
 
 			# Style detection (skip empty cells with no appearance, and merge cells)
 			if ($appNode -and -not $perCell.mergeV -and -not $perCell.mergeH) {
-				$fp = Get-AppearanceFingerprint $appNode
-				if ($fp.Count -gt 0) {
-					# Ячейка имеет стилевые атрибуты — пробуем match с built-in
+				$cellPreset = Extract-CellPreset $appNode
+				if ($null -ne $cellPreset) {
+					# Ячейка имеет стилевые атрибуты — match против effectivePresets, иначе аллоцируем custom
 					$hasAnyNonEmptyFp = $true
-					$matched = Match-BuiltinStyle $fp
+					$matched = Match-PresetByShape $cellPreset
+					if ($null -eq $matched) {
+						$matched = Allocate-CustomStyle $cellPreset
+					}
 					if ($null -eq $detectedStyle) {
 						$detectedStyle = $matched
 					} elseif ($matched -ne $detectedStyle) {
 						$styleMismatch = $true
 					}
 				}
-				# Пустой fp (только per-cell width/merge) — ячейка без стиля, не контрибутирует.
+				# Если cellPreset = $null — ячейка без стилевых атрибутов (только per-cell width/merge), не контрибутирует.
 			}
 
 			# Drilldown attachment
@@ -1448,6 +1528,16 @@ function Try-StructureShorthand {
 
 # --- 4. dataSources ---
 
+# Резолв outputPath и загрузка user-стилей до обработки шаблонов
+$script:outputDir = $null
+if ($OutputPath) {
+	if (-not [System.IO.Path]::IsPathRooted($OutputPath)) {
+		$OutputPath = Join-Path (Get-Location).Path $OutputPath
+	}
+	$script:outputDir = [System.IO.Path]::GetDirectoryName($OutputPath)
+	Load-UserStyles -dirPath $script:outputDir
+}
+
 $dataSources = @()
 $dsourceNodes = $root.SelectNodes("r:dataSource", $ns)
 foreach ($dsn in $dsourceNodes) {
@@ -1716,11 +1806,9 @@ $json = [regex]::Replace($json, '\\u([0-9a-fA-F]{4})', {
 })
 
 if ($OutputPath) {
-	if (-not [System.IO.Path]::IsPathRooted($OutputPath)) {
-		$OutputPath = Join-Path (Get-Location).Path $OutputPath
-	}
 	$enc = New-Object System.Text.UTF8Encoding($false)
 	[System.IO.File]::WriteAllText($OutputPath, $json, $enc)
+	Save-UserStyles -dirPath $script:outputDir
 
 	if ($script:warnings.Count -gt 0) {
 		$wPath = [System.IO.Path]::ChangeExtension($OutputPath, $null).TrimEnd('.') + '.warnings.md'
