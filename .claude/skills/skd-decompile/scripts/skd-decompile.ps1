@@ -1,4 +1,4 @@
-﻿# skd-decompile v0.33 — Decompile 1C DCS Template.xml to JSON DSL (draft)
+﻿# skd-decompile v0.34 — Decompile 1C DCS Template.xml to JSON DSL (draft)
 # Source: https://github.com/Nikolay-Shirokov/cc-1c-skills
 param(
 	[Parameter(Mandatory)]
@@ -1375,17 +1375,19 @@ function Build-FilterItem {
 	if ($userId) { $flags += '@user' }
 	if ($viewMode -eq 'QuickAccess') { $flags += '@quickAccess' }
 	elseif ($viewMode -eq 'Inaccessible') { $flags += '@inaccessible' }
-	# Normal сохраняется только если node присутствовал — переходит в object form
+	# Normal: явное присутствие <viewMode>Normal</viewMode> в XML сохраняется
+	# через shorthand-флаг @normal (отсутствие — без флага). Это эквивалентно
+	# object form "viewMode": "Normal" но компактнее.
+	elseif ($viewMode -eq 'Normal') { $flags += '@normal' }
 
 	# nullity ops have no value
 	$noValueOps = @('filled','notFilled')
 
 	# Переход в object form:
 	# - userSettingPresentation,
-	# - явный viewMode=Normal (отсутствие тоже нужно сохранить),
 	# - массивное value (multi-right или пустой ValueList),
 	# - явный valueType (например, dcscor:Field — field-to-field comparison)
-	if ($userPresNode -or $viewMode -eq 'Normal' -or $valueIsArrayFlag -or $valueTypeAttr) {
+	if ($userPresNode -or $valueIsArrayFlag -or $valueTypeAttr) {
 		$obj = [ordered]@{ field = $field; op = $op }
 		if ($op -notin $noValueOps -and $null -ne $value) {
 			if ($valueIsArrayFlag) {

@@ -553,14 +553,14 @@ XML-маппинг — по `<group>` на каждый элемент:
 ]
 ```
 
-Формат: `"<Поле> <оператор> [<значение>] [@off] [@user] [@quickAccess] [@inaccessible]"`.
+Формат: `"<Поле> <оператор> [<значение>] [@off] [@user] [@quickAccess] [@normal] [@inaccessible]"`.
 
 - Значение `_` — пустое (placeholder, не выводится в XML)
 - `@off` → `use=false`
 - `@user` → `userSettingID=auto` (генерировать GUID)
 - `@quickAccess` → `viewMode=QuickAccess`
+- `@normal` → `viewMode=Normal` (явный — для bit-perfect, см. [viewMode](#viewmode-режим-доступности))
 - `@inaccessible` → `viewMode=Inaccessible`
-- `Normal` (default) — отдельным флагом не задаётся. Если в исходном XML был явный `<viewMode>Normal</viewMode>`, decompile переводит item в object form с `"viewMode": "Normal"`.
 - Типы значений автоопределяются: `true`/`false` → boolean, `2024-01-01T00:00:00` → dateTime, числа → decimal, `Перечисление.*`/`Справочник.*`/`ПланСчетов.*`/`Документ.*` → DesignTimeValue, прочее → string
 - OrGroup: `{"group": "Or", "items": ["условие1", "условие2"]}` — объединяет условия через ИЛИ
 
@@ -719,7 +719,7 @@ XML-маппинг — по `<group>` на каждый элемент:
 ]
 ```
 
-Формат: `"<Имя> [= <значение>] [@off] [@user] [@quickAccess] [@inaccessible]"`.
+Формат: `"<Имя> [= <значение>] [@off] [@user] [@quickAccess] [@normal] [@inaccessible]"`.
 
 - Значения-варианты периодов (`LastMonth`, `ThisYear` и др.) автоматически оборачиваются в `v8:StandardPeriod`
 - `@off` → `use=false`, `@user` → `userSettingID=auto`
