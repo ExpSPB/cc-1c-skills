@@ -1,4 +1,4 @@
-﻿# skd-decompile v0.27 — Decompile 1C DCS Template.xml to JSON DSL (draft)
+﻿# skd-decompile v0.29 — Decompile 1C DCS Template.xml to JSON DSL (draft)
 # Source: https://github.com/Nikolay-Shirokov/cc-1c-skills
 param(
 	[Parameter(Mandatory)]
@@ -1294,7 +1294,20 @@ function Build-FilterItem {
 		foreach ($c in $itemNode.SelectNodes("dcsset:item", $ns)) {
 			$items += (Build-FilterItem -itemNode $c -loc "$loc/item")
 		}
-		return [ordered]@{ group = $groupName; items = $items }
+		$gObj = [ordered]@{ group = $groupName; items = $items }
+		$gPres = Get-Text $itemNode "dcsset:presentation"
+		if ($gPres) { $gObj['presentation'] = $gPres }
+		$gVM = Get-Text $itemNode "dcsset:viewMode"
+		# Normal — implicit when userSettingID present; skip unless non-default
+		if ($gVM -and $gVM -ne 'Normal') { $gObj['viewMode'] = $gVM }
+		$gUSID = Get-Text $itemNode "dcsset:userSettingID"
+		if ($gUSID) { $gObj['userSettingID'] = 'auto' }
+		$gUSPN = $itemNode.SelectSingleNode("dcsset:userSettingPresentation", $ns)
+		if ($gUSPN) {
+			$gUSP = Get-MLText $gUSPN
+			if ($gUSP) { $gObj['userSettingPresentation'] = $gUSP }
+		}
+		return $gObj
 	}
 	if ($xtype -ne 'FilterItemComparison') {
 		return (New-Sentinel -kind "FilterItemType:$xtype" -loc $loc -detail 'Неизвестный тип фильтра')
@@ -1598,10 +1611,9 @@ function Get-GroupFields {
 function Build-TableAxisBlock {
 	param($node, [string]$loc, [bool]$includeName = $false)
 	$entry = [ordered]@{}
-	if ($includeName) {
-		$nm = Get-Text $node "dcsset:name"
-		if ($nm) { $entry['name'] = $nm }
-	}
+	# name доступен на любой оси (column/row/point/series): убираем флаг includeName
+	$nm = Get-Text $node "dcsset:name"
+	if ($nm) { $entry['name'] = $nm }
 	$gf = Get-GroupFields -parentNode $node -loc $loc
 	if ($gf.Count -gt 0) { $entry['groupFields'] = $gf }
 	# filter block on column/row/point/series
@@ -1627,6 +1639,16 @@ function Build-TableAxisBlock {
 	$opNode = $node.SelectSingleNode("dcsset:outputParameters", $ns)
 	$op = Build-OutputParameters -opNode $opNode
 	if ($op -and $op.Count -gt 0) { $entry['outputParameters'] = $op }
+	# user-settings on the axis itself
+	$avm = Get-Text $node "dcsset:viewMode"
+	if ($avm -and $avm -ne 'Normal') { $entry['viewMode'] = $avm }
+	$ausid = Get-Text $node "dcsset:userSettingID"
+	if ($ausid) { $entry['userSettingID'] = 'auto' }
+	$ausPresNode = $node.SelectSingleNode("dcsset:userSettingPresentation", $ns)
+	if ($ausPresNode) {
+		$ausPres = Get-MLText $ausPresNode
+		if ($ausPres) { $entry['userSettingPresentation'] = $ausPres }
+	}
 	return $entry
 }
 
