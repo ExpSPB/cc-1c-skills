@@ -1,4 +1,4 @@
-﻿# skd-compile v1.50 — Compile 1C DCS from JSON
+﻿# skd-compile v1.51 — Compile 1C DCS from JSON
 # Source: https://github.com/Nikolay-Shirokov/cc-1c-skills
 param(
 	[string]$DefinitionFile,
@@ -2192,6 +2192,11 @@ function Emit-ConditionalAppearance {
 	foreach ($ca in $items) {
 		X "$indent`t<dcsset:item>"
 
+		# use=false — отключённое правило (эмитим до selection — XML-порядок)
+		if ($ca.use -eq $false) {
+			X "$indent`t`t<dcsset:use>false</dcsset:use>"
+		}
+
 		# Selection (which fields to apply to; empty = all)
 		if ($ca.selection -and $ca.selection.Count -gt 0) {
 			X "$indent`t`t<dcsset:selection>"
@@ -2232,6 +2237,22 @@ function Emit-ConditionalAppearance {
 		if ($ca.userSettingID) {
 			$uid = if ("$($ca.userSettingID)" -eq "auto") { New-Guid-String } else { "$($ca.userSettingID)" }
 			X "$indent`t`t<dcsset:userSettingID>$(Esc-Xml $uid)</dcsset:userSettingID>"
+		}
+
+		# useInXxx — список областей где правило НЕ применяется (DontUse).
+		# Порядок имитирует платформенный (group → hierarchicalGroup → overall → ...).
+		if ($ca.useInDontUse -and $ca.useInDontUse.Count -gt 0) {
+			$useInOrder = @('group','hierarchicalGroup','overall',
+				'fieldsHeader','header','parameters','filter',
+				'resourceFieldsHeader','overallHeader','overallResourceFieldsHeader')
+			$set = @{}
+			foreach ($n in $ca.useInDontUse) { $set["$n"] = $true }
+			foreach ($n in $useInOrder) {
+				if ($set.ContainsKey($n)) {
+					$tag = "useIn" + ($n.Substring(0,1).ToUpper()) + ($n.Substring(1))
+					X "$indent`t`t<dcsset:$tag>DontUse</dcsset:$tag>"
+				}
+			}
 		}
 
 		X "$indent`t</dcsset:item>"

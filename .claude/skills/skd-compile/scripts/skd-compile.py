@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-# skd-compile v1.50 — Compile 1C DCS from JSON
+# skd-compile v1.51 — Compile 1C DCS from JSON
 # Source: https://github.com/Nikolay-Shirokov/cc-1c-skills
 import argparse
 import json
@@ -1836,6 +1836,9 @@ def emit_conditional_appearance(lines, items, indent, block_view_mode=None):
     for ca in items:
         lines.append(f'{indent}\t<dcsset:item>')
 
+        if ca.get('use') is False:
+            lines.append(f'{indent}\t\t<dcsset:use>false</dcsset:use>')
+
         # Selection
         if ca.get('selection') and len(ca['selection']) > 0:
             lines.append(f'{indent}\t\t<dcsset:selection>')
@@ -1869,6 +1872,17 @@ def emit_conditional_appearance(lines, items, indent, block_view_mode=None):
         if ca.get('userSettingID'):
             uid = new_uuid() if str(ca['userSettingID']) == 'auto' else str(ca['userSettingID'])
             lines.append(f'{indent}\t\t<dcsset:userSettingID>{esc_xml(uid)}</dcsset:userSettingID>')
+
+        # useInXxx — список областей где правило НЕ применяется (DontUse)
+        if ca.get('useInDontUse'):
+            use_in_order = ['group', 'hierarchicalGroup', 'overall',
+                            'fieldsHeader', 'header', 'parameters', 'filter',
+                            'resourceFieldsHeader', 'overallHeader', 'overallResourceFieldsHeader']
+            s = set(ca['useInDontUse'])
+            for n in use_in_order:
+                if n in s:
+                    tag = 'useIn' + n[0].upper() + n[1:]
+                    lines.append(f'{indent}\t\t<dcsset:{tag}>DontUse</dcsset:{tag}>')
 
         lines.append(f'{indent}\t</dcsset:item>')
     if block_view_mode is not None:
