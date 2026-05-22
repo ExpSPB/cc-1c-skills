@@ -1,4 +1,4 @@
-﻿# skd-decompile v0.40 — Decompile 1C DCS Template.xml to JSON DSL (draft)
+﻿# skd-decompile v0.41 — Decompile 1C DCS Template.xml to JSON DSL (draft)
 # Source: https://github.com/Nikolay-Shirokov/cc-1c-skills
 param(
 	[Parameter(Mandatory)]
@@ -1751,6 +1751,12 @@ function Build-TableAxisBlock {
 	if ($selNode) {
 		$selItems = Build-Selection -selNode $selNode -loc "$loc/selection"
 		if ($selItems.Count -gt 0) { $entry['selection'] = $selItems }
+	}
+	# conditionalAppearance block
+	$caN = $node.SelectSingleNode("dcsset:conditionalAppearance", $ns)
+	if ($caN) {
+		$ca = Build-ConditionalAppearance -caNode $caN -loc "$loc/ca"
+		if ($ca.Count -gt 0) { $entry['conditionalAppearance'] = $ca }
 	}
 	# outputParameters block
 	$opNode = $node.SelectSingleNode("dcsset:outputParameters", $ns)
