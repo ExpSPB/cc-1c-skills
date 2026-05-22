@@ -1,4 +1,4 @@
-﻿# skd-compile v1.47 — Compile 1C DCS from JSON
+﻿# skd-compile v1.48 — Compile 1C DCS from JSON
 # Source: https://github.com/Nikolay-Shirokov/cc-1c-skills
 param(
 	[string]$DefinitionFile,
@@ -2011,6 +2011,7 @@ function Emit-FilterItem {
 					if ($v -is [bool]) { $vt = 'xs:boolean' }
 					elseif ($v -is [int] -or $v -is [long] -or $v -is [double]) { $vt = 'xs:decimal' }
 					elseif ("$v" -match '^\d{4}-\d{2}-\d{2}T') { $vt = 'xs:dateTime' }
+					elseif ("$v" -match '^-?\d+(\.\d+)?$') { $vt = 'xs:decimal' }
 					else { $vt = 'xs:string' }
 				}
 				$vStr = if ($v -is [bool]) { "$v".ToLower() } else { Esc-Xml "$v" }
@@ -2027,6 +2028,8 @@ function Emit-FilterItem {
 				$vt = "xs:decimal"
 			} elseif ("$v" -match '^\d{4}-\d{2}-\d{2}T') {
 				$vt = "xs:dateTime"
+			} elseif ("$v" -match '^-?\d+(\.\d+)?$') {
+				$vt = "xs:decimal"
 			} else {
 				$vt = "xs:string"
 			}

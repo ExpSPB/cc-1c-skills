@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-# skd-compile v1.47 — Compile 1C DCS from JSON
+# skd-compile v1.48 — Compile 1C DCS from JSON
 # Source: https://github.com/Nikolay-Shirokov/cc-1c-skills
 import argparse
 import json
@@ -1678,6 +1678,8 @@ def emit_filter_item(lines, item, indent):
                         vt = 'xs:decimal'
                     elif re.match(r'^\d{4}-\d{2}-\d{2}T', str(v)):
                         vt = 'xs:dateTime'
+                    elif re.match(r'^-?\d+(\.\d+)?$', str(v)):
+                        vt = 'xs:decimal'
                     else:
                         vt = 'xs:string'
                 v_str = str(v).lower() if isinstance(v, bool) else esc_xml(str(v))
@@ -1692,6 +1694,8 @@ def emit_filter_item(lines, item, indent):
                 vt = 'xs:decimal'
             elif re.match(r'^\d{4}-\d{2}-\d{2}T', str(v)):
                 vt = 'xs:dateTime'
+            elif re.match(r'^-?\d+(\.\d+)?$', str(v)):
+                vt = 'xs:decimal'
             else:
                 vt = 'xs:string'
         if isinstance(val, bool):
