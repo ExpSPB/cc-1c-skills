@@ -1,4 +1,4 @@
-﻿# skd-compile v1.39 — Compile 1C DCS from JSON
+﻿# skd-compile v1.40 — Compile 1C DCS from JSON
 # Source: https://github.com/Nikolay-Shirokov/cc-1c-skills
 param(
 	[string]$DefinitionFile,
@@ -2365,6 +2365,63 @@ function Parse-StructureShorthand {
 	return ,$result
 }
 
+function Emit-UserFields {
+	param($items, [string]$indent)
+	if (-not $items -or $items.Count -eq 0) { return }
+	X "$indent<dcsset:userFields>"
+	foreach ($uf in $items) {
+		# Type detection: cases → UserFieldCase, otherwise UserFieldExpression
+		$uType = if ($uf.cases) { "UserFieldCase" } else { "UserFieldExpression" }
+		X "$indent`t<dcsset:item xsi:type=`"dcsset:$uType`">"
+		if ($uf.dataPath) {
+			X "$indent`t`t<dcsset:dataPath>$(Esc-Xml "$($uf.dataPath)")</dcsset:dataPath>"
+		}
+		if ($uf.title) {
+			Emit-MLText -tag "dcsset:lwsTitle" -text $uf.title -indent "$indent`t`t" -NoXsiType
+		}
+		if ($uType -eq "UserFieldExpression") {
+			if ($uf.detail) {
+				if ($uf.detail.expression) { X "$indent`t`t<dcsset:detailExpression>$(Esc-Xml "$($uf.detail.expression)")</dcsset:detailExpression>" }
+				if ($uf.detail.presentation) { X "$indent`t`t<dcsset:detailExpressionPresentation>$(Esc-Xml "$($uf.detail.presentation)")</dcsset:detailExpressionPresentation>" }
+			}
+			if ($uf.total) {
+				if ($uf.total.expression) { X "$indent`t`t<dcsset:totalExpression>$(Esc-Xml "$($uf.total.expression)")</dcsset:totalExpression>" }
+				if ($uf.total.presentation) { X "$indent`t`t<dcsset:totalExpressionPresentation>$(Esc-Xml "$($uf.total.presentation)")</dcsset:totalExpressionPresentation>" }
+			}
+		} else {
+			# UserFieldCase
+			if ($uf.cases.Count -eq 0) {
+				X "$indent`t`t<dcsset:cases/>"
+			} else {
+				X "$indent`t`t<dcsset:cases>"
+				foreach ($c in $uf.cases) {
+					X "$indent`t`t`t<dcsset:item>"
+					if ($c.filter) {
+						Emit-Filter -items $c.filter -indent "$indent`t`t`t`t"
+					}
+					if ($null -ne $c.value) {
+						$cv = $c.value
+						if ($cv -is [bool]) {
+							X "$indent`t`t`t`t<dcsset:value xsi:type=`"xs:boolean`">$(("$cv").ToLower())</dcsset:value>"
+						} elseif ($cv -is [int] -or $cv -is [long] -or $cv -is [double]) {
+							X "$indent`t`t`t`t<dcsset:value xsi:type=`"xs:decimal`">$cv</dcsset:value>"
+						} else {
+							X "$indent`t`t`t`t<dcsset:value xsi:type=`"xs:string`">$(Esc-Xml "$cv")</dcsset:value>"
+						}
+					}
+					if ($c.presentation) {
+						Emit-MLText -tag "dcsset:lwsPresentationValue" -text $c.presentation -indent "$indent`t`t`t`t" -NoXsiType
+					}
+					X "$indent`t`t`t</dcsset:item>"
+				}
+				X "$indent`t`t</dcsset:cases>"
+			}
+		}
+		X "$indent`t</dcsset:item>"
+	}
+	X "$indent</dcsset:userFields>"
+}
+
 # Shared emitter for table column/row and chart point/series.
 # Emits groupItems, filter, order, selection, outputParameters — each conditional on JSON presence.
 function Emit-TableAxisBlock {
@@ -2560,6 +2617,11 @@ function Emit-SettingsVariants {
 			$prop = "${key}ViewMode"
 			if ($s.PSObject.Properties[$prop]) { return "$($s.$prop)" }
 			return $null
+		}
+
+		# userFields — пользовательские вычисляемые поля (Expression / Case)
+		if ($s.userFields -and $s.userFields.Count -gt 0) {
+			Emit-UserFields -items $s.userFields -indent "`t`t`t"
 		}
 
 		# Selection (Auto items only belong at group level, not top-level settings)
