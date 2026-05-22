@@ -57,6 +57,7 @@
 							<dcsset:field>ДатаДокумента</dcsset:field>
 						</dcsset:item>
 					</dcsset:selection>
+					<dcsset:filter/>
 					<dcsset:appearance>
 						<dcscor:item xsi:type="dcsset:SettingsParameterValue">
 							<dcscor:parameter>Формат</dcscor:parameter>

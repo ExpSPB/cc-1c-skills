@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-# skd-compile v1.60 — Compile 1C DCS from JSON
+# skd-compile v1.61 — Compile 1C DCS from JSON
 # Source: https://github.com/Nikolay-Shirokov/cc-1c-skills
 import argparse
 import json
@@ -1882,8 +1882,11 @@ def emit_conditional_appearance(lines, items, indent, block_view_mode=None):
             lines.append(f'{indent}\t\t<dcsset:selection/>')
 
         # Filter
-        if ca.get('filter'):
+        if ca.get('filter') and len(ca['filter']) > 0:
             emit_filter(lines, ca['filter'], f'{indent}\t\t')
+        else:
+            # Платформа эмитит пустой <dcsset:filter/> на каждом condApp item
+            lines.append(f'{indent}\t\t<dcsset:filter/>')
 
         # Appearance
         if ca.get('appearance'):

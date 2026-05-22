@@ -1,4 +1,4 @@
-﻿# skd-compile v1.60 — Compile 1C DCS from JSON
+﻿# skd-compile v1.61 — Compile 1C DCS from JSON
 # Source: https://github.com/Nikolay-Shirokov/cc-1c-skills
 param(
 	[string]$DefinitionFile,
@@ -2248,8 +2248,11 @@ function Emit-ConditionalAppearance {
 		}
 
 		# Filter (reuse existing Emit-Filter logic)
-		if ($ca.filter) {
+		if ($ca.filter -and $ca.filter.Count -gt 0) {
 			Emit-Filter -items $ca.filter -indent "$indent`t`t"
+		} else {
+			# Платформа эмитит пустой <dcsset:filter/> на каждом condApp item
+			X "$indent`t`t<dcsset:filter/>"
 		}
 
 		# Appearance (parameter-value pairs)
