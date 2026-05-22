@@ -2365,6 +2365,26 @@ function Parse-StructureShorthand {
 	return ,$result
 }
 
+# Shared emitter for table column/row and chart point/series.
+# Emits groupItems, filter, order, selection, outputParameters — each conditional on JSON presence.
+function Emit-TableAxisBlock {
+	param($block, [string]$indent)
+	$gb = if ($block.groupBy) { $block.groupBy } else { $block.groupFields }
+	Emit-GroupItems -groupBy $gb -indent $indent
+	if ($block.filter) {
+		Emit-Filter -items $block.filter -indent $indent
+	}
+	if ($block.order) {
+		Emit-Order -items $block.order -indent $indent
+	}
+	if ($block.selection) {
+		Emit-Selection -items $block.selection -indent $indent
+	}
+	if ($block.outputParameters) {
+		Emit-OutputParameters -params $block.outputParameters -indent $indent
+	}
+}
+
 function Emit-StructureItem {
 	param($item, [string]$indent)
 
@@ -2424,12 +2444,7 @@ function Emit-StructureItem {
 		if ($item.columns) {
 			foreach ($col in $item.columns) {
 				X "$indent`t<dcsset:column>"
-				$colGb = if ($col.groupBy) { $col.groupBy } else { $col.groupFields }
-				Emit-GroupItems -groupBy $colGb -indent "$indent`t`t"
-				$colOrder = $col.order; if (-not $colOrder) { $colOrder = @("Auto") }
-				Emit-Order -items $colOrder -indent "$indent`t`t"
-				$colSel = $col.selection; if (-not $colSel) { $colSel = @("Auto") }
-				Emit-Selection -items $colSel -indent "$indent`t`t"
+				Emit-TableAxisBlock -block $col -indent "$indent`t`t"
 				X "$indent`t</dcsset:column>"
 			}
 		}
@@ -2441,12 +2456,7 @@ function Emit-StructureItem {
 				if ($row.name) {
 					X "$indent`t`t<dcsset:name>$(Esc-Xml "$($row.name)")</dcsset:name>"
 				}
-				$rowGb = if ($row.groupBy) { $row.groupBy } else { $row.groupFields }
-				Emit-GroupItems -groupBy $rowGb -indent "$indent`t`t"
-				$rowOrder = $row.order; if (-not $rowOrder) { $rowOrder = @("Auto") }
-				Emit-Order -items $rowOrder -indent "$indent`t`t"
-				$rowSel = $row.selection; if (-not $rowSel) { $rowSel = @("Auto") }
-				Emit-Selection -items $rowSel -indent "$indent`t`t"
+				Emit-TableAxisBlock -block $row -indent "$indent`t`t"
 				X "$indent`t</dcsset:row>"
 			}
 		}
@@ -2463,24 +2473,14 @@ function Emit-StructureItem {
 		# Points
 		if ($item.points) {
 			X "$indent`t<dcsset:point>"
-			$ptGb = if ($item.points.groupBy) { $item.points.groupBy } else { $item.points.groupFields }
-			Emit-GroupItems -groupBy $ptGb -indent "$indent`t`t"
-			$ptOrder = $item.points.order; if (-not $ptOrder) { $ptOrder = @("Auto") }
-			Emit-Order -items $ptOrder -indent "$indent`t`t"
-			$ptSel = $item.points.selection; if (-not $ptSel) { $ptSel = @("Auto") }
-			Emit-Selection -items $ptSel -indent "$indent`t`t"
+			Emit-TableAxisBlock -block $item.points -indent "$indent`t`t"
 			X "$indent`t</dcsset:point>"
 		}
 
 		# Series
 		if ($item.series) {
 			X "$indent`t<dcsset:series>"
-			$srGb = if ($item.series.groupBy) { $item.series.groupBy } else { $item.series.groupFields }
-			Emit-GroupItems -groupBy $srGb -indent "$indent`t`t"
-			$srOrder = $item.series.order; if (-not $srOrder) { $srOrder = @("Auto") }
-			Emit-Order -items $srOrder -indent "$indent`t`t"
-			$srSel = $item.series.selection; if (-not $srSel) { $srSel = @("Auto") }
-			Emit-Selection -items $srSel -indent "$indent`t`t"
+			Emit-TableAxisBlock -block $item.series -indent "$indent`t`t"
 			X "$indent`t</dcsset:series>"
 		}
 
