@@ -1,4 +1,4 @@
-﻿# skd-decompile v0.26 — Decompile 1C DCS Template.xml to JSON DSL (draft)
+﻿# skd-decompile v0.27 — Decompile 1C DCS Template.xml to JSON DSL (draft)
 # Source: https://github.com/Nikolay-Shirokov/cc-1c-skills
 param(
 	[Parameter(Mandatory)]
@@ -1742,6 +1742,16 @@ function Build-Structure {
 			foreach ($fc in $filterNode.SelectNodes("dcsset:item", $ns)) { $f += (Build-FilterItem -itemNode $fc -loc "$loc/filter") }
 			$entry['filter'] = $f
 		}
+		# Local conditionalAppearance
+		$caNode = $it.SelectSingleNode("dcsset:conditionalAppearance", $ns)
+		if ($caNode) {
+			$ca = Build-ConditionalAppearance -caNode $caNode -loc "$loc/ca"
+			if ($ca.Count -gt 0) { $entry['conditionalAppearance'] = $ca }
+		}
+		# Local outputParameters
+		$opNode = $it.SelectSingleNode("dcsset:outputParameters", $ns)
+		$op = Build-OutputParameters -opNode $opNode
+		if ($op -and $op.Count -gt 0) { $entry['outputParameters'] = $op }
 
 		# Children — recursive
 		$children = Build-Structure -node $it -loc "$loc/children"
