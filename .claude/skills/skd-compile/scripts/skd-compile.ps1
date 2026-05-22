@@ -1,4 +1,4 @@
-﻿# skd-compile v1.36 — Compile 1C DCS from JSON
+﻿# skd-compile v1.37 — Compile 1C DCS from JSON
 # Source: https://github.com/Nikolay-Shirokov/cc-1c-skills
 param(
 	[string]$DefinitionFile,
@@ -2135,16 +2135,20 @@ function Emit-OutputParameters {
 	X "$indent<dcsset:outputParameters>"
 	foreach ($prop in $params.PSObject.Properties) {
 		$key = $prop.Name
-		$val = "$($prop.Value)"
+		$rawVal = $prop.Value
 		$ptype = $script:outputParamTypes[$key]
 		if (-not $ptype) { $ptype = "xs:string" }
+		# Auto-promote to mltext if value is a multilang dict ({ru, en, ...})
+		if ($rawVal -is [System.Management.Automation.PSCustomObject] -or $rawVal -is [hashtable] -or $rawVal -is [System.Collections.IDictionary]) {
+			$ptype = "mltext"
+		}
 
 		X "$indent`t<dcscor:item xsi:type=`"dcsset:SettingsParameterValue`">"
 		X "$indent`t`t<dcscor:parameter>$(Esc-Xml $key)</dcscor:parameter>"
 		if ($ptype -eq "mltext") {
-			Emit-MLText -tag "dcscor:value" -text $val -indent "$indent`t`t"
+			Emit-MLText -tag "dcscor:value" -text $rawVal -indent "$indent`t`t"
 		} else {
-			X "$indent`t`t<dcscor:value xsi:type=`"$ptype`">$(Esc-Xml $val)</dcscor:value>"
+			X "$indent`t`t<dcscor:value xsi:type=`"$ptype`">$(Esc-Xml "$rawVal")</dcscor:value>"
 		}
 		X "$indent`t</dcscor:item>"
 	}

@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-# skd-compile v1.36 — Compile 1C DCS from JSON
+# skd-compile v1.37 — Compile 1C DCS from JSON
 # Source: https://github.com/Nikolay-Shirokov/cc-1c-skills
 import argparse
 import json
@@ -1776,15 +1776,17 @@ def emit_output_parameters(lines, params, indent):
 
     lines.append(f'{indent}<dcsset:outputParameters>')
     for key, val in params.items():
-        val_str = str(val)
         ptype = OUTPUT_PARAM_TYPES.get(key, 'xs:string')
+        # Auto-promote to mltext if value is a multilang dict ({ru, en, ...})
+        if isinstance(val, dict):
+            ptype = 'mltext'
 
         lines.append(f'{indent}\t<dcscor:item xsi:type="dcsset:SettingsParameterValue">')
         lines.append(f'{indent}\t\t<dcscor:parameter>{esc_xml(key)}</dcscor:parameter>')
         if ptype == 'mltext':
-            emit_mltext(lines, f'{indent}\t\t', 'dcscor:value', val_str)
+            emit_mltext(lines, f'{indent}\t\t', 'dcscor:value', val)
         else:
-            lines.append(f'{indent}\t\t<dcscor:value xsi:type="{ptype}">{esc_xml(val_str)}</dcscor:value>')
+            lines.append(f'{indent}\t\t<dcscor:value xsi:type="{ptype}">{esc_xml(str(val))}</dcscor:value>')
         lines.append(f'{indent}\t</dcscor:item>')
     lines.append(f'{indent}</dcsset:outputParameters>')
 
