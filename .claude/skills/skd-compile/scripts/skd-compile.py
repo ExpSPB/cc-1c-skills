@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-# skd-compile v1.61 — Compile 1C DCS from JSON
+# skd-compile v1.62 — Compile 1C DCS from JSON
 # Source: https://github.com/Nikolay-Shirokov/cc-1c-skills
 import argparse
 import json
@@ -2233,6 +2233,14 @@ def emit_structure_item(lines, item, indent):
                 lines.append(f'{indent}\t<dcsset:row>')
                 emit_table_axis_block(lines, row, f'{indent}\t\t')
                 lines.append(f'{indent}\t</dcsset:row>')
+
+        # Top-level: selection / conditionalAppearance / outputParameters на самой таблице
+        if item.get('selection'):
+            emit_selection(lines, item['selection'], f'{indent}\t')
+        if item.get('conditionalAppearance'):
+            emit_conditional_appearance(lines, item['conditionalAppearance'], f'{indent}\t')
+        if item.get('outputParameters'):
+            emit_output_parameters(lines, item['outputParameters'], f'{indent}\t')
 
         lines.append(f'{indent}</dcsset:item>')
 

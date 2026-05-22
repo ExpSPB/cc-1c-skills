@@ -1,4 +1,4 @@
-﻿# skd-compile v1.61 — Compile 1C DCS from JSON
+﻿# skd-compile v1.62 — Compile 1C DCS from JSON
 # Source: https://github.com/Nikolay-Shirokov/cc-1c-skills
 param(
 	[string]$DefinitionFile,
@@ -2703,6 +2703,17 @@ function Emit-StructureItem {
 				Emit-TableAxisBlock -block $row -indent "$indent`t`t"
 				X "$indent`t</dcsset:row>"
 			}
+		}
+
+		# Top-level: selection / conditionalAppearance / outputParameters на самой таблице
+		if ($item.selection) {
+			Emit-Selection -items $item.selection -indent "$indent`t"
+		}
+		if ($item.conditionalAppearance) {
+			Emit-ConditionalAppearance -items $item.conditionalAppearance -indent "$indent`t"
+		}
+		if ($item.outputParameters) {
+			Emit-OutputParameters -params $item.outputParameters -indent "$indent`t"
 		}
 
 		X "$indent</dcsset:item>"
