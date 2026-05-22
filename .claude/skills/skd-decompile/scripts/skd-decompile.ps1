@@ -1,4 +1,4 @@
-﻿# skd-decompile v0.25 — Decompile 1C DCS Template.xml to JSON DSL (draft)
+﻿# skd-decompile v0.26 — Decompile 1C DCS Template.xml to JSON DSL (draft)
 # Source: https://github.com/Nikolay-Shirokov/cc-1c-skills
 param(
 	[Parameter(Mandatory)]
@@ -540,10 +540,33 @@ function Build-Field {
 	$appNode = $fieldNode.SelectSingleNode("r:appearance", $ns)
 	$appearance = Get-AppearanceDict $appNode
 	$presExpr = Get-Text $fieldNode "r:presentationExpression"
+	# availableValues on dataset field
+	$avNodes = $fieldNode.SelectNodes("r:availableValue", $ns)
+	$availableValues = @()
+	foreach ($av in $avNodes) {
+		$avVN = $av.SelectSingleNode("r:value", $ns)
+		$avPN = $av.SelectSingleNode("r:presentation", $ns)
+		$avEntry = [ordered]@{}
+		if ($avVN) {
+			$avType = Get-LocalXsiType $avVN
+			$avText = $avVN.InnerText
+			if ($avType -eq 'boolean') { $avEntry['value'] = ($avText -eq 'true') }
+			elseif ($avType -eq 'decimal') {
+				if ($avText -match '^-?\d+$') { $avEntry['value'] = [int]$avText }
+				else { $avEntry['value'] = [double]$avText }
+			}
+			else { $avEntry['value'] = $avText }
+		}
+		if ($avPN) {
+			$avPres = Get-MLText $avPN
+			if ($avPres) { $avEntry['presentation'] = $avPres }
+		}
+		$availableValues += $avEntry
+	}
 
 	# Можно ли роль положить в shorthand-строку?
 	$roleInString = $roleRendered -and $roleRendered.isString
-	$needsObject = $title -or $appearance -or $presExpr -or ($typeShort -is [array]) -or ($roleRendered -and -not $roleInString) -or $orderExpression -or $inputParameters
+	$needsObject = $title -or $appearance -or $presExpr -or ($typeShort -is [array]) -or ($roleRendered -and -not $roleInString) -or $orderExpression -or $inputParameters -or ($availableValues.Count -gt 0)
 
 	if (-not $needsObject) {
 		# shorthand: "Name: type @role K=V #restrict"
@@ -575,6 +598,7 @@ function Build-Field {
 	if ($inputParameters) { $obj['inputParameters'] = $inputParameters }
 	if ($restrictTokens) { $obj['restrict'] = ($restrictTokens | ForEach-Object { $_ -replace '^#','' }) }
 	if ($presExpr) { $obj['presentationExpression'] = $presExpr }
+	if ($availableValues.Count -gt 0) { $obj['availableValues'] = $availableValues }
 	if ($appearance) { $obj['appearance'] = $appearance }
 	return $obj
 }
