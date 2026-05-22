@@ -1,4 +1,4 @@
-﻿# skd-decompile v0.22 — Decompile 1C DCS Template.xml to JSON DSL (draft)
+﻿# skd-decompile v0.23 — Decompile 1C DCS Template.xml to JSON DSL (draft)
 # Source: https://github.com/Nikolay-Shirokov/cc-1c-skills
 param(
 	[Parameter(Mandatory)]
@@ -1805,7 +1805,10 @@ function Build-DataSet {
 		'DataSetUnion' {
 			$nested = @()
 			$ni = 0
-			foreach ($nNode in $dsNode.SelectNodes("r:dataSet", $ns)) {
+			# Inner Union datasets are wrapped as <item xsi:type="..."> in real 1C output.
+			# Accept <dataSet> too for backward compatibility with older builds.
+			$innerNodes = @($dsNode.SelectNodes("r:item", $ns)) + @($dsNode.SelectNodes("r:dataSet", $ns))
+			foreach ($nNode in $innerNodes) {
 				$nested += (Build-DataSet -dsNode $nNode -loc "$loc/items[$ni]")
 				$ni++
 			}
