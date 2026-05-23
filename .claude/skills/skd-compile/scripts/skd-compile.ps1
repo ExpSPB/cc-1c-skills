@@ -1,4 +1,4 @@
-﻿# skd-compile v1.67 — Compile 1C DCS from JSON
+﻿# skd-compile v1.68 — Compile 1C DCS from JSON
 # Source: https://github.com/Nikolay-Shirokov/cc-1c-skills
 param(
 	[string]$DefinitionFile,
@@ -2356,23 +2356,29 @@ function Emit-OutputParameters {
 	foreach ($prop in $params.PSObject.Properties) {
 		$key = $prop.Name
 		$rawVal = $prop.Value
-		# Распознаём wrapper {value, use?, viewMode?, userSettingID?, userSettingPresentation?}
+		# Распознаём wrapper {value, valueType?, use?, items?, viewMode?, userSettingID?, userSettingPresentation?}
 		# отличая от multilang dict ({ru, en, ...}). Wrapper всегда имеет ключ 'value'.
 		$useFalse = $false
 		$wrapVM = $null
 		$wrapUSID = $null
 		$wrapUSP = $null
+		$wrapVT = $null
+		$wrapItems = $null
 		$hasValueKey = $false
 		if ($rawVal -is [PSCustomObject] -and $rawVal.PSObject.Properties['value']) {
 			$hasValueKey = $true
+			if ($rawVal.PSObject.Properties['valueType']) { $wrapVT = "$($rawVal.valueType)" }
 			if ($rawVal.PSObject.Properties['use'] -and $rawVal.use -eq $false) { $useFalse = $true }
+			if ($rawVal.PSObject.Properties['items']) { $wrapItems = $rawVal.items }
 			if ($rawVal.PSObject.Properties['viewMode']) { $wrapVM = "$($rawVal.viewMode)" }
 			if ($rawVal.PSObject.Properties['userSettingID']) { $wrapUSID = "$($rawVal.userSettingID)" }
 			if ($rawVal.PSObject.Properties['userSettingPresentation']) { $wrapUSP = $rawVal.userSettingPresentation }
 			$rawVal = $rawVal.value
 		} elseif (($rawVal -is [hashtable] -or $rawVal -is [System.Collections.IDictionary]) -and $rawVal.Contains('value')) {
 			$hasValueKey = $true
+			if ($rawVal.Contains('valueType')) { $wrapVT = "$($rawVal['valueType'])" }
 			if ($rawVal.Contains('use') -and $rawVal['use'] -eq $false) { $useFalse = $true }
+			if ($rawVal.Contains('items')) { $wrapItems = $rawVal['items'] }
 			if ($rawVal.Contains('viewMode')) { $wrapVM = "$($rawVal['viewMode'])" }
 			if ($rawVal.Contains('userSettingID')) { $wrapUSID = "$($rawVal['userSettingID'])" }
 			if ($rawVal.Contains('userSettingPresentation')) { $wrapUSP = $rawVal['userSettingPresentation'] }
@@ -2386,8 +2392,12 @@ function Emit-OutputParameters {
 		} elseif ($rawVal -is [System.Collections.IDictionary]) {
 			if ($rawVal.Contains('@type') -and "$($rawVal['@type'])" -eq 'Font') { $isFontDict = $true }
 		}
-		$ptype = $script:outputParamTypes[$key]
-		if (-not $ptype) { $ptype = "xs:string" }
+		# Приоритет: явный wrapVT > известный тип ключа > xs:string
+		if ($wrapVT) { $ptype = $wrapVT }
+		else {
+			$ptype = $script:outputParamTypes[$key]
+			if (-not $ptype) { $ptype = "xs:string" }
+		}
 		# Auto-promote to mltext if value is a multilang dict (но не Font/wrapper)
 		if (-not $isFontDict -and ($rawVal -is [System.Management.Automation.PSCustomObject] -or $rawVal -is [hashtable] -or $rawVal -is [System.Collections.IDictionary])) {
 			$ptype = "mltext"
@@ -2413,6 +2423,31 @@ function Emit-OutputParameters {
 			Emit-MLText -tag "dcscor:value" -text $rawVal -indent "$indent`t`t"
 		} else {
 			X "$indent`t`t<dcscor:value xsi:type=`"$ptype`">$(Esc-Xml "$rawVal")</dcscor:value>"
+		}
+		# Nested sub-параметры (ТипДиаграммы.ВидПодписей и т.п.) — эмитим между value и extras
+		if ($wrapItems) {
+			$itemProps = if ($wrapItems -is [PSCustomObject]) { $wrapItems.PSObject.Properties } else { $null }
+			if ($itemProps) {
+				foreach ($ip in $itemProps) {
+					$subName = $ip.Name; $subWrap = $ip.Value
+					$subVal = if ($subWrap -is [PSCustomObject] -and $subWrap.PSObject.Properties['value']) { $subWrap.value } else { $subWrap }
+					$subVT  = if ($subWrap -is [PSCustomObject] -and $subWrap.PSObject.Properties['valueType']) { "$($subWrap.valueType)" } else { 'xs:string' }
+					X "$indent`t`t<dcscor:item xsi:type=`"dcsset:SettingsParameterValue`">"
+					X "$indent`t`t`t<dcscor:parameter>$(Esc-Xml $subName)</dcscor:parameter>"
+					X "$indent`t`t`t<dcscor:value xsi:type=`"$subVT`">$(Esc-Xml "$subVal")</dcscor:value>"
+					X "$indent`t`t</dcscor:item>"
+				}
+			} elseif ($wrapItems -is [System.Collections.IDictionary]) {
+				foreach ($k in $wrapItems.Keys) {
+					$subWrap = $wrapItems[$k]
+					$subVal = if ($subWrap -is [System.Collections.IDictionary] -and $subWrap.Contains('value')) { $subWrap['value'] } else { $subWrap }
+					$subVT  = if ($subWrap -is [System.Collections.IDictionary] -and $subWrap.Contains('valueType')) { "$($subWrap['valueType'])" } else { 'xs:string' }
+					X "$indent`t`t<dcscor:item xsi:type=`"dcsset:SettingsParameterValue`">"
+					X "$indent`t`t`t<dcscor:parameter>$(Esc-Xml $k)</dcscor:parameter>"
+					X "$indent`t`t`t<dcscor:value xsi:type=`"$subVT`">$(Esc-Xml "$subVal")</dcscor:value>"
+					X "$indent`t`t</dcscor:item>"
+				}
+			}
 		}
 		if ($wrapVM) { X "$indent`t`t<dcsset:viewMode>$(Esc-Xml $wrapVM)</dcsset:viewMode>" }
 		if ($wrapUSID) {

@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-# skd-compile v1.67 — Compile 1C DCS from JSON
+# skd-compile v1.68 — Compile 1C DCS from JSON
 # Source: https://github.com/Nikolay-Shirokov/cc-1c-skills
 import argparse
 import json
@@ -1948,19 +1948,26 @@ def emit_output_parameters(lines, params, indent):
 
     lines.append(f'{indent}<dcsset:outputParameters>')
     for key, val in params.items():
-        # wrapper {value, use?, viewMode?, userSettingID?, userSettingPresentation?}
+        # wrapper {value, valueType?, use?, items?, viewMode?, userSettingID?, userSettingPresentation?}
         use_false = False
         wrap_vm = None
         wrap_usid = None
         wrap_usp = None
+        wrap_vt = None
+        wrap_items = None
         if isinstance(val, dict) and 'value' in val:
+            wrap_vt = val.get('valueType')
             if val.get('use') is False: use_false = True
+            wrap_items = val.get('items')
             wrap_vm = val.get('viewMode')
             wrap_usid = val.get('userSettingID')
             wrap_usp = val.get('userSettingPresentation')
             val = val['value']
         is_font_dict = isinstance(val, dict) and val.get('@type') == 'Font'
-        ptype = OUTPUT_PARAM_TYPES.get(key, 'xs:string')
+        if wrap_vt:
+            ptype = wrap_vt
+        else:
+            ptype = OUTPUT_PARAM_TYPES.get(key, 'xs:string')
         # Auto-promote to mltext if value is a multilang dict (but not Font)
         if not is_font_dict and isinstance(val, dict):
             ptype = 'mltext'
@@ -1979,6 +1986,19 @@ def emit_output_parameters(lines, params, indent):
             emit_mltext(lines, f'{indent}\t\t', 'dcscor:value', val)
         else:
             lines.append(f'{indent}\t\t<dcscor:value xsi:type="{ptype}">{esc_xml(str(val))}</dcscor:value>')
+        # Nested sub-параметры (ТипДиаграммы.ВидПодписей и т.п.)
+        if wrap_items and isinstance(wrap_items, dict):
+            for sub_name, sub_wrap in wrap_items.items():
+                if isinstance(sub_wrap, dict) and 'value' in sub_wrap:
+                    sub_val = sub_wrap['value']
+                    sub_vt = sub_wrap.get('valueType', 'xs:string')
+                else:
+                    sub_val = sub_wrap
+                    sub_vt = 'xs:string'
+                lines.append(f'{indent}\t\t<dcscor:item xsi:type="dcsset:SettingsParameterValue">')
+                lines.append(f'{indent}\t\t\t<dcscor:parameter>{esc_xml(sub_name)}</dcscor:parameter>')
+                lines.append(f'{indent}\t\t\t<dcscor:value xsi:type="{sub_vt}">{esc_xml(str(sub_val))}</dcscor:value>')
+                lines.append(f'{indent}\t\t</dcscor:item>')
         if wrap_vm:
             lines.append(f'{indent}\t\t<dcsset:viewMode>{esc_xml(str(wrap_vm))}</dcsset:viewMode>')
         if wrap_usid:

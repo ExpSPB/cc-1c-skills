@@ -1,4 +1,4 @@
-﻿# skd-decompile v0.51 — Decompile 1C DCS Template.xml to JSON DSL (draft)
+﻿# skd-decompile v0.52 — Decompile 1C DCS Template.xml to JSON DSL (draft)
 # Source: https://github.com/Nikolay-Shirokov/cc-1c-skills
 param(
 	[Parameter(Mandatory)]
@@ -1671,18 +1671,42 @@ function Build-OutputParameters {
 		$val = $it.SelectSingleNode("dcscor:value", $ns)
 		if (-not $pName -or -not $val) { continue }
 		$vType = Get-LocalXsiType $val
+		# Полный xsi:type (с префиксом) — нужен compile для bit-perfect, если ключ не в outputParamTypes.
+		$fullType = $null
+		$ta = $val.Attributes['xsi:type']
+		if ($ta) { $fullType = $ta.Value }
 		if ($vType -eq 'LocalStringType') { $rawVal = Get-MLText $val }
 		elseif ($vType -eq 'Font') { $rawVal = Get-FontValue $val }
 		else { $rawVal = $val.InnerText }
-		# Extras (use=false / viewMode / userSettingID / userSettingPresentation) → wrapper.
+		# Nested dcscor:items (sub-параметры типа ТипДиаграммы.ВидПодписей)
+		$nestedItems = [ordered]@{}
+		foreach ($sub in $it.SelectNodes("dcscor:item", $ns)) {
+			$subName = Get-Text $sub "dcscor:parameter"
+			$subVal = $sub.SelectSingleNode("dcscor:value", $ns)
+			if (-not $subName -or -not $subVal) { continue }
+			$subType = Get-LocalXsiType $subVal
+			$subFull = $null
+			$subTA = $subVal.Attributes['xsi:type']
+			if ($subTA) { $subFull = $subTA.Value }
+			if ($subType -eq 'LocalStringType') { $subRaw = Get-MLText $subVal }
+			elseif ($subType -eq 'Font') { $subRaw = Get-FontValue $subVal }
+			else { $subRaw = $subVal.InnerText }
+			# Сохраняем как {value, valueType} чтобы compile воспроизвёл xsi:type
+			$nestedItems[$subName] = [ordered]@{ value = $subRaw; valueType = $subFull }
+		}
+		# Extras (use=false / viewMode / userSettingID / userSettingPresentation / nested items) → wrapper.
 		$useV = Get-Text $it "dcscor:use"
 		$vmN = $it.SelectSingleNode("dcsset:viewMode", $ns)
 		$usidV = Get-Text $it "dcsset:userSettingID"
 		$uspN = $it.SelectSingleNode("dcsset:userSettingPresentation", $ns)
-		$hasExtras = ($useV -eq 'false') -or $vmN -or $usidV -or $uspN
+		$hasExtras = ($useV -eq 'false') -or $vmN -or $usidV -or $uspN -or ($nestedItems.Count -gt 0)
 		if ($hasExtras) {
 			$wrap = [ordered]@{ value = $rawVal }
+			if ($fullType -and -not (($vType -eq 'LocalStringType') -or ($vType -eq 'Font'))) {
+				$wrap['valueType'] = $fullType
+			}
 			if ($useV -eq 'false') { $wrap['use'] = $false }
+			if ($nestedItems.Count -gt 0) { $wrap['items'] = $nestedItems }
 			if ($vmN) { $wrap['viewMode'] = $vmN.InnerText }
 			if ($usidV) { $wrap['userSettingID'] = 'auto' }
 			if ($uspN) { $wrap['userSettingPresentation'] = Get-MLText $uspN }
