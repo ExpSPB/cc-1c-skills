@@ -1,4 +1,4 @@
-﻿# skd-compile v1.65 — Compile 1C DCS from JSON
+﻿# skd-compile v1.66 — Compile 1C DCS from JSON
 # Source: https://github.com/Nikolay-Shirokov/cc-1c-skills
 param(
 	[string]$DefinitionFile,
@@ -2200,9 +2200,30 @@ function Emit-AppearanceValue {
 	if ($useWrapper) { X "$indent`t<dcscor:use>false</dcscor:use>" }
 	X "$indent`t<dcscor:parameter>$(Esc-Xml $key)</dcscor:parameter>"
 
-	# Multilang dict ({"ru": "...", "en": "..."}) → LocalStringType независимо от ключа.
-	$isMultilang = ($innerVal -is [hashtable]) -or ($innerVal -is [System.Collections.IDictionary]) -or ($innerVal -is [PSCustomObject])
-	if ($isMultilang) {
+	# Font dict ({@type: "Font", ref, faceName, height, bold, ...}) → <dcscor:value xsi:type="v8ui:Font" .../>
+	$isFontDict = $false
+	if ($innerVal -is [PSCustomObject]) {
+		$tProp = $innerVal.PSObject.Properties['@type']
+		if ($tProp -and "$($tProp.Value)" -eq 'Font') { $isFontDict = $true }
+	} elseif ($innerVal -is [System.Collections.IDictionary]) {
+		if ($innerVal.Contains('@type') -and "$($innerVal['@type'])" -eq 'Font') { $isFontDict = $true }
+	}
+	$isDict = ($innerVal -is [hashtable]) -or ($innerVal -is [System.Collections.IDictionary]) -or ($innerVal -is [PSCustomObject])
+	if ($isFontDict) {
+		$attrParts = @()
+		foreach ($attrName in @('ref','faceName','height','bold','italic','underline','strikeout','kind','scale')) {
+			$av = $null
+			if ($innerVal -is [PSCustomObject]) {
+				$ap = $innerVal.PSObject.Properties[$attrName]
+				if ($ap) { $av = $ap.Value }
+			} else {
+				if ($innerVal.Contains($attrName)) { $av = $innerVal[$attrName] }
+			}
+			if ($null -ne $av) { $attrParts += "$attrName=`"$(Esc-Xml "$av")`"" }
+		}
+		X "$indent`t<dcscor:value xsi:type=`"v8ui:Font`" $($attrParts -join ' ')/>"
+	} elseif ($isDict) {
+		# Multilang dict ({"ru": "...", "en": "..."}) → LocalStringType независимо от ключа.
 		Emit-MLText -tag "dcscor:value" -text $innerVal -indent "$indent`t"
 	} else {
 		$actualVal = "$innerVal"

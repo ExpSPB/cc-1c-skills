@@ -1,4 +1,4 @@
-﻿# skd-decompile v0.49 — Decompile 1C DCS Template.xml to JSON DSL (draft)
+﻿# skd-decompile v0.50 — Decompile 1C DCS Template.xml to JSON DSL (draft)
 # Source: https://github.com/Nikolay-Shirokov/cc-1c-skills
 param(
 	[Parameter(Mandatory)]
@@ -431,6 +431,18 @@ function Get-RestrictionTokens {
 }
 
 # <appearance> → hashtable {param: value}
+function Get-FontValue {
+	param($valNode)
+	# Шрифт: <dcscor:value xsi:type="v8ui:Font" ref=... faceName=... height=... bold=... .../>
+	# Сохраняем все атрибуты как объект {@type:Font, ...}, чтобы compile мог восстановить bit-perfect.
+	$f = [ordered]@{ '@type' = 'Font' }
+	foreach ($attrName in @('ref','faceName','height','bold','italic','underline','strikeout','kind','scale')) {
+		$a = $valNode.Attributes[$attrName]
+		if ($null -ne $a) { $f[$attrName] = $a.Value }
+	}
+	return $f
+}
+
 function Get-AppearanceDict {
 	param($appNode)
 	if (-not $appNode) { return $null }
@@ -440,10 +452,12 @@ function Get-AppearanceDict {
 		$p = Get-Text $it "dcscor:parameter"
 		$valNode = $it.SelectSingleNode("dcscor:value", $ns)
 		if (-not $p -or -not $valNode) { continue }
-		# Value can be xs:string, v8ui:HorizontalAlign, v8:LocalStringType, etc.
+		# Value can be xs:string, v8ui:HorizontalAlign, v8:LocalStringType, v8ui:Font, etc.
 		$valType = Get-LocalXsiType $valNode
 		if ($valType -eq 'LocalStringType') {
 			$rawVal = Get-MLText $valNode
+		} elseif ($valType -eq 'Font') {
+			$rawVal = Get-FontValue $valNode
 		} else {
 			$rawVal = $valNode.InnerText
 		}
@@ -1570,9 +1584,18 @@ function Get-SettingsAppearance {
 		if (-not $pName -or -not $val) { continue }
 		$valType = Get-LocalXsiType $val
 		if ($valType -eq 'LocalStringType') {
-			$dict[$pName] = Get-MLText $val
+			$rawVal = Get-MLText $val
+		} elseif ($valType -eq 'Font') {
+			$rawVal = Get-FontValue $val
 		} else {
-			$dict[$pName] = $val.InnerText
+			$rawVal = $val.InnerText
+		}
+		# wrapper {use:false, value} как в Get-AppearanceDict
+		$useV = Get-Text $it "dcscor:use"
+		if ($useV -eq 'false') {
+			$dict[$pName] = [ordered]@{ value = $rawVal; use = $false }
+		} else {
+			$dict[$pName] = $rawVal
 		}
 	}
 	return $dict

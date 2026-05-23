@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-# skd-compile v1.65 — Compile 1C DCS from JSON
+# skd-compile v1.66 — Compile 1C DCS from JSON
 # Source: https://github.com/Nikolay-Shirokov/cc-1c-skills
 import argparse
 import json
@@ -1835,8 +1835,14 @@ def emit_appearance_value(lines, key, val, indent):
         lines.append(f'{indent}\t<dcscor:use>false</dcscor:use>')
     lines.append(f'{indent}\t<dcscor:parameter>{esc_xml(key)}</dcscor:parameter>')
 
-    # Multilang dict ({"ru": "...", "en": "..."}) \u2192 LocalStringType \u043d\u0435\u0437\u0430\u0432\u0438\u0441\u0438\u043c\u043e \u043e\u0442 \u043a\u043b\u044e\u0447\u0430.
-    if isinstance(inner_val, dict):
+    # Font dict ({@type: "Font", ref, faceName, height, bold, ...}) \u2192 <dcscor:value xsi:type="v8ui:Font" .../>
+    if isinstance(inner_val, dict) and inner_val.get('@type') == 'Font':
+        attr_parts = []
+        for attr_name in ('ref', 'faceName', 'height', 'bold', 'italic', 'underline', 'strikeout', 'kind', 'scale'):
+            if attr_name in inner_val:
+                attr_parts.append(f'{attr_name}="{esc_xml(str(inner_val[attr_name]))}"')
+        lines.append(f'{indent}\t<dcscor:value xsi:type="v8ui:Font" {" ".join(attr_parts)}/>')
+    elif isinstance(inner_val, dict):
         emit_mltext(lines, f'{indent}\t', 'dcscor:value', inner_val)
     else:
         actual_val = str(inner_val) if inner_val is not None else ''
