@@ -1,4 +1,4 @@
-﻿# skd-compile v1.81 — Compile 1C DCS from JSON
+﻿# skd-compile v1.82 — Compile 1C DCS from JSON
 # Source: https://github.com/Nikolay-Shirokov/cc-1c-skills
 param(
 	[string]$DefinitionFile,
@@ -1496,12 +1496,14 @@ function Emit-ParamValue {
 	$valStr = "$val"
 
 	if ($type -eq "StandardPeriod") {
-		# val is a period variant string like "LastMonth" or "Custom".
-		# Always emit startDate/endDate to match how 1C Designer saves the schema.
+		# Platform-pattern: startDate/endDate эмитятся ТОЛЬКО для variant=Custom.
+		# Для всех остальных вариантов (ThisMonth, LastYear, Today, ...) — без дат.
 		X "$indent<value xsi:type=`"v8:StandardPeriod`">"
 		X "$indent`t<v8:variant xsi:type=`"v8:StandardPeriodVariant`">$(Esc-Xml $valStr)</v8:variant>"
-		X "$indent`t<v8:startDate>0001-01-01T00:00:00</v8:startDate>"
-		X "$indent`t<v8:endDate>0001-01-01T00:00:00</v8:endDate>"
+		if ($valStr -eq 'Custom') {
+			X "$indent`t<v8:startDate>0001-01-01T00:00:00</v8:startDate>"
+			X "$indent`t<v8:endDate>0001-01-01T00:00:00</v8:endDate>"
+		}
 		X "$indent</value>"
 	} elseif ($type -match '^date') {
 		X "$indent<value xsi:type=`"xs:dateTime`">$(Esc-Xml $valStr)</value>"
@@ -2575,7 +2577,8 @@ function Emit-DataParameters {
 		} elseif ($null -ne $dp.value) {
 			$vtype = "$($dp.valueType)"
 			if (($dp.value -is [PSCustomObject] -or $dp.value -is [hashtable]) -and ($dp.value.variant)) {
-				# StandardPeriod (PSCustomObject from JSON / hashtable from shorthand parser)
+				# StandardPeriod (PSCustomObject from JSON / hashtable from shorthand parser).
+				# Platform-pattern: startDate/endDate ТОЛЬКО для variant=Custom.
 				$_sd = $null; $_ed = $null
 				if ($dp.value -is [PSCustomObject]) {
 					if ($dp.value.PSObject.Properties['startDate']) { $_sd = "$($dp.value.startDate)" }
@@ -2584,12 +2587,15 @@ function Emit-DataParameters {
 					if ($dp.value.Contains('startDate')) { $_sd = "$($dp.value['startDate'])" }
 					if ($dp.value.Contains('endDate'))   { $_ed = "$($dp.value['endDate'])" }
 				}
-				if (-not $_sd) { $_sd = '0001-01-01T00:00:00' }
-				if (-not $_ed) { $_ed = '0001-01-01T00:00:00' }
+				$_variantStr = "$($dp.value.variant)"
 				X "$indent`t`t<dcscor:value xsi:type=`"v8:StandardPeriod`">"
-				X "$indent`t`t`t<v8:variant xsi:type=`"v8:StandardPeriodVariant`">$(Esc-Xml "$($dp.value.variant)")</v8:variant>"
-				X "$indent`t`t`t<v8:startDate>$(Esc-Xml $_sd)</v8:startDate>"
-				X "$indent`t`t`t<v8:endDate>$(Esc-Xml $_ed)</v8:endDate>"
+				X "$indent`t`t`t<v8:variant xsi:type=`"v8:StandardPeriodVariant`">$(Esc-Xml $_variantStr)</v8:variant>"
+				if ($_variantStr -eq 'Custom') {
+					if (-not $_sd) { $_sd = '0001-01-01T00:00:00' }
+					if (-not $_ed) { $_ed = '0001-01-01T00:00:00' }
+					X "$indent`t`t`t<v8:startDate>$(Esc-Xml $_sd)</v8:startDate>"
+					X "$indent`t`t`t<v8:endDate>$(Esc-Xml $_ed)</v8:endDate>"
+				}
 				X "$indent`t`t</dcscor:value>"
 			} elseif ($vtype -match '^[a-zA-Z]+:') {
 				# Полный xsi:type из decompile (например "xs:boolean", "dcscor:DesignTimeValue").

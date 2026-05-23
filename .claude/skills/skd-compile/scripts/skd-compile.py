@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-# skd-compile v1.81 — Compile 1C DCS from JSON
+# skd-compile v1.82 — Compile 1C DCS from JSON
 # Source: https://github.com/Nikolay-Shirokov/cc-1c-skills
 import argparse
 import json
@@ -1035,11 +1035,12 @@ def emit_param_value(lines, type_str, val, indent, value_list_allowed=False):
     val_str = str(val)
 
     if type_str == 'StandardPeriod':
-        # Always emit startDate/endDate to match how 1C Designer saves the schema.
+        # Platform-pattern: startDate/endDate ТОЛЬКО для variant=Custom.
         lines.append(f'{indent}<value xsi:type="v8:StandardPeriod">')
         lines.append(f'{indent}\t<v8:variant xsi:type="v8:StandardPeriodVariant">{esc_xml(val_str)}</v8:variant>')
-        lines.append(f'{indent}\t<v8:startDate>0001-01-01T00:00:00</v8:startDate>')
-        lines.append(f'{indent}\t<v8:endDate>0001-01-01T00:00:00</v8:endDate>')
+        if val_str == 'Custom':
+            lines.append(f'{indent}\t<v8:startDate>0001-01-01T00:00:00</v8:startDate>')
+            lines.append(f'{indent}\t<v8:endDate>0001-01-01T00:00:00</v8:endDate>')
         lines.append(f'{indent}</value>')
     elif type_str and re.match(r'^date', type_str):
         lines.append(f'{indent}<value xsi:type="xs:dateTime">{esc_xml(val_str)}</value>')
@@ -2091,13 +2092,15 @@ def emit_data_parameters(lines, items, indent):
             val = dp['value']
             vtype = str(dp.get('valueType') or '')
             if isinstance(val, dict) and val.get('variant'):
-                # StandardPeriod (с явными датами или boilerplate)
-                sd = str(val.get('startDate') or '0001-01-01T00:00:00')
-                ed = str(val.get('endDate') or '0001-01-01T00:00:00')
+                # StandardPeriod. Platform-pattern: startDate/endDate ТОЛЬКО для variant=Custom.
+                variant_str = str(val['variant'])
                 lines.append(f'{indent}\t\t<dcscor:value xsi:type="v8:StandardPeriod">')
-                lines.append(f'{indent}\t\t\t<v8:variant xsi:type="v8:StandardPeriodVariant">{esc_xml(str(val["variant"]))}</v8:variant>')
-                lines.append(f'{indent}\t\t\t<v8:startDate>{esc_xml(sd)}</v8:startDate>')
-                lines.append(f'{indent}\t\t\t<v8:endDate>{esc_xml(ed)}</v8:endDate>')
+                lines.append(f'{indent}\t\t\t<v8:variant xsi:type="v8:StandardPeriodVariant">{esc_xml(variant_str)}</v8:variant>')
+                if variant_str == 'Custom':
+                    sd = str(val.get('startDate') or '0001-01-01T00:00:00')
+                    ed = str(val.get('endDate') or '0001-01-01T00:00:00')
+                    lines.append(f'{indent}\t\t\t<v8:startDate>{esc_xml(sd)}</v8:startDate>')
+                    lines.append(f'{indent}\t\t\t<v8:endDate>{esc_xml(ed)}</v8:endDate>')
                 lines.append(f'{indent}\t\t</dcscor:value>')
             elif re.match(r'^[a-zA-Z]+:', vtype):
                 # Полный xsi:type из decompile (например "xs:boolean", "dcscor:DesignTimeValue").
