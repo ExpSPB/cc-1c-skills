@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-# skd-compile v1.64 — Compile 1C DCS from JSON
+# skd-compile v1.65 — Compile 1C DCS from JSON
 # Source: https://github.com/Nikolay-Shirokov/cc-1c-skills
 import argparse
 import json
@@ -2106,16 +2106,22 @@ def emit_user_fields(lines, items, indent):
         if uf.get('title'):
             emit_mltext(lines, f'{indent}\t\t', 'dcsset:lwsTitle', uf['title'], no_xsi_type=True)
         if u_type == 'UserFieldExpression':
-            d = uf.get('detail') or {}
-            if d.get('expression'):
-                lines.append(f'{indent}\t\t<dcsset:detailExpression>{esc_xml(str(d["expression"]))}</dcsset:detailExpression>')
-            if d.get('presentation'):
-                lines.append(f'{indent}\t\t<dcsset:detailExpressionPresentation>{esc_xml(str(d["presentation"]))}</dcsset:detailExpressionPresentation>')
-            t = uf.get('total') or {}
-            if t.get('expression'):
-                lines.append(f'{indent}\t\t<dcsset:totalExpression>{esc_xml(str(t["expression"]))}</dcsset:totalExpression>')
-            if t.get('presentation'):
-                lines.append(f'{indent}\t\t<dcsset:totalExpressionPresentation>{esc_xml(str(t["presentation"]))}</dcsset:totalExpressionPresentation>')
+            d = uf.get('detail')
+            if d is not None:
+                if 'expression' in d:
+                    v = str(d['expression'])
+                    lines.append(f'{indent}\t\t<dcsset:detailExpression>{esc_xml(v)}</dcsset:detailExpression>' if v else f'{indent}\t\t<dcsset:detailExpression/>')
+                if 'presentation' in d:
+                    v = str(d['presentation'])
+                    lines.append(f'{indent}\t\t<dcsset:detailExpressionPresentation>{esc_xml(v)}</dcsset:detailExpressionPresentation>' if v else f'{indent}\t\t<dcsset:detailExpressionPresentation/>')
+            t = uf.get('total')
+            if t is not None:
+                if 'expression' in t:
+                    v = str(t['expression'])
+                    lines.append(f'{indent}\t\t<dcsset:totalExpression>{esc_xml(v)}</dcsset:totalExpression>' if v else f'{indent}\t\t<dcsset:totalExpression/>')
+                if 'presentation' in t:
+                    v = str(t['presentation'])
+                    lines.append(f'{indent}\t\t<dcsset:totalExpressionPresentation>{esc_xml(v)}</dcsset:totalExpressionPresentation>' if v else f'{indent}\t\t<dcsset:totalExpressionPresentation/>')
         else:
             cases = uf.get('cases') or []
             if len(cases) == 0:

@@ -1,4 +1,4 @@
-﻿# skd-decompile v0.48 — Decompile 1C DCS Template.xml to JSON DSL (draft)
+﻿# skd-decompile v0.49 — Decompile 1C DCS Template.xml to JSON DSL (draft)
 # Source: https://github.com/Nikolay-Shirokov/cc-1c-skills
 param(
 	[Parameter(Mandatory)]
@@ -2292,20 +2292,20 @@ foreach ($sv in $svNodes) {
 			$titleV = Get-MLText $titleN
 			if ($titleV) { $entry['title'] = $titleV }
 			if ($uxt -eq 'UserFieldExpression') {
-				$dEx = Get-Text $ufItem "dcsset:detailExpression"
-				$dEp = Get-Text $ufItem "dcsset:detailExpressionPresentation"
-				$tEx = Get-Text $ufItem "dcsset:totalExpression"
-				$tEp = Get-Text $ufItem "dcsset:totalExpressionPresentation"
-				if ($dEx -or $dEp) {
+				$dExN = $ufItem.SelectSingleNode("dcsset:detailExpression", $ns)
+				$dEpN = $ufItem.SelectSingleNode("dcsset:detailExpressionPresentation", $ns)
+				$tExN = $ufItem.SelectSingleNode("dcsset:totalExpression", $ns)
+				$tEpN = $ufItem.SelectSingleNode("dcsset:totalExpressionPresentation", $ns)
+				if ($dExN -or $dEpN) {
 					$d = [ordered]@{}
-					if ($dEx) { $d['expression'] = $dEx }
-					if ($dEp) { $d['presentation'] = $dEp }
+					if ($dExN) { $d['expression'] = $dExN.InnerText }
+					if ($dEpN) { $d['presentation'] = $dEpN.InnerText }
 					$entry['detail'] = $d
 				}
-				if ($tEx -or $tEp) {
+				if ($tExN -or $tEpN) {
 					$t = [ordered]@{}
-					if ($tEx) { $t['expression'] = $tEx }
-					if ($tEp) { $t['presentation'] = $tEp }
+					if ($tExN) { $t['expression'] = $tExN.InnerText }
+					if ($tEpN) { $t['presentation'] = $tEpN.InnerText }
 					$entry['total'] = $t
 				}
 			} elseif ($uxt -eq 'UserFieldCase') {

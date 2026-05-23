@@ -1,4 +1,4 @@
-﻿# skd-compile v1.64 — Compile 1C DCS from JSON
+﻿# skd-compile v1.65 — Compile 1C DCS from JSON
 # Source: https://github.com/Nikolay-Shirokov/cc-1c-skills
 param(
 	[string]$DefinitionFile,
@@ -2549,12 +2549,28 @@ function Emit-UserFields {
 		}
 		if ($uType -eq "UserFieldExpression") {
 			if ($uf.detail) {
-				if ($uf.detail.expression) { X "$indent`t`t<dcsset:detailExpression>$(Esc-Xml "$($uf.detail.expression)")</dcsset:detailExpression>" }
-				if ($uf.detail.presentation) { X "$indent`t`t<dcsset:detailExpressionPresentation>$(Esc-Xml "$($uf.detail.presentation)")</dcsset:detailExpressionPresentation>" }
+				if ($uf.detail.PSObject.Properties.Match('expression').Count -gt 0) {
+					$_v = "$($uf.detail.expression)"
+					if ($_v) { X "$indent`t`t<dcsset:detailExpression>$(Esc-Xml $_v)</dcsset:detailExpression>" }
+					else { X "$indent`t`t<dcsset:detailExpression/>" }
+				}
+				if ($uf.detail.PSObject.Properties.Match('presentation').Count -gt 0) {
+					$_v = "$($uf.detail.presentation)"
+					if ($_v) { X "$indent`t`t<dcsset:detailExpressionPresentation>$(Esc-Xml $_v)</dcsset:detailExpressionPresentation>" }
+					else { X "$indent`t`t<dcsset:detailExpressionPresentation/>" }
+				}
 			}
 			if ($uf.total) {
-				if ($uf.total.expression) { X "$indent`t`t<dcsset:totalExpression>$(Esc-Xml "$($uf.total.expression)")</dcsset:totalExpression>" }
-				if ($uf.total.presentation) { X "$indent`t`t<dcsset:totalExpressionPresentation>$(Esc-Xml "$($uf.total.presentation)")</dcsset:totalExpressionPresentation>" }
+				if ($uf.total.PSObject.Properties.Match('expression').Count -gt 0) {
+					$_v = "$($uf.total.expression)"
+					if ($_v) { X "$indent`t`t<dcsset:totalExpression>$(Esc-Xml $_v)</dcsset:totalExpression>" }
+					else { X "$indent`t`t<dcsset:totalExpression/>" }
+				}
+				if ($uf.total.PSObject.Properties.Match('presentation').Count -gt 0) {
+					$_v = "$($uf.total.presentation)"
+					if ($_v) { X "$indent`t`t<dcsset:totalExpressionPresentation>$(Esc-Xml $_v)</dcsset:totalExpressionPresentation>" }
+					else { X "$indent`t`t<dcsset:totalExpressionPresentation/>" }
+				}
 			}
 		} else {
 			# UserFieldCase
