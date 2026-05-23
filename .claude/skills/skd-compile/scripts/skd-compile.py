@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-# skd-compile v1.84 — Compile 1C DCS from JSON
+# skd-compile v1.85 — Compile 1C DCS from JSON
 # Source: https://github.com/Nikolay-Shirokov/cc-1c-skills
 import argparse
 import json
@@ -2468,11 +2468,11 @@ def emit_settings_variants(lines, defn):
             emit_user_fields(lines, s['userFields'], '\t\t\t')
 
         # Selection/Filter/Order/CA — эмитим даже если items пустые, но есть
-        # block-level viewMode/userSettingID (platform пишет такой блок как
-        # <dcsset:selection><dcsset:viewMode>...</dcsset:viewMode></dcsset:selection>).
+        # block-level viewMode/userSettingID. Platform может содержать Auto-items
+        # на top-level (вместе с явными полями), поэтому не skip_auto.
         svm, susid = _block_vm('selection'), _block_usid('selection')
         if s.get('selection') or svm is not None or susid is not None:
-            emit_selection(lines, s.get('selection'), '\t\t\t', skip_auto=True, block_view_mode=svm, block_user_setting_id=susid)
+            emit_selection(lines, s.get('selection'), '\t\t\t', block_view_mode=svm, block_user_setting_id=susid)
 
         fvm, fusid = _block_vm('filter'), _block_usid('filter')
         if s.get('filter') or fvm is not None or fusid is not None:
@@ -2480,7 +2480,7 @@ def emit_settings_variants(lines, defn):
 
         ovm, ousid = _block_vm('order'), _block_usid('order')
         if s.get('order') or ovm is not None or ousid is not None:
-            emit_order(lines, s.get('order'), '\t\t\t', skip_auto=True, block_view_mode=ovm, block_user_setting_id=ousid)
+            emit_order(lines, s.get('order'), '\t\t\t', block_view_mode=ovm, block_user_setting_id=ousid)
 
         cavm, causid = _block_vm('conditionalAppearance'), _block_usid('conditionalAppearance')
         if s.get('conditionalAppearance') or cavm is not None or causid is not None:

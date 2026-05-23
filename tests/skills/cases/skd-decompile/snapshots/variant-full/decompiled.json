@@ -8,9 +8,9 @@
       "name": "Основной",
       "title": "Основной вариант",
       "settings": {
-        "selection": ["Организация", { "folder": "Объёмы", "items": ["Сумма", "Количество"] }],
+        "selection": ["Организация", { "folder": "Объёмы", "items": ["Сумма", "Количество"] }, "Auto"],
         "filter": ["Организация = _ @off @user", { "group": "Or", "items": ["Статус = Активен", "Сумма > 1000"] }],
-        "order": ["Сумма desc"],
+        "order": ["Сумма desc", "Auto"],
         "conditionalAppearance": [{ "filter": ["Сумма > 10000"], "appearance": { "ЦветТекста": "style:НегативныйТекстЦвет" }, "presentation": "Большие суммы", "viewMode": "Normal", "userSettingID": "auto" }],
         "outputParameters": { "Заголовок": "Сводка по организациям" },
         "dataParameters": "auto",

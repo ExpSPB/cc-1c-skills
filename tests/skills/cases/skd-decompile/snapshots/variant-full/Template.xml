@@ -291,6 +291,7 @@
 					</dcsset:item>
 					<dcsset:placement>Auto</dcsset:placement>
 				</dcsset:item>
+				<dcsset:item xsi:type="dcsset:SelectedItemAuto"/>
 			</dcsset:selection>
 			<dcsset:filter>
 				<dcsset:item xsi:type="dcsset:FilterItemComparison">
@@ -318,6 +319,7 @@
 					<dcsset:field>Сумма</dcsset:field>
 					<dcsset:orderType>Desc</dcsset:orderType>
 				</dcsset:item>
+				<dcsset:item xsi:type="dcsset:OrderItemAuto"/>
 			</dcsset:order>
 			<dcsset:conditionalAppearance>
 				<dcsset:item>

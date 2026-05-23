@@ -1,4 +1,4 @@
-﻿# skd-compile v1.84 — Compile 1C DCS from JSON
+﻿# skd-compile v1.85 — Compile 1C DCS from JSON
 # Source: https://github.com/Nikolay-Shirokov/cc-1c-skills
 param(
 	[string]$DefinitionFile,
@@ -3076,12 +3076,11 @@ function Emit-SettingsVariants {
 			Emit-UserFields -items $s.userFields -indent "`t`t`t"
 		}
 
-		# Selection (Auto items only belong at group level, not top-level settings).
-		# Эмитим даже если items пустые, но есть block-level viewMode/userSettingID
-		# (platform пишет такой блок как <dcsset:selection><dcsset:viewMode>.../...>).
+		# Selection — эмитим даже если items пустые, но есть block-level viewMode/userSettingID.
+		# Platform может содержать Auto-items на top-level (вместе с явными полями).
 		$svm = Get-BlockVM 'selection';  $susid = Get-BlockUSID 'selection'
 		if ($s.selection -or $null -ne $svm -or $null -ne $susid) {
-			Emit-Selection -items $s.selection -indent "`t`t`t" -skipAuto -blockViewMode $svm -blockUserSettingID $susid
+			Emit-Selection -items $s.selection -indent "`t`t`t" -blockViewMode $svm -blockUserSettingID $susid
 		}
 
 		# Filter
@@ -3090,10 +3089,10 @@ function Emit-SettingsVariants {
 			Emit-Filter -items $s.filter -indent "`t`t`t" -blockViewMode $fvm -blockUserSettingID $fusid
 		}
 
-		# Order (Auto items only belong at group level, not top-level settings)
+		# Order
 		$ovm = Get-BlockVM 'order';  $ousid = Get-BlockUSID 'order'
 		if ($s.order -or $null -ne $ovm -or $null -ne $ousid) {
-			Emit-Order -items $s.order -indent "`t`t`t" -skipAuto -blockViewMode $ovm -blockUserSettingID $ousid
+			Emit-Order -items $s.order -indent "`t`t`t" -blockViewMode $ovm -blockUserSettingID $ousid
 		}
 
 		# ConditionalAppearance
