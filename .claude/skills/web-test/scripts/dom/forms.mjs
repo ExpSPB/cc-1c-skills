@@ -1,4 +1,4 @@
-// web-test dom/forms v1.2 — form detection, content read, click-target/field-button resolution
+// web-test dom/forms v1.3 — form detection, content read, click-target/field-button resolution
 // Source: https://github.com/Nikolay-Shirokov/cc-1c-skills
 import { DETECT_FORM_FN, READ_FORM_FN } from './_shared.mjs';
 
@@ -481,5 +481,104 @@ export function isFormVisibleScript(dialogForm) {
   return `(() => {
     const p = 'form${dialogForm}_';
     return [...document.querySelectorAll('[id^="' + p + '"]')].some(el => el.offsetWidth > 0);
+  })()`;
+}
+
+/**
+ * Find the Pattern input id on a search/filter dialog. Returns `id | null`.
+ */
+export function findPatternInputIdScript(dialogForm) {
+  return `(() => {
+    const p = 'form${dialogForm}_';
+    const el = [...document.querySelectorAll('input.editInput[id^="' + p + '"]')]
+      .find(el => el.offsetWidth > 0 && /Pattern/i.test(el.id));
+    return el ? el.id : null;
+  })()`;
+}
+
+/**
+ * Is the given form a type selection dialog ("Выбор типа данных")?
+ *
+ * Detection signals (any one is sufficient):
+ *   - `form{N}_OK` element exists      (selection forms use "Выбрать", not "OK")
+ *   - `form{N}_ValueList` grid exists  (specific to type/value list dialogs)
+ *   - window title contains "Выбор типа" on a visible `.toplineBoxTitle`
+ *
+ * Returns boolean.
+ */
+export function isTypeDialogScript(formNum) {
+  return `(() => {
+    const p = 'form' + ${formNum} + '_';
+    const hasOK = !!document.getElementById(p + 'OK');
+    const hasValueList = !!document.getElementById(p + 'ValueList');
+    const hasTitle = [...document.querySelectorAll('.toplineBoxTitle')]
+      .some(el => el.offsetWidth > 0 && /выбор типа/i.test(el.getAttribute('title') || ''));
+    return hasOK || hasValueList || hasTitle;
+  })()`;
+}
+
+/**
+ * Is the "нет в списке" cloud popup visible? 1C shows it as a positioned div
+ * (absolute/fixed, high z-index) whose text contains "нет в списке".
+ * Returns boolean.
+ */
+export function isNotInListCloudVisibleScript() {
+  return `(() => {
+    const divs = document.querySelectorAll('div');
+    for (const el of divs) {
+      if (el.offsetWidth === 0 || el.offsetHeight === 0) continue;
+      const style = getComputedStyle(el);
+      if (style.position !== 'absolute' && style.position !== 'fixed') continue;
+      const z = parseInt(style.zIndex) || 0;
+      if (z < 100) continue;
+      if ((el.innerText || '').includes('нет в списке')) return true;
+    }
+    return false;
+  })()`;
+}
+
+/**
+ * Find a child form opened above `prevFormNum` whose `form{N}_{buttonName}` button is visible.
+ * Used by type-dialog Ctrl+F flow to locate the "Найти" sub-dialog form number.
+ * Returns the form number or `null`.
+ */
+export function findChildFormByButtonScript(prevFormNum, buttonName, range = 20) {
+  return `(() => {
+    for (let n = ${prevFormNum} + 1; n < ${prevFormNum} + ${range}; n++) {
+      const btn = document.getElementById('form' + n + '_' + ${JSON.stringify(buttonName)});
+      if (btn && btn.offsetWidth > 0) return n;
+    }
+    return null;
+  })()`;
+}
+
+/**
+ * Read visible rows of a type-dialog ValueList grid and return rows that fuzzy-match `typeNorm`.
+ *
+ * `typeNorm` should already be lowercased, NBSP-normalized, ё→е normalized (use `normYo`).
+ *
+ * Returns `{ visible: string[], matches: Array<{ text, x, y }> }`.
+ */
+export function readTypeDialogVisibleRowsScript(formNum, typeNorm) {
+  return `(() => {
+    const grid = document.getElementById('form${formNum}_ValueList');
+    if (!grid) return { visible: [], matches: [] };
+    const body = grid.querySelector('.gridBody');
+    if (!body) return { visible: [], matches: [] };
+    const lines = body.querySelectorAll('.gridLine');
+    const norm = s => (s || '').replace(/\\u00a0/g, ' ').trim();
+    const typeNorm = ${JSON.stringify(typeNorm)};
+    const visible = [];
+    const matches = [];
+    for (const line of lines) {
+      const text = norm(line.innerText);
+      if (!text) continue;
+      visible.push(text);
+      if (text.toLowerCase().replace(/ё/gi, 'е').includes(typeNorm)) {
+        const r = line.getBoundingClientRect();
+        matches.push({ text, x: Math.round(r.x + r.width / 2), y: Math.round(r.y + r.height / 2) });
+      }
+    }
+    return { visible, matches };
   })()`;
 }

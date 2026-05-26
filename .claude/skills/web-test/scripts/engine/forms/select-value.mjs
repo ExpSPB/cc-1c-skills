@@ -1,4 +1,4 @@
-// web-test forms/select-value v1.16 — Reference & composite-type value selection: selectValue, fillReferenceField, selection/type-dialog pickers.
+// web-test forms/select-value v1.17 — Reference & composite-type value selection: selectValue, fillReferenceField, selection/type-dialog pickers.
 // Source: https://github.com/Nikolay-Shirokov/cc-1c-skills
 
 import {
@@ -7,6 +7,9 @@ import {
 import {
   detectFormScript, findFieldButtonScript, resolveFieldsScript,
   readSubmenuScript, checkErrorsScript,
+  findSearchInputScript, findNamedButtonScript, findCompareTypeRadioScript, isFormVisibleScript,
+  findPatternInputIdScript, isTypeDialogScript, isNotInListCloudVisibleScript,
+  findChildFormByButtonScript, readTypeDialogVisibleRowsScript,
 } from '../../dom.mjs';
 import { dismissPendingErrors, checkForErrors } from '../core/errors.mjs';
 import { waitForStable, waitForCondition } from '../core/wait.mjs';
@@ -68,10 +71,7 @@ async function dblclickAndVerify(coords, selFormNum, fieldName) {
   await waitForStable(selFormNum);
 
   // Verify selection form closed
-  const stillOpen = await page.evaluate(`(() => {
-    const p = 'form${selFormNum}_';
-    return [...document.querySelectorAll('[id^="' + p + '"]')].some(el => el.offsetWidth > 0);
-  })()`);
+  const stillOpen = await page.evaluate(isFormVisibleScript(selFormNum));
   if (stillOpen) {
     // Enter didn't select — item is likely a non-selectable group.
     // Don't Escape here — let the caller decide (may want to try another row).
@@ -105,26 +105,14 @@ async function advancedSearchInline(formNum, text) {
     if (dialogForm === formNum || dialogForm === null) return; // Alt+F didn't open dialog
 
     // 2. Switch to "по части строки" (CompareType#1)
-    const radioClicked = await page.evaluate(`(() => {
-      const p = 'form${dialogForm}_';
-      const el = document.getElementById(p + 'CompareType#1#radio');
-      if (!el || el.offsetWidth === 0) return false;
-      if (el.classList.contains('select')) return true; // already selected
-      const r = el.getBoundingClientRect();
-      return { x: Math.round(r.x + r.width / 2), y: Math.round(r.y + r.height / 2) };
-    })()`);
-    if (radioClicked && typeof radioClicked === 'object') {
+    const radioClicked = await page.evaluate(findCompareTypeRadioScript(dialogForm, 1));
+    if (radioClicked && !radioClicked.already) {
       await page.mouse.click(radioClicked.x, radioClicked.y);
       await page.waitForTimeout(300);
     }
 
     // 3. Fill Pattern field via clipboard paste
-    const patternId = await page.evaluate(`(() => {
-      const p = 'form${dialogForm}_';
-      const el = [...document.querySelectorAll('input.editInput[id^="' + p + '"]')]
-        .find(el => el.offsetWidth > 0 && /Pattern/i.test(el.id));
-      return el ? el.id : null;
-    })()`);
+    const patternId = await page.evaluate(findPatternInputIdScript(dialogForm));
     if (!patternId) {
       await page.keyboard.press('Escape');
       await page.waitForTimeout(300);
@@ -137,13 +125,7 @@ async function advancedSearchInline(formNum, text) {
     await page.waitForTimeout(300);
 
     // 4. Click "Найти"
-    const findBtn = await page.evaluate(`(() => {
-      const btns = [...document.querySelectorAll('a.press')].filter(el => el.offsetWidth > 0);
-      const btn = btns.find(el => el.innerText?.trim() === 'Найти');
-      if (!btn) return null;
-      const r = btn.getBoundingClientRect();
-      return { x: Math.round(r.x + r.width / 2), y: Math.round(r.y + r.height / 2) };
-    })()`);
+    const findBtn = await page.evaluate(findNamedButtonScript('Найти'));
     if (findBtn) {
       await page.mouse.click(findBtn.x, findBtn.y);
       await page.waitForTimeout(2000);
@@ -151,10 +133,7 @@ async function advancedSearchInline(formNum, text) {
 
     // 5. Close advanced search dialog
     for (let attempt = 0; attempt < 3; attempt++) {
-      const dialogVisible = await page.evaluate(`(() => {
-        const p = 'form${dialogForm}_';
-        return [...document.querySelectorAll('[id^="' + p + '"]')].some(el => el.offsetWidth > 0);
-      })()`);
+      const dialogVisible = await page.evaluate(isFormVisibleScript(dialogForm));
       if (!dialogVisible) break;
       await page.keyboard.press('Escape');
       await page.waitForTimeout(500);
@@ -224,15 +203,10 @@ export async function pickFromSelectionForm(selFormNum, fieldName, search, origF
 
   // Step 3: Fallback — simple search via search input (for forms without Alt+F support)
   if (typeof search === 'string' && searchLower) {
-    const searchInputId = await page.evaluate(`(() => {
-      const p = 'form${selFormNum}_';
-      const el = [...document.querySelectorAll('input.editInput[id^="' + p + '"]')]
-        .find(el => el.offsetWidth > 0 && /Строк[аи]Поиска|SearchString/i.test(el.id));
-      return el ? el.id : null;
-    })()`);
-    if (searchInputId) {
+    const searchInputInfo = await page.evaluate(findSearchInputScript(selFormNum));
+    if (searchInputInfo) {
       try {
-        await page.click(`[id="${searchInputId}"]`);
+        await page.click(`[id="${searchInputInfo.id}"]`);
         await page.waitForTimeout(200);
         await page.keyboard.press('Control+A');
         await pasteText(searchText);
@@ -278,14 +252,7 @@ export async function pickFromSelectionForm(selFormNum, fieldName, search, origF
  * - Window title contains "Выбор типа" (title attr on .toplineBoxTitle)
  */
 export async function isTypeDialog(formNum) {
-  return page.evaluate(`(() => {
-    const p = 'form' + ${formNum} + '_';
-    const hasOK = !!document.getElementById(p + 'OK');
-    const hasValueList = !!document.getElementById(p + 'ValueList');
-    const hasTitle = [...document.querySelectorAll('.toplineBoxTitle')]
-      .some(el => el.offsetWidth > 0 && /выбор типа/i.test(el.getAttribute('title') || ''));
-    return hasOK || hasValueList || hasTitle;
-  })()`);
+  return page.evaluate(isTypeDialogScript(formNum));
 }
 
 /**
@@ -317,27 +284,7 @@ export async function pickFromTypeDialog(formNum, typeName) {
 
   // Helper: read visible rows and find matching ones
   async function readVisibleRows() {
-    return page.evaluate(`(() => {
-      const grid = document.getElementById('form${formNum}_ValueList');
-      if (!grid) return { visible: [], matches: [] };
-      const body = grid.querySelector('.gridBody');
-      if (!body) return { visible: [], matches: [] };
-      const lines = body.querySelectorAll('.gridLine');
-      const norm = s => (s || '').replace(/\\u00a0/g, ' ').trim();
-      const typeNorm = ${JSON.stringify(typeNorm)};
-      const visible = [];
-      const matches = [];
-      for (const line of lines) {
-        const text = norm(line.innerText);
-        if (!text) continue;
-        visible.push(text);
-        if (text.toLowerCase().replace(/ё/gi, 'е').includes(typeNorm)) {
-          const r = line.getBoundingClientRect();
-          matches.push({ text, x: Math.round(r.x + r.width / 2), y: Math.round(r.y + r.height / 2) });
-        }
-      }
-      return { visible, matches };
-    })()`);
+    return page.evaluate(readTypeDialogVisibleRowsScript(formNum, typeNorm));
   }
 
   // Step 1: Scan visible rows (fast path — no Ctrl+F needed for small lists)
@@ -379,13 +326,7 @@ export async function pickFromTypeDialog(formNum, typeName) {
   await page.waitForTimeout(300);
 
   // Find the "Найти" dialog form number (it's > formNum)
-  const findFormNum = await page.evaluate(`(() => {
-    for (let n = ${formNum} + 1; n < ${formNum} + 20; n++) {
-      const btn = document.getElementById('form' + n + '_Find');
-      if (btn && btn.offsetWidth > 0) return n;
-    }
-    return null;
-  })()`);
+  const findFormNum = await page.evaluate(findChildFormByButtonScript(formNum, 'Find'));
 
   if (findFormNum === null) {
     await page.keyboard.press('Escape');
@@ -455,18 +396,7 @@ export async function fillReferenceField(selector, fieldName, value, formNum) {
 
   // Helper: check for "not in list" cloud popup (1C shows positioned div with "нет в списке")
   async function checkNotInListCloud() {
-    return page.evaluate(`(() => {
-      const divs = document.querySelectorAll('div');
-      for (const el of divs) {
-        if (el.offsetWidth === 0 || el.offsetHeight === 0) continue;
-        const style = getComputedStyle(el);
-        if (style.position !== 'absolute' && style.position !== 'fixed') continue;
-        const z = parseInt(style.zIndex) || 0;
-        if (z < 100) continue;
-        if ((el.innerText || '').includes('нет в списке')) return true;
-      }
-      return false;
-    })()`);
+    return page.evaluate(isNotInListCloudVisibleScript());
   }
 
   // 0. Dismiss any leftover error modal from a previous operation
