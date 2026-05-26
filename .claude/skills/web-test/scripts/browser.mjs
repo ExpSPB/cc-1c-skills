@@ -1,4 +1,4 @@
-// web-test browser v1.17 — engine facade: re-exports the public API from engine/*
+// web-test browser v1.18 — engine facade: re-exports the public API from engine/*
 // Source: https://github.com/Nikolay-Shirokov/cc-1c-skills
 /**
  * Public API of the web-test engine. Pure re-export facade — no logic here.
