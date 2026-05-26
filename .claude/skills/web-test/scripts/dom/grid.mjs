@@ -1,4 +1,4 @@
-// web-test dom/grid v1.0 — grid resolution + table reading
+// web-test dom/grid v1.1 — grid resolution + table reading + edit-time helpers
 // Source: https://github.com/Nikolay-Shirokov/cc-1c-skills
 
 /**
@@ -245,5 +245,77 @@ export function readTableScript(formNum, { maxRows = 20, offset = 0, gridSelecto
     if (isTree) result.viewMode = 'tree';
     if (hasGroups) result.hierarchical = true;
     return result;
+  })()`;
+}
+
+// ─── Edit-time grid helpers (for fillTableRow / row-fill) ────────────────────
+//
+// All helpers below accept an optional `gridSelector`. When passed, they target
+// that exact grid; when null/undefined they pick the LAST visible `.grid` on
+// the page (this matches the implicit "current grid" used by row-fill).
+
+/** Inline JS fragment that resolves the target grid into `const grid`. */
+function gridResolver(gridSelector) {
+  return gridSelector
+    ? `document.querySelector(${JSON.stringify(gridSelector)})`
+    : `(() => { const grids = [...document.querySelectorAll('.grid')].filter(el => el.offsetWidth > 0); return grids[grids.length - 1]; })()`;
+}
+
+/**
+ * Count `.gridLine` rows in the body of the target grid.
+ * Returns the row count, or `0` when grid/body absent.
+ */
+export function countGridRowsScript(gridSelector) {
+  return `(() => {
+    const grid = ${gridResolver(gridSelector)};
+    const body = grid?.querySelector('.gridBody');
+    return body ? body.querySelectorAll('.gridLine').length : 0;
+  })()`;
+}
+
+/**
+ * Is the target grid a tree grid? (presence of `.gridBoxTree`)
+ * Returns boolean.
+ */
+export function isTreeGridScript(gridSelector) {
+  return `(() => {
+    const grid = ${gridResolver(gridSelector)};
+    return grid ? !!grid.querySelector('.gridBoxTree') : false;
+  })()`;
+}
+
+/**
+ * Return center coords of the grid's `.gridHead` element.
+ * Used as a click target to commit a pending cell edit (clicking the header
+ * defocuses the input without selecting another row).
+ *
+ * Returns `{ x, y } | null`.
+ */
+export function findGridHeadCenterCoordsScript(gridSelector) {
+  return `(() => {
+    const grid = ${gridResolver(gridSelector)};
+    if (!grid) return null;
+    const head = grid.querySelector('.gridHead');
+    if (!head) return null;
+    const r = head.getBoundingClientRect();
+    return { x: Math.round(r.x + r.width / 2), y: Math.round(r.y + r.height / 2) };
+  })()`;
+}
+
+/**
+ * Return the index of the currently selected row in the target grid, or
+ * fall back to the last row when nothing is selected.
+ *
+ * Returns row index, or `-1` when no rows.
+ */
+export function getSelectedOrLastRowIndexScript(gridSelector) {
+  return `(() => {
+    const grid = ${gridResolver(gridSelector)};
+    if (!grid) return -1;
+    const body = grid.querySelector('.gridBody');
+    if (!body) return -1;
+    const lines = [...body.querySelectorAll('.gridLine')];
+    const sel = lines.findIndex(l => l.classList.contains('selected'));
+    return sel >= 0 ? sel : lines.length - 1;
   })()`;
 }

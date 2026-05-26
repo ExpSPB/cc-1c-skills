@@ -1,4 +1,4 @@
-// web-test dom/forms v1.3 — form detection, content read, click-target/field-button resolution
+// web-test dom/forms v1.4 — form detection, content read, click-target/field-button resolution
 // Source: https://github.com/Nikolay-Shirokov/cc-1c-skills
 import { DETECT_FORM_FN, READ_FORM_FN } from './_shared.mjs';
 
@@ -514,6 +514,39 @@ export function isTypeDialogScript(formNum) {
     const hasTitle = [...document.querySelectorAll('.toplineBoxTitle')]
       .some(el => el.offsetWidth > 0 && /выбор типа/i.test(el.getAttribute('title') || ''));
     return hasOK || hasValueList || hasTitle;
+  })()`;
+}
+
+/**
+ * Click the "Показать все" / "Show all" link inside the "нет в списке"
+ * cloud popup via `dispatchEvent`. Returns boolean — whether clicked.
+ */
+export function clickShowAllInNotInListCloudScript() {
+  return `(() => {
+    for (const el of document.querySelectorAll('div')) {
+      if (el.offsetWidth === 0 || el.offsetHeight === 0) continue;
+      const s = getComputedStyle(el);
+      if (s.position !== 'absolute' && s.position !== 'fixed') continue;
+      if ((parseInt(s.zIndex) || 0) < 100) continue;
+      if (!(el.innerText || '').includes('нет в списке')) continue;
+      const links = [...el.querySelectorAll('a, span, div')]
+        .filter(e => e.offsetWidth > 0 && e.children.length === 0);
+      const showAll = links.find(e => {
+        const t = (e.innerText?.trim() || '').toLowerCase();
+        return t === 'показать все' || t === 'show all';
+      });
+      if (showAll) {
+        const r = showAll.getBoundingClientRect();
+        const opts = { bubbles:true, cancelable:true,
+          clientX: r.x + r.width/2, clientY: r.y + r.height/2 };
+        showAll.dispatchEvent(new MouseEvent('mousedown', opts));
+        showAll.dispatchEvent(new MouseEvent('mouseup', opts));
+        showAll.dispatchEvent(new MouseEvent('click', opts));
+        return true;
+      }
+      return false;
+    }
+    return false;
   })()`;
 }
 

@@ -6,6 +6,9 @@ import {
 } from '../core/state.mjs';
 import {
   detectFormScript, resolveGridScript, readTableScript,
+  countGridRowsScript, isTreeGridScript, findGridHeadCenterCoordsScript,
+  getSelectedOrLastRowIndexScript,
+  isNotInListCloudVisibleScript, clickShowAllInNotInListCloudScript,
 } from '../../dom.mjs';
 import { dismissPendingErrors, checkForErrors } from '../core/errors.mjs';
 import { waitForStable, waitForCondition, startNetworkMonitor } from '../core/wait.mjs';
@@ -62,24 +65,12 @@ export async function fillTableRow(fields, { tab, add, row, table } = {}) {
   let addedRowIdx = -1;
   if (add) {
     // Count rows before add — new row will be appended at this index
-    addedRowIdx = await page.evaluate(`(() => {
-      const grid = ${gridSelector
-        ? `document.querySelector(${JSON.stringify(gridSelector)})`
-        : `(() => { const grids = [...document.querySelectorAll('.grid')].filter(el => el.offsetWidth > 0); return grids[grids.length - 1]; })()`};
-      const body = grid?.querySelector('.gridBody');
-      return body ? body.querySelectorAll('.gridLine').length : 0;
-    })()`);
+    addedRowIdx = await page.evaluate(countGridRowsScript(gridSelector));
     await clickElement('Добавить', { table });
     // Poll for edit mode (INPUT inside grid) instead of fixed 1000ms wait
     for (let aw = 0; aw < 6; aw++) {
       await page.waitForTimeout(150);
-      const ready = await page.evaluate(`(() => {
-        const f = document.activeElement;
-        if (!f || (f.tagName !== 'INPUT' && f.tagName !== 'TEXTAREA')) return false;
-        let n = f; while (n) { if (n.classList?.contains('grid')) return true; n = n.parentElement; }
-        return false;
-      })()`);
-      if (ready) break;
+      if (await isInputFocusedInGrid()) break;
     }
   }
 
@@ -294,12 +285,7 @@ export async function fillTableRow(fields, { tab, add, row, table } = {}) {
     // When click entered INPUT mode but no selection form yet — try F4 only for tree grids
     // (tree grid ref fields need F4 to open selection form; flat grids work via Tab-loop)
     if (inEdit && directEditForm === null) {
-      const isTreeGrid = await page.evaluate(`(() => {
-        const grid = ${gridSelector
-          ? `document.querySelector(${JSON.stringify(gridSelector)})`
-          : `(() => { const grids = [...document.querySelectorAll('.grid')].filter(el => el.offsetWidth > 0); return grids[grids.length - 1]; })()`};
-        return grid ? !!grid.querySelector('.gridBoxTree') : false;
-      })()`);
+      const isTreeGrid = await page.evaluate(isTreeGridScript(gridSelector));
       if (isTreeGrid) {
         await page.keyboard.press('F4');
         for (let fw = 0; fw < 8; fw++) {
@@ -782,46 +768,11 @@ export async function fillTableRow(fields, { tab, add, row, table } = {}) {
     await page.waitForTimeout(1000);
 
     // Check for "нет в списке" cloud popup (reference field, value not found)
-    const notInList = await page.evaluate(`(() => {
-      for (const el of document.querySelectorAll('div')) {
-        if (el.offsetWidth === 0 || el.offsetHeight === 0) continue;
-        const s = getComputedStyle(el);
-        if (s.position !== 'absolute' && s.position !== 'fixed') continue;
-        if ((parseInt(s.zIndex) || 0) < 100) continue;
-        if ((el.innerText || '').includes('нет в списке')) return true;
-      }
-      return false;
-    })()`);
+    const notInList = await page.evaluate(isNotInListCloudVisibleScript());
 
     if (notInList) {
       // Cloud has "Показать все" link — try to open selection form via it
-      const clickedShowAll = await page.evaluate(`(() => {
-        for (const el of document.querySelectorAll('div')) {
-          if (el.offsetWidth === 0 || el.offsetHeight === 0) continue;
-          const s = getComputedStyle(el);
-          if (s.position !== 'absolute' && s.position !== 'fixed') continue;
-          if ((parseInt(s.zIndex) || 0) < 100) continue;
-          if (!(el.innerText || '').includes('нет в списке')) continue;
-          // Found the cloud — look for "Показать все" hyperlink inside
-          const links = [...el.querySelectorAll('a, span, div')]
-            .filter(e => e.offsetWidth > 0 && e.children.length === 0);
-          const showAll = links.find(e => {
-            const t = (e.innerText?.trim() || '').toLowerCase();
-            return t === 'показать все' || t === 'show all';
-          });
-          if (showAll) {
-            const r = showAll.getBoundingClientRect();
-            const opts = { bubbles:true, cancelable:true,
-              clientX: r.x + r.width/2, clientY: r.y + r.height/2 };
-            showAll.dispatchEvent(new MouseEvent('mousedown', opts));
-            showAll.dispatchEvent(new MouseEvent('mouseup', opts));
-            showAll.dispatchEvent(new MouseEvent('click', opts));
-            return true;
-          }
-          return false;
-        }
-        return false;
-      })()`);
+      const clickedShowAll = await page.evaluate(clickShowAllInNotInListCloudScript());
 
       if (clickedShowAll) {
         await waitForStable(formNum);
@@ -958,18 +909,7 @@ export async function fillTableRow(fields, { tab, add, row, table } = {}) {
   // Clicking a different data row would re-enter edit mode on that row.
   // Without this commit click, the row stays in "uncommitted add" state
   // and a subsequent Escape (e.g. from closeForm) would cancel the entire row.
-  const commitTarget = await page.evaluate(`(() => {
-    const grid = ${gridSelector
-      ? `document.querySelector(${JSON.stringify(gridSelector)})`
-      : `(() => { const grids = [...document.querySelectorAll('.grid')].filter(el => el.offsetWidth > 0); return grids[grids.length - 1]; })()`};
-    if (!grid) return null;
-    const head = grid.querySelector('.gridHead');
-    if (head) {
-      const r = head.getBoundingClientRect();
-      return { x: Math.round(r.x + r.width / 2), y: Math.round(r.y + r.height / 2) };
-    }
-    return null;
-  })()`);
+  const commitTarget = await page.evaluate(findGridHeadCenterCoordsScript(gridSelector));
   if (commitTarget) {
     await page.mouse.click(commitTarget.x, commitTarget.y);
     await page.waitForTimeout(500);
@@ -1001,17 +941,7 @@ export async function fillTableRow(fields, { tab, add, row, table } = {}) {
     }
     if (Object.keys(checkboxFields).length > 0) {
       // Use row index: addedRowIdx (from add mode) or fallback to selected row
-      const currentRow = addedRowIdx >= 0 ? addedRowIdx : (row != null ? row : await page.evaluate(`(() => {
-        const grid = ${gridSelector
-          ? `document.querySelector(${JSON.stringify(gridSelector)})`
-          : `(() => { const grids = [...document.querySelectorAll('.grid')].filter(el => el.offsetWidth > 0); return grids[grids.length - 1]; })()`};
-        if (!grid) return -1;
-        const body = grid.querySelector('.gridBody');
-        if (!body) return -1;
-        const lines = [...body.querySelectorAll('.gridLine')];
-        const sel = lines.findIndex(l => l.classList.contains('selected'));
-        return sel >= 0 ? sel : lines.length - 1;
-      })()`)
+      const currentRow = addedRowIdx >= 0 ? addedRowIdx : (row != null ? row : await page.evaluate(getSelectedOrLastRowIndexScript(gridSelector))
       );
       if (currentRow >= 0) {
         const more = await fillTableRow(checkboxFields, { row: currentRow, table });
