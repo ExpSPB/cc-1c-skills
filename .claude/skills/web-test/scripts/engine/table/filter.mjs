@@ -1,8 +1,14 @@
-// web-test table/filter v1.17 — filterList / unfilterList — simple search + advanced-column filter badges.
+// web-test table/filter v1.18 — filterList / unfilterList — simple search + advanced-column filter badges.
 // Source: https://github.com/Nikolay-Shirokov/cc-1c-skills
 
 import { page, ensureConnected, normYo, highlightMode, ACTION_WAIT } from '../core/state.mjs';
-import { detectFormScript, resolveGridScript } from '../../dom.mjs';
+import {
+  detectFormScript, readSubmenuScript,
+  findSearchInputScript, findNamedButtonScript, findCompareTypeRadioScript, isFormVisibleScript,
+  findFirstGridCellCoordsScript, findColumnFirstCellCoordsScript,
+  readFieldSelectorInfoScript, pickFieldInSelectorDropdownScript,
+  readFilterDialogInfoScript, findFilterBadgeCloseScript, findFirstFilterBadgeCloseScript,
+} from '../../dom.mjs';
 import { dismissPendingErrors, checkForErrors } from '../core/errors.mjs';
 import { waitForStable, waitForCondition } from '../core/wait.mjs';
 import { highlight, unhighlight } from '../recording/highlight.mjs';
@@ -34,15 +40,10 @@ export async function filterList(text, { field, exact } = {}) {
 
   if (!field) {
     // --- Simple search: fill search input + Enter ---
-    const searchId = await page.evaluate(`(() => {
-      const p = 'form${formNum}_';
-      const el = [...document.querySelectorAll('input.editInput[id^="' + p + '"]')]
-        .find(el => el.offsetWidth > 0 && /Строк[аи]Поиска|SearchString/i.test(el.id));
-      return el ? el.id : null;
-    })()`);
+    const searchInfo = await page.evaluate(findSearchInputScript(formNum));
 
-    if (searchId) {
-      await page.click(`[id="${searchId}"]`);
+    if (searchInfo) {
+      await page.click(`[id="${searchInfo.id}"]`);
       await page.waitForTimeout(200);
       await page.keyboard.press('Control+A');
       await pasteText(text);
@@ -57,18 +58,7 @@ export async function filterList(text, { field, exact } = {}) {
 
     // No search input — Ctrl+F opens advanced search on such forms.
     // Click first grid cell then fall through to advanced search path below.
-    const firstCell = await page.evaluate(`(() => {
-      const p = 'form${formNum}_';
-      const grid = [...document.querySelectorAll('[id^="' + p + '"].grid, [id^="' + p + '"] .grid')]
-        .find(g => g.offsetWidth > 0);
-      if (!grid) return null;
-      const rows = [...grid.querySelectorAll('.gridBody .gridLine')];
-      if (!rows.length) return null;
-      const cells = [...rows[0].querySelectorAll('.gridBox')];
-      if (!cells.length) return null;
-      const r = cells[0].getBoundingClientRect();
-      return { x: Math.round(r.x + r.width / 2), y: Math.round(r.y + r.height / 2) };
-    })()`);
+    const firstCell = await page.evaluate(findFirstGridCellCoordsScript(formNum));
     if (!firstCell) throw new Error('filterList: no search input and no grid found on this form');
     await page.mouse.click(firstCell.x, firstCell.y);
     await page.waitForTimeout(300);
@@ -84,40 +74,7 @@ export async function filterList(text, { field, exact } = {}) {
   // 1. Click a cell in the target column to activate it (auto-populates FieldSelector).
   //    If the column isn't visible in the grid, click any cell and use DLB fallback later.
   let needDlb = false;
-  const gridEl = await page.evaluate(`(() => {
-    const p = 'form${formNum}_';
-    const grid = [...document.querySelectorAll('[id^="' + p + '"].grid, [id^="' + p + '"] .grid')]
-      .find(g => g.offsetWidth > 0);
-    if (!grid) return { error: 'no_grid' };
-    const targetField = ${JSON.stringify(field)};
-    const headers = [...grid.querySelectorAll('.gridHead .gridBox')];
-    let colIndex = -1;
-    let startsWithIdx = -1;
-    let includesIdx = -1;
-    for (let i = 0; i < headers.length; i++) {
-      const t = headers[i].innerText?.trim().replace(/\\u00a0/g, ' ');
-      if (!t) continue;
-      const ny = s => s.replace(/ё/gi, 'е').replace(/\\u00a0/g, ' ');
-      const tl = ny(t.toLowerCase()), fl = ny(targetField.toLowerCase());
-      if (tl === fl) { colIndex = i; break; }
-      if (startsWithIdx < 0 && tl.startsWith(fl)) { startsWithIdx = i; }
-      else if (includesIdx < 0 && tl.includes(fl)) { includesIdx = i; }
-    }
-    if (colIndex < 0) colIndex = startsWithIdx >= 0 ? startsWithIdx : includesIdx;
-    const rows = [...grid.querySelectorAll('.gridBody .gridLine')];
-    if (!rows.length) return { error: 'no_rows' };
-    if (colIndex < 0) {
-      // Column not in grid — click first cell of first row, will use DLB to change field
-      const cells = [...rows[0].querySelectorAll('.gridBox')];
-      if (!cells.length) return { error: 'no_cells' };
-      const r = cells[0].getBoundingClientRect();
-      return { x: Math.round(r.x + r.width / 2), y: Math.round(r.y + r.height / 2), needDlb: true };
-    }
-    const cells = [...rows[0].querySelectorAll('.gridBox')];
-    if (colIndex >= cells.length) return { error: 'cell_not_found' };
-    const r = cells[colIndex].getBoundingClientRect();
-    return { x: Math.round(r.x + r.width / 2), y: Math.round(r.y + r.height / 2) };
-  })()`);
+  const gridEl = await page.evaluate(findColumnFirstCellCoordsScript(formNum, field));
   if (gridEl.error) throw new Error(`filterList: ${gridEl.error}`);
   needDlb = !!gridEl.needDlb;
   await page.mouse.click(gridEl.x, gridEl.y);
@@ -134,7 +91,7 @@ export async function filterList(text, { field, exact } = {}) {
     await page.waitForTimeout(500);
     const menu = await page.evaluate(readSubmenuScript());
     const searchItem = Array.isArray(menu) && menu.find(i =>
-      i.name.replace(/\u00a0/g, ' ').toLowerCase().includes('расширенный поиск'));
+      i.name.replace(/ /g, ' ').toLowerCase().includes('расширенный поиск'));
     if (!searchItem) {
       await page.keyboard.press('Escape');
       throw new Error('filterList: advanced search dialog could not be opened');
@@ -150,35 +107,13 @@ export async function filterList(text, { field, exact } = {}) {
   // 2b. If column wasn't in the grid, change FieldSelector via DLB dropdown
   //     Skip DLB when field is empty (fallback from no-search-input path — keep auto-selected field)
   if (needDlb && field) {
-    const fsInfo = await page.evaluate(`(() => {
-      const p = 'form' + ${JSON.stringify(String(dialogForm))} + '_';
-      const fsInput = [...document.querySelectorAll('input.editInput[id^="' + p + '"]')]
-        .find(el => el.offsetWidth > 0 && /FieldSelector/i.test(el.id));
-      const dlb = document.getElementById(p + 'FieldSelector_DLB');
-      return {
-        current: fsInput?.value?.trim() || '',
-        dlbX: dlb && dlb.offsetWidth > 0 ? Math.round(dlb.getBoundingClientRect().x + dlb.getBoundingClientRect().width / 2) : 0,
-        dlbY: dlb && dlb.offsetWidth > 0 ? Math.round(dlb.getBoundingClientRect().y + dlb.getBoundingClientRect().height / 2) : 0
-      };
-    })()`);
+    const fsInfo = await page.evaluate(readFieldSelectorInfoScript(dialogForm));
 
     if (normYo(fsInfo.current.toLowerCase()) !== normYo(field.toLowerCase())) {
       await page.mouse.click(fsInfo.dlbX, fsInfo.dlbY);
       await page.waitForTimeout(1500);
 
-      const ddResult = await page.evaluate(`(() => {
-        const edd = document.getElementById('editDropDown');
-        if (!edd || edd.offsetWidth === 0) return { error: 'no_dropdown' };
-        const ny = s => s.replace(/ё/gi, 'е').replace(/\\u00a0/g, ' ');
-        const target = ny(${JSON.stringify(field.toLowerCase())});
-        const items = [...edd.querySelectorAll('div')].filter(el =>
-          el.offsetWidth > 0 && el.innerText?.trim() && !el.innerText.includes('\\n'));
-        const match = items.find(el => ny(el.innerText.trim().toLowerCase()) === target)
-          || items.find(el => ny(el.innerText.trim().toLowerCase()).includes(target));
-        if (!match) return { error: 'field_not_found', available: items.map(el => el.innerText.trim()) };
-        const r = match.getBoundingClientRect();
-        return { x: Math.round(r.x + r.width / 2), y: Math.round(r.y + r.height / 2), name: match.innerText.trim() };
-      })()`);
+      const ddResult = await page.evaluate(pickFieldInSelectorDropdownScript(field));
 
       if (ddResult.error) {
         await page.keyboard.press('Escape');
@@ -197,24 +132,7 @@ export async function filterList(text, { field, exact } = {}) {
   //    - iCalendB → date field (Home+Shift+End+Ctrl+V to replace date value)
   //    - iDLB on Pattern → reference field (paste + Tab for autocomplete)
   //    - neither → plain text field (just paste)
-  const dialogInfo = await page.evaluate(`(() => {
-    const p = 'form' + ${JSON.stringify(String(dialogForm))} + '_';
-    const fsInput = [...document.querySelectorAll('input.editInput[id^="' + p + '"]')]
-      .find(el => el.offsetWidth > 0 && /FieldSelector/i.test(el.id));
-    const ptInput = [...document.querySelectorAll('input.editInput[id^="' + p + '"]')]
-      .find(el => el.offsetWidth > 0 && /Pattern/i.test(el.id));
-    const ptLabel = ptInput?.closest('label');
-    const btns = ptLabel ? [...ptLabel.querySelectorAll('span.btn')].map(b => b.className) : [];
-    const isDate = btns.some(c => c.includes('iCalendB'));
-    const isRef = !isDate && btns.some(c => c.includes('iDLB'));
-    return {
-      fieldSelector: fsInput?.value?.trim() || '',
-      patternValue: ptInput?.value?.trim() || '',
-      patternId: ptInput?.id || '',
-      isDate,
-      isRef
-    };
-  })()`);
+  const dialogInfo = await page.evaluate(readFilterDialogInfoScript(dialogForm));
 
   if (dialogInfo.isDate) {
     // Date field: fill via Home → Shift+End (select all) → Ctrl+V (paste)
@@ -246,17 +164,7 @@ export async function filterList(text, { field, exact } = {}) {
   // 3b. Switch CompareType if exact match requested (text fields only).
   //    Date/number: always exact, CompareType disabled. Reference: default exact (selects ref).
   if (exact && !dialogInfo.isDate && !dialogInfo.isRef) {
-    const exactRadio = await page.evaluate(`(() => {
-      const p = 'form' + ${JSON.stringify(String(dialogForm))} + '_';
-      // Check if CompareType group is disabled (dates, numbers)
-      const group = document.getElementById(p + 'CompareType');
-      if (group && group.classList.contains('disabled')) return { already: true };
-      const el = document.getElementById(p + 'CompareType#2#radio');
-      if (!el || el.offsetWidth === 0) return null;
-      if (el.classList.contains('select')) return { already: true };
-      const r = el.getBoundingClientRect();
-      return { x: Math.round(r.x + r.width / 2), y: Math.round(r.y + r.height / 2) };
-    })()`);
+    const exactRadio = await page.evaluate(findCompareTypeRadioScript(dialogForm, 2));
     if (exactRadio && !exactRadio.already) {
       await page.mouse.click(exactRadio.x, exactRadio.y);
       await page.waitForTimeout(300);
@@ -264,13 +172,7 @@ export async function filterList(text, { field, exact } = {}) {
   }
 
   // 4. Click "Найти" via mouse.click (dialog is modal — page.click may be blocked)
-  const findBtnCoords = await page.evaluate(`(() => {
-    const btns = [...document.querySelectorAll('a.press')].filter(el => el.offsetWidth > 0);
-    const btn = btns.find(el => el.innerText?.trim() === 'Найти');
-    if (!btn) return null;
-    const r = btn.getBoundingClientRect();
-    return { x: Math.round(r.x + r.width / 2), y: Math.round(r.y + r.height / 2) };
-  })()`);
+  const findBtnCoords = await page.evaluate(findNamedButtonScript('Найти'));
   if (findBtnCoords) {
     await page.mouse.click(findBtnCoords.x, findBtnCoords.y);
   } else {
@@ -282,10 +184,7 @@ export async function filterList(text, { field, exact } = {}) {
   //    Check the specific dialog form — not generic modalSurface — to avoid closing parent modals
   //    (e.g. a selection form that opened this advanced search).
   for (let attempt = 0; attempt < 3; attempt++) {
-    const dialogVisible = await page.evaluate(`(() => {
-      const p = 'form${dialogForm}_';
-      return [...document.querySelectorAll('[id^="' + p + '"]')].some(el => el.offsetWidth > 0);
-    })()`);
+    const dialogVisible = await page.evaluate(isFormVisibleScript(dialogForm));
     if (!dialogVisible) break;
     await page.keyboard.press('Escape');
     await page.waitForTimeout(500);
@@ -314,26 +213,7 @@ export async function unfilterList({ field } = {}) {
 
   if (field) {
     // --- Selective: click × on specific filter badge ---
-    const closeBtn = await page.evaluate(`(() => {
-      const p = 'form${formNum}_';
-      const norm = s => s?.trim().replace(/\\u00a0/g, ' ').replace(/:$/, '').replace(/\\n/g, ' ') || '';
-      const ny = s => s.replace(/ё/gi, 'е').replace(/\\u00a0/g, ' ');
-      const target = ny(${JSON.stringify(field.toLowerCase())});
-      const items = [...document.querySelectorAll('[id^="' + p + '"].trainItem')].filter(el => el.offsetWidth > 0);
-      for (const item of items) {
-        const titleEl = item.querySelector('.trainName');
-        const title = ny(norm(titleEl?.innerText).toLowerCase());
-        if (title === target || title.includes(target)) {
-          const close = item.querySelector('.trainClose');
-          if (close) {
-            const r = close.getBoundingClientRect();
-            return { x: Math.round(r.x + r.width / 2), y: Math.round(r.y + r.height / 2), field: norm(titleEl?.innerText) };
-          }
-        }
-      }
-      const available = items.map(item => norm(item.querySelector('.trainName')?.innerText));
-      return { error: 'not_found', available };
-    })()`);
+    const closeBtn = await page.evaluate(findFilterBadgeCloseScript(formNum, field));
 
     if (closeBtn?.error) throw new Error(`unfilterList: filter badge "${field}" not found. Available: ${closeBtn.available?.join(', ') || 'none'}`);
     await page.mouse.click(closeBtn.x, closeBtn.y);
@@ -348,16 +228,7 @@ export async function unfilterList({ field } = {}) {
 
   // 1. Remove all advanced filter badges (.trainItem × buttons)
   for (let attempt = 0; attempt < 20; attempt++) {
-    const badge = await page.evaluate(`(() => {
-      const p = 'form${formNum}_';
-      const item = [...document.querySelectorAll('[id^="' + p + '"].trainItem')]
-        .find(el => el.offsetWidth > 0);
-      if (!item) return null;
-      const close = item.querySelector('.trainClose');
-      if (!close) return null;
-      const r = close.getBoundingClientRect();
-      return { x: Math.round(r.x + r.width / 2), y: Math.round(r.y + r.height / 2) };
-    })()`);
+    const badge = await page.evaluate(findFirstFilterBadgeCloseScript(formNum));
     if (!badge) break;
     await page.mouse.click(badge.x, badge.y);
     await waitForStable(formNum);
@@ -368,12 +239,7 @@ export async function unfilterList({ field } = {}) {
   await waitForStable(formNum);
 
   // 3. Clear simple search field if it has a value
-  const searchInfo = await page.evaluate(`(() => {
-    const p = 'form${formNum}_';
-    const el = [...document.querySelectorAll('input.editInput[id^="' + p + '"]')]
-      .find(el => el.offsetWidth > 0 && /Строк[аи]Поиска|SearchString/i.test(el.id));
-    return el ? { id: el.id, value: el.value || '' } : null;
-  })()`);
+  const searchInfo = await page.evaluate(findSearchInputScript(formNum));
 
   if (searchInfo?.value) {
     await page.click(`[id="${searchInfo.id}"]`);

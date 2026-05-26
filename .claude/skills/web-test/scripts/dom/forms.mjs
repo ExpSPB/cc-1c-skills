@@ -1,4 +1,4 @@
-// web-test dom/forms v1.1 — form detection, content read, click-target/field-button resolution
+// web-test dom/forms v1.2 — form detection, content read, click-target/field-button resolution
 // Source: https://github.com/Nikolay-Shirokov/cc-1c-skills
 import { DETECT_FORM_FN, READ_FORM_FN } from './_shared.mjs';
 
@@ -420,5 +420,66 @@ export function detectNewFormScript(prevFormNum, { strict = false } = {}) {
     });
     const nums = Object.keys(forms).map(Number).filter(n => n > ${prevFormNum});
     return nums.length > 0 ? Math.max(...nums) : null;
+  })()`;
+}
+
+/**
+ * Find the search input on a list form (matches `SearchString` / `ПоискаСтроки` id).
+ * Returns `{ id, value } | null`.
+ */
+export function findSearchInputScript(formNum) {
+  return `(() => {
+    const p = 'form${formNum}_';
+    const el = [...document.querySelectorAll('input.editInput[id^="' + p + '"]')]
+      .find(el => el.offsetWidth > 0 && /Строк[аи]Поиска|SearchString/i.test(el.id));
+    return el ? { id: el.id, value: el.value || '' } : null;
+  })()`;
+}
+
+/**
+ * Find a visible `a.press` button by its exact innerText (after trim).
+ * Returns `{ x, y } | null` for `page.mouse.click(x, y)`.
+ *
+ * Used for modal dialog buttons (Найти, OK) where page.click may be blocked.
+ */
+export function findNamedButtonScript(buttonText) {
+  return `(() => {
+    const btns = [...document.querySelectorAll('a.press')].filter(el => el.offsetWidth > 0);
+    const btn = btns.find(el => el.innerText?.trim() === ${JSON.stringify(buttonText)});
+    if (!btn) return null;
+    const r = btn.getBoundingClientRect();
+    return { x: Math.round(r.x + r.width / 2), y: Math.round(r.y + r.height / 2) };
+  })()`;
+}
+
+/**
+ * Find a CompareType radio button by index (1 = "contains", 2 = "exact", etc.)
+ * on a search/filter dialog.
+ *
+ * Returns:
+ *   - `{ already: true }`        — the group is disabled OR the radio is already selected
+ *   - `{ x, y } | null`          — coords to click, or null if radio not present
+ */
+export function findCompareTypeRadioScript(dialogForm, radioIndex) {
+  return `(() => {
+    const p = 'form' + ${JSON.stringify(String(dialogForm))} + '_';
+    const group = document.getElementById(p + 'CompareType');
+    if (group && group.classList.contains('disabled')) return { already: true };
+    const el = document.getElementById(p + 'CompareType#' + ${JSON.stringify(String(radioIndex))} + '#radio');
+    if (!el || el.offsetWidth === 0) return null;
+    if (el.classList.contains('select')) return { already: true };
+    const r = el.getBoundingClientRect();
+    return { x: Math.round(r.x + r.width / 2), y: Math.round(r.y + r.height / 2) };
+  })()`;
+}
+
+/**
+ * Is any element of `form{dialogForm}_` currently visible?
+ * Used to poll dialog dismissal after Escape.
+ */
+export function isFormVisibleScript(dialogForm) {
+  return `(() => {
+    const p = 'form${dialogForm}_';
+    return [...document.querySelectorAll('[id^="' + p + '"]')].some(el => el.offsetWidth > 0);
   })()`;
 }
