@@ -1,8 +1,13 @@
-// web-test core/errors v1.17 — Error/modal/platform-dialog handling: dismiss, detect, fetch stack from 1C UI.
+// web-test core/errors v1.18 — Error/modal/platform-dialog handling: dismiss, detect, fetch stack from 1C UI.
 // Source: https://github.com/Nikolay-Shirokov/cc-1c-skills
 
 import { page } from './state.mjs';
 import { checkErrorsScript } from '../../dom.mjs';
+import {
+  getOpenReportCoordsScript, isErrorDetailLinkVisibleScript,
+  readLargestVisibleTextareaScript, clickTopCloudOkButtonScript,
+  clickReportCloseButtonScript,
+} from '../../dom/errors-stack.mjs';
 import { waitForStable } from './wait.mjs';
 
 /**
@@ -205,12 +210,7 @@ export async function fetchErrorStack(formNum, hasReport) {
  */
 async function fetchStackViaReport(formNum) {
   // 1. Get coordinates of the OpenReport link and click via mouse (modalSurface blocks JS clicks)
-  const coords = await page.evaluate((fn) => {
-    const el = document.getElementById('form' + fn + '_OpenReport#text');
-    if (!el || el.offsetWidth <= 2) return null;
-    const rect = el.getBoundingClientRect();
-    return { x: rect.x + rect.width / 2, y: rect.y + rect.height / 2 };
-  }, formNum);
+  const coords = await page.evaluate(getOpenReportCoordsScript(formNum));
   if (!coords) return null;
 
   await page.mouse.click(coords.x, coords.y);
@@ -219,13 +219,7 @@ async function fetchStackViaReport(formNum) {
   let found = false;
   for (let i = 0; i < 20; i++) {
     await page.waitForTimeout(500);
-    found = await page.evaluate(() => {
-      const links = document.querySelectorAll('a, [class*="hyper"], span');
-      for (const el of links) {
-        if (el.offsetWidth > 0 && el.textContent.includes('подробный текст ошибки')) return true;
-      }
-      return false;
-    });
+    found = await page.evaluate(isErrorDetailLinkVisibleScript());
     if (found) break;
   }
   if (!found) return null;
@@ -235,42 +229,17 @@ async function fetchStackViaReport(formNum) {
   await page.waitForTimeout(2000);
 
   // 4. Read the textarea with detailed error text (find the largest visible textarea)
-  const raw = await page.evaluate(() => {
-    let best = null;
-    document.querySelectorAll('textarea').forEach(ta => {
-      if (ta.offsetWidth > 0 && ta.value.length > 0) {
-        if (!best || ta.value.length > best.value.length) best = ta;
-      }
-    });
-    return best?.value || null;
-  });
+  const raw = await page.evaluate(readLargestVisibleTextareaScript());
 
   // 5. Close "Подробный текст ошибки" dialog (click its OK button)
   try {
-    const okBtn = await page.evaluate(() => {
-      // Find the OK button in the topmost small cloud window
-      const psWins = [...document.querySelectorAll('[id^="ps"][id$="win"]')]
-        .filter(w => w.offsetWidth > 0)
-        .sort((a, b) => parseInt(b.style?.zIndex || '0') - parseInt(a.style?.zIndex || '0'));
-      for (const w of psWins) {
-        const ok = w.querySelector('button.webBtn, .pressDefault');
-        if (ok && ok.textContent.trim() === 'OK') { ok.click(); return true; }
-      }
-      return false;
-    });
+    await page.evaluate(clickTopCloudOkButtonScript());
     await page.waitForTimeout(300);
   } catch {}
 
   // 6. Close "Отчет об ошибке" dialog (click its × close button)
   try {
-    await page.evaluate(() => {
-      const psWins = [...document.querySelectorAll('[id^="ps"][id$="win"]')]
-        .filter(w => w.offsetWidth > 0);
-      for (const w of psWins) {
-        const closeBtn = w.querySelector('[id$="_cmd_CloseButton"]');
-        if (closeBtn && closeBtn.offsetWidth > 0) { closeBtn.click(); break; }
-      }
-    });
+    await page.evaluate(clickReportCloseButtonScript());
     await page.waitForTimeout(300);
   } catch {}
 
