@@ -1,4 +1,4 @@
-// web-test table/click-cell v1.1 — click a cell in a form grid by (row, column).
+// web-test table/click-cell v1.2 — click a cell in a form grid by (row, column).
 // Source: https://github.com/Nikolay-Shirokov/cc-1c-skills
 //
 // Routed from core/click.mjs when the user calls clickElement({row, column}) and
@@ -22,7 +22,7 @@
 
 import { page } from '../core/state.mjs';
 import { waitForStable } from '../core/wait.mjs';
-import { modifierClick, returnFormState } from '../core/helpers.mjs';
+import { modifierClick, returnFormState, isInputFocusedInGrid } from '../core/helpers.mjs';
 import { scrollHorizontallyByKey } from '../core/scroll-horiz.mjs';
 import {
   findGridCellScript, findFocusCellScript, snapshotGridScript,
@@ -115,6 +115,12 @@ async function revealAndFindCell({ formNum, gridSelector, target, scroll }) {
   if (!focusPt) return { error: 'no_focusable_cell' };
   await page.mouse.click(focusPt.x, focusPt.y);
   await page.waitForTimeout(FOCUS_WAIT_MS);
+  // Click on a Number/Date cell auto-enters edit mode in 1С; PageDown there
+  // is a no-op. Exit edit mode before driving the reveal loop.
+  if (await isInputFocusedInGrid({ gridSelector })) {
+    await page.keyboard.press('Escape');
+    await page.waitForTimeout(150);
+  }
 
   let prevSnap = await page.evaluate(snapshotGridScript(gridSelector));
   for (let i = 0; i < limit; i++) {
@@ -155,6 +161,12 @@ async function scrollGridToCell({ formNum, gridSelector, target, cell }) {
   if (!focusPt) throw new Error('clickElement: no visible cell to focus for horizontal scroll');
   await page.mouse.click(focusPt.x, focusPt.y);
   await page.waitForTimeout(FOCUS_WAIT_MS);
+  // Click on a Number/Date cell auto-enters edit mode in 1С; arrow keys there
+  // navigate text inside the input rather than scrolling the viewport. Exit first.
+  if (await isInputFocusedInGrid({ gridSelector })) {
+    await page.keyboard.press('Escape');
+    await page.waitForTimeout(150);
+  }
 
   await scrollHorizontallyByKey({
     page,

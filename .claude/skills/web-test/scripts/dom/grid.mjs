@@ -1,4 +1,4 @@
-// web-test dom/grid v1.5 — grid resolution + table reading + edit-time helpers
+// web-test dom/grid v1.6 — grid resolution + table reading + edit-time helpers
 // Source: https://github.com/Nikolay-Shirokov/cc-1c-skills
 
 /**
@@ -596,12 +596,18 @@ export function findFocusCellScript(gridSelector, { rowIdx, direction } = {}) {
       visible.sort((a, b) => a.r.x - b.r.x);
       candidates = direction === 'ArrowRight' ? [...visible].reverse() : visible;
     } else {
-      // Generic focus mode: any visible cell past the first column (tree toggles).
+      // Generic focus mode (used by reveal-loop): pick the FIRST visible cell —
+      // typically a Reference column (Номенклатура in документах) which doesn't
+      // auto-enter edit mode on click. Number/Date/String cells auto-edit and
+      // break subsequent PageDown navigation.
+      // For tree grids (presence of .gridBoxTree), skip first column to avoid
+      // toggling expand/collapse of the row.
+      const isTree = !!body.querySelector('.gridBoxTree');
       const cells = [...line.children]
         .filter(b => b.offsetWidth > 0)
         .map(b => ({ b, r: b.getBoundingClientRect(), checkbox: !!b.querySelector('.checkbox') }));
       if (!cells.length) return null;
-      candidates = cells.length > 1 ? cells.slice(1) : cells;
+      candidates = isTree && cells.length > 1 ? cells.slice(1) : cells;
     }
     const pick = candidates.find(v => !v.checkbox) || candidates[0];
     if (!pick) return null;
