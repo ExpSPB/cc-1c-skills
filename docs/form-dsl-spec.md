@@ -355,6 +355,18 @@ Pages поддерживает `pagesRepresentation`: `None`, `TabsOnTop`, `Tabs
 { "picField": "Фото", "path": "Фотография" }
 ```
 
+Для поля, привязанного к булеву/числу (иконка-индикатор в колонке), задайте картинку значения через `valuesPicture` — без неё иконка не отрисуется:
+
+```json
+{ "picField": "Картинка", "path": "Таблица.Картинка",
+  "valuesPicture": "StdPicture.Favorites", "loadTransparent": true }
+```
+
+| Свойство | Тип | Описание |
+|----------|-----|----------|
+| `valuesPicture` | string | Ссылка на картинку значения (`StdPicture.*`, `CommonPicture.*`) |
+| `loadTransparent` | bool | Скрыть кадр «нет значения». Выводится только при `true` |
+
 #### calendar — CalendarField
 
 ```json
