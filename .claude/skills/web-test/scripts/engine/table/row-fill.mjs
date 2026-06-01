@@ -1,4 +1,4 @@
-// web-test table/row-fill v1.20 — fillTableRow — заполнение строки табличной части/списка через Tab-навигацию и попутный выбор значений.
+// web-test table/row-fill v1.21 — fillTableRow — заполнение строки табличной части/списка через Tab-навигацию и попутный выбор значений.
 // Source: https://github.com/Nikolay-Shirokov/cc-1c-skills
 
 import {
@@ -29,6 +29,75 @@ import {
   fillReferenceField, selectValue,
 } from '../forms/select-value.mjs';
 import { pasteText } from '../core/clipboard.mjs';
+
+/**
+ * Fill a choice cell (_CB iCB, buttonKind==='choice') whose INPUT is already focused.
+ *
+ * Two kinds of cell carry the same choice button and are INDISTINGUISHABLE in the DOM
+ * (both `editInput`, readOnly:false):
+ *   (a) editable value cell (Произвольный/примитив, РедактированиеТекста=Истина) — typed text sticks;
+ *   (b) pick-from-list cell (НачалоВыбора / РедактированиеТекста=Ложь) — typed text is rejected.
+ * The only reliable discriminator is behavioral: paste and watch the input value.
+ *   stuck  → editable cell → leave value in the INPUT (caller's Tab/commit persists it), method 'direct';
+ *   rejected → F4 → form: isTypeDialog ? pickFromTypeDialog ('choice') : pickFromSelectionForm ('form').
+ *
+ * Does NOT navigate between cells — caller owns Tab/dblclick/row-commit.
+ *
+ * @param {number} formNum base form number (for new-form detection)
+ * @param {string} text value to fill
+ * @param {Object} [opts]
+ * @param {string|null} [opts.type] explicit type for composite/value-list pick
+ * @param {string} [opts.fieldLabel] field name for diagnostics / selection-form search
+ * @returns {{ ok, method, error?, message?, value? }}
+ */
+async function fillChoiceCell(formNum, text, { type = null, fieldLabel = '' } = {}) {
+  const norm = (s) => normYo((s || '').toLowerCase());
+  const before = await page.evaluate(`document.activeElement?.value || ''`);
+  // Re-fill guard: cell already holds the target (paste wouldn't change it → false "rejected").
+  if (before && norm(before).includes(norm(text))) {
+    return { ok: true, method: 'skip', value: before };
+  }
+  // Try direct input; poll for the input value to settle on the pasted text (editable cell).
+  await pasteText(text, { confirm: ['Control+a', 'Control+v'] });
+  let after = before, stuck = false;
+  for (let i = 0; i < 6; i++) {
+    await page.waitForTimeout(100);
+    after = await page.evaluate(`document.activeElement?.value || ''`);
+    if (after !== before && norm(after).includes(norm(text))) { stuck = true; break; }
+  }
+  if (stuck) return { ok: true, method: 'direct', value: text };
+
+  // Text rejected (pick-from-list cell) — nothing typed to clear (field is not text-editable).
+  // Dismiss any autocomplete hint, then open the choice form via F4.
+  if (await isEddVisible()) { await page.keyboard.press('Escape'); await page.waitForTimeout(200); }
+  await page.keyboard.press('F4');
+  let choiceForm = null;
+  for (let cw = 0; cw < 8; cw++) {
+    await page.waitForTimeout(200);
+    choiceForm = await helperDetectNewForm(formNum);
+    if (choiceForm !== null) break;
+  }
+  if (choiceForm === null) {
+    return { ok: false, error: 'no_selection_form', message: `Cell "${fieldLabel || text}": F4 did not open a choice form` };
+  }
+  if (await isTypeDialog(choiceForm)) {
+    try {
+      await pickFromTypeDialog(choiceForm, type || text);
+    } catch (e) {
+      return { ok: false, error: 'not_found', message: e.message };
+    }
+    await waitForStable(formNum);
+    // A value form opened after the type pick → composite-value cell needs { value, type }.
+    const valForm = await helperDetectNewForm(formNum);
+    if (valForm !== null) {
+      await page.keyboard.press('Escape'); await page.waitForTimeout(300);
+      return { ok: false, error: 'type_required', message: `Cell "${fieldLabel || text}" expects { value, type }` };
+    }
+    return { ok: true, method: 'choice', value: text };
+  }
+  const pr = await pickFromSelectionForm(choiceForm, fieldLabel || text, text, formNum);
+  return pr.ok ? { ok: true, method: 'form' } : { ok: false, error: pr.error, message: pr.message };
+}
 
 /**
  * Fill cells in the current table row via Tab navigation.
@@ -306,23 +375,16 @@ export async function fillTableRow(fields, { tab, add, row, table } = {}) {
         // Also check if a selection form already appeared
         let selForm = await helperDetectNewForm(formNum);
         if (selForm === null && inInputAfterDblclick) {
-          // Choice cell (bare _CB list-pick) — paste would revert silently; open via F4.
+          // Choice cell (bare _CB iCB) — editable value (text sticks) or pick-from-list
+          // (text rejected → F4 form). fillChoiceCell discriminates; row commit persists 'direct'.
           const activeCell = await page.evaluate(readActiveGridCellScript());
           if (activeCell.buttonKind === 'choice') {
-            await page.keyboard.press('F4');
-            let cForm = null;
-            for (let cw = 0; cw < 8; cw++) {
-              await page.waitForTimeout(200);
-              cForm = await helperDetectNewForm(formNum);
-              if (cForm !== null) break;
-            }
-            if (cForm !== null) {
-              const pr = await directEditPick(cForm, key, info);
-              info.filled = true;
-              results.push(pr);
-              continue;
-            }
-            // F4 opened nothing — fall through to paste (best effort)
+            const r = await fillChoiceCell(formNum, info.value, { type: info.type, fieldLabel: key });
+            info.filled = true;
+            results.push(r.ok
+              ? { field: key, ok: true, method: r.method, ...(r.value !== undefined ? { value: r.value } : {}) }
+              : { field: key, ok: false, error: r.error, message: r.message });
+            continue;
           }
           // Plain text/numeric field — fill via clipboard paste
           await pasteText(info.value, { confirm: ['Control+a', 'Control+v'] });
@@ -559,57 +621,16 @@ export async function fillTableRow(fields, { tab, add, row, table } = {}) {
       continue;
     }
 
-    // Choice cell: value is picked from a programmatic list (field with НачалоВыбора →
-    // ПоказатьВыборЭлемента, e.g. a "Выбрать тип" list). Plain paste reverts silently,
-    // so open the choice form via F4 and pick from it.
+    // Choice cell (_CB iCB): either an editable value cell (text sticks → direct input) or a
+    // pick-from-list cell (НачалоВыбора / РедактированиеТекста=Ложь → text rejected → F4 form).
+    // fillChoiceCell discriminates behaviorally; both kinds are indistinguishable in the DOM.
     if (cell.buttonKind === 'choice') {
-      await page.keyboard.press('F4');
-      let choiceForm = null;
-      for (let cw = 0; cw < 8; cw++) {
-        await page.waitForTimeout(200);
-        choiceForm = await helperDetectNewForm(formNum);
-        if (choiceForm !== null) break;
-      }
-      if (choiceForm === null) {
-        info.filled = true;
-        results.push({ field: matchedKey, cell: cell.fullName, ok: false,
-          error: 'no_selection_form', message: `Cell "${matchedKey}": F4 did not open a choice form` });
-        await page.keyboard.press('Tab'); await page.waitForTimeout(500);
-        continue;
-      }
-      if (await isTypeDialog(choiceForm)) {
-        try {
-          await pickFromTypeDialog(choiceForm, text);
-        } catch (e) {
-          info.filled = true;
-          results.push({ field: matchedKey, cell: cell.fullName, ok: false,
-            error: 'not_found', message: e.message });
-          await page.keyboard.press('Tab'); await page.waitForTimeout(500);
-          continue;
-        }
-        await waitForStable(formNum);
-        // If a value form opened after the pick, this was a composite-value cell → needs {value, type}
-        const valForm = await helperDetectNewForm(formNum);
-        if (valForm !== null) {
-          await page.keyboard.press('Escape'); await page.waitForTimeout(300);
-          info.filled = true;
-          results.push({ field: matchedKey, cell: cell.fullName, ok: false,
-            error: 'type_required', message: `Cell "${matchedKey}" expects { value, type }` });
-          await page.keyboard.press('Tab'); await page.waitForTimeout(500);
-          continue;
-        }
-        info.filled = true;
-        results.push({ field: matchedKey, cell: cell.fullName, ok: true, method: 'choice', value: text });
-        if ([...pending.values()].every(p => p.filled)) break;
-        await page.keyboard.press('Tab'); await page.waitForTimeout(500);
-        continue;
-      }
-      // F4 opened a regular selection form (reference via CB) — pick from it
-      const pr = await pickFromSelectionForm(choiceForm, matchedKey, text, formNum);
+      const r = await fillChoiceCell(formNum, text, { type: info.type, fieldLabel: matchedKey });
       info.filled = true;
-      results.push(pr.ok
-        ? { field: matchedKey, cell: cell.fullName, ok: true, method: 'form' }
-        : { field: matchedKey, cell: cell.fullName, ok: false, error: pr.error, message: pr.message });
+      results.push(r.ok
+        ? { field: matchedKey, cell: cell.fullName, ok: true, method: r.method, ...(r.value !== undefined ? { value: r.value } : {}) }
+        : { field: matchedKey, cell: cell.fullName, ok: false, error: r.error, message: r.message });
+      // 'direct' leaves text in the INPUT — caller's Tab (or end-of-row commit on the last field) persists it.
       if ([...pending.values()].every(p => p.filled)) break;
       await page.keyboard.press('Tab'); await page.waitForTimeout(500);
       continue;

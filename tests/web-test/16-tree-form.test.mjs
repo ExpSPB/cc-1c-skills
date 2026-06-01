@@ -11,6 +11,9 @@ export const timeout = 90000;
 // Покрывает: 05-table/edit-form (fillTableRow method:'direct' на FormDataTree-колонке)
 // + 08-hierarchy/tree-edit (expand узла + edit Цены внутри expanded группы)
 // + readTable picture-колонки (pic:N/'') и Selection-toggle.
+// + дискриминатор choice-ячейки (fillChoiceCell): ДеревоРедактируемаяСтрока (кнопка iCB,
+//   пустой НачалоВыбора, текст редактируется → method:'direct') vs ДеревоТипЗначения
+//   (РедактированиеТекста=Ложь, текст отвергается → форма выбора, method:'choice').
 
 export default async function({ navigateLink, clickElement, closeForm, readTable, fillTableRow, assert, step, log }) {
 
@@ -24,7 +27,7 @@ export default async function({ navigateLink, clickElement, closeForm, readTable
   await step('read-roots: на верхнем уровне видны группы (Товары, Услуги, БольшойСписок)', async () => {
     const t = await readTable('Дерево');
     log(`columns=${t.columns?.join(',')} rows=${t.rows?.length}`);
-    assert.deepEqual(t.columns, ['Номенклатура', 'Цена', 'Картинка', 'Флаг', 'Тип значения'], 'колонки: Номенклатура + Цена + Картинка + Флаг + Тип значения');
+    assert.deepEqual(t.columns, ['Номенклатура', 'Цена', 'Картинка', 'Флаг', 'Тип значения', 'Редактируемая строка'], 'колонки: Номенклатура + Цена + Картинка + Флаг + Тип значения + Редактируемая строка');
     assert.equal(t.rows.length, 3, '3 корневые строки');
     const names = t.rows.map(r => r['Номенклатура']);
     assert.includes(names, 'Товары', 'есть Товары');
@@ -61,9 +64,26 @@ export default async function({ navigateLink, clickElement, closeForm, readTable
     assert.equal(tovar01['Цена'], '1 500,00', 'Цена обновилась до 1 500,00');
   });
 
+  await step('choice-direct: редактируемая choice-ячейка заполняется прямым вводом (method:direct)', async () => {
+    // ДеревоРедактируемаяСтрока — поле с кнопкой выбора (iCB), но пустым НачалоВыбора и
+    // РедактированиеТекста=Истина: текст ПРИЛИПАЕТ. fillChoiceCell определяет это поведенчески
+    // (paste прилип → stuck) и вводит напрямую, не уходя в форму. Модель ячейки «Значение»
+    // типовой Консоли запросов (была баг no_selection_form).
+    const r = await fillTableRow({ 'Редактируемая строка': 'привет' }, { row: 1 });
+    log(`filled: ${JSON.stringify(r.filled)}`);
+    const cell = r.filled?.find(f => /Редактируем/i.test(f.field));
+    assert.ok(cell, 'поле Редактируемая строка в результате');
+    assert.equal(cell.ok, true, 'ok=true');
+    assert.equal(cell.method, 'direct', 'method=direct (прямой ввод, форма не открывалась)');
+    const t = await readTable('Дерево');
+    const tovar01 = t.rows.find(row => row['Номенклатура'] === 'Товар 01');
+    assert.equal(tovar01['Редактируемая строка'], 'привет', 'значение введено напрямую');
+  });
+
   await step('choice-cell: fillTableRow задаёт ТипЗначения через форму выбора (НачалоВыбора)', async () => {
     // Колонка-строка с кнопкой выбора + обработчиком НачалоВыбора → СписокТипов.ПоказатьВыборЭлемента
-    // («Выбрать тип»). Plain-paste тут не годится — движок открывает форму выбора и выбирает из списка.
+    // («Выбрать тип»), РедактированиеТекста=Ложь. Прямой ввод ОТВЕРГАется — fillChoiceCell видит
+    // stuck=false и открывает форму выбора, выбирая из списка (method:choice, не direct).
     const r = await fillTableRow({ ТипЗначения: 'Число' }, { row: 1 });
     log(`filled: ${JSON.stringify(r.filled)}`);
     const cell = r.filled?.find(f => f.field === 'ТипЗначения');
