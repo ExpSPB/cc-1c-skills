@@ -18,5 +18,5 @@
       ]
     }
   ],
-  "settingsVariants": [{ "name": "Основной", "settings": { "selection": ["Auto"], "structure": [{ "selection": ["Auto"], "order": ["Auto"] }] } }]
+  "settingsVariants": [{ "name": "Основной", "settings": { "selection": ["Auto"], "structure": "details" } }]
 }

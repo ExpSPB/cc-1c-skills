@@ -1,4 +1,4 @@
-﻿# skd-decompile v0.89 — Decompile 1C DCS Template.xml to JSON DSL (draft)
+﻿# skd-decompile v0.90 — Decompile 1C DCS Template.xml to JSON DSL (draft)
 # Source: https://github.com/Nikolay-Shirokov/cc-1c-skills
 param(
 	[Parameter(Mandatory)]
@@ -2494,9 +2494,22 @@ function Build-Structure {
 	return ,$items
 }
 
+# True when selection/order is just the single auto element ("Auto") that the
+# compiler adds by default to every shorthand group — folding such a group back
+# to shorthand is bit-perfect (Parse-StructureShorthand re-adds it on compile).
+# Disabled auto ({auto,use}), mixed lists ("Поле","Auto") and explicit fields
+# are objects / non-singleton lists and won't match → those keep object form.
+function Is-AutoOnly($val) {
+	if ($null -eq $val) { return $false }
+	$arr = @($val)
+	if ($arr.Count -ne 1) { return $false }
+	return ($arr[0] -is [string]) -and ($arr[0] -eq 'Auto')
+}
+
 # Try to fold a structure tree into string shorthand "A > B > details".
 # Conditions: linear chain (each level has exactly one child), each level is
-# a plain group with single groupField and no local selection/order/filter.
+# a plain group with single groupField and no local filter; selection/order are
+# allowed only when they are the default single "Auto" element (see Is-AutoOnly).
 function Try-StructureShorthand {
 	param($items)
 	if ($items.Count -ne 1) { return $null }
@@ -2506,8 +2519,8 @@ function Try-StructureShorthand {
 		# Disallow extras
 		if ($cur.Contains('type') -and $cur['type'] -ne 'group') { return $null }
 		if ($cur.Contains('name')) { return $null }
-		if ($cur.Contains('selection')) { return $null }
-		if ($cur.Contains('order')) { return $null }
+		if ($cur.Contains('selection') -and -not (Is-AutoOnly $cur['selection'])) { return $null }
+		if ($cur.Contains('order') -and -not (Is-AutoOnly $cur['order'])) { return $null }
 		if ($cur.Contains('filter')) { return $null }
 		if ($cur.Contains('viewMode')) { return $null }
 		if ($cur.Contains('itemsViewMode')) { return $null }

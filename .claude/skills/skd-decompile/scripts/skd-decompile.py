@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-# skd-decompile v0.89 — Decompile 1C DCS Template.xml to JSON DSL (draft)
+# skd-decompile v0.90 — Decompile 1C DCS Template.xml to JSON DSL (draft)
 # Source: https://github.com/Nikolay-Shirokov/cc-1c-skills
 import argparse
 import os
@@ -2600,6 +2600,17 @@ def build_structure(node, loc):
     return items
 
 
+def is_auto_only(val):
+    # True when selection/order is just the single auto element ("Auto") that the
+    # compiler adds by default to every shorthand group — folding such a group back
+    # to shorthand is bit-perfect (parse re-adds it on compile). Disabled auto
+    # ({auto,use}), mixed lists and explicit fields won't match → keep object form.
+    if val is None:
+        return False
+    arr = val if isinstance(val, list) else [val]
+    return len(arr) == 1 and isinstance(arr[0], str) and arr[0] == 'Auto'
+
+
 def try_structure_shorthand(items):
     if len(items) != 1:
         return None
@@ -2610,9 +2621,9 @@ def try_structure_shorthand(items):
             return None
         if 'name' in cur:
             return None
-        if 'selection' in cur:
+        if 'selection' in cur and not is_auto_only(cur['selection']):
             return None
-        if 'order' in cur:
+        if 'order' in cur and not is_auto_only(cur['order']):
             return None
         if 'filter' in cur:
             return None
