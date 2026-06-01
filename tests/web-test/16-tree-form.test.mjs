@@ -95,6 +95,20 @@ export default async function({ navigateLink, clickElement, closeForm, readTable
     assert.equal(tovar01['Тип значения'], 'Число', 'ТипЗначения = Число');
   });
 
+  await step('choice-exact: при подстрочной неоднозначности выбирается точное совпадение', async () => {
+    // СписокТипов содержит «Дата» и «Дата документа». Поиск «Дата» даёт 2 подстрочных
+    // совпадения — pickFromTypeDialog должен предпочесть ТОЧНОЕ «Дата», а не ругаться
+    // на неоднозначность и не выбрать «Дата документа» (Проблема 2 из bug-report).
+    const r = await fillTableRow({ ТипЗначения: 'Дата' }, { row: 1 });
+    const cell = r.filled?.find(f => f.field === 'ТипЗначения');
+    assert.ok(cell, 'поле ТипЗначения в результате');
+    assert.equal(cell.ok, true, 'ok=true (exact-match разрешил неоднозначность)');
+    assert.equal(cell.method, 'choice', 'method=choice');
+    const t = await readTable('Дерево');
+    const tovar01 = t.rows.find(row => row['Номенклатура'] === 'Товар 01');
+    assert.equal(tovar01['Тип значения'], 'Дата', 'выбрано точное «Дата», не «Дата документа»');
+  });
+
   await step('choice-cell-negative: несуществующий тип → ok:false/not_found (форма не закрывается)', async () => {
     // not_found гасит только диалог выбора типа (умный dismiss), исходная форма остаётся —
     // следующие шаги (picture) это подтверждают.

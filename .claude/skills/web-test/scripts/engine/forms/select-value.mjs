@@ -1,4 +1,4 @@
-// web-test forms/select-value v1.21 — Reference & composite-type value selection: selectValue, fillReferenceField, selection/type-dialog pickers.
+// web-test forms/select-value v1.22 — Reference & composite-type value selection: selectValue, fillReferenceField, selection/type-dialog pickers.
 // Source: https://github.com/Nikolay-Shirokov/cc-1c-skills
 
 import {
@@ -279,33 +279,44 @@ export async function pickFromTypeDialog(formNum, typeName) {
     }
   }
 
-  // Step 1: Scan visible rows (fast path — no Ctrl+F needed for small lists)
-  const scan = await readVisibleRows();
-
-  if (scan.matches.length === 1) {
-    // Single match — click to select, then OK
-    await page.mouse.click(scan.matches[0].x, scan.matches[0].y);
+  // Exact-match preference: substring search can surface several types that merely CONTAIN the
+  // requested name (e.g. "Контрагент" → "Банковская карта контрагента", "Договор с контрагентом",
+  // …, "Контрагент"). Prefer the row equal to the requested name; only the absence of a single
+  // exact match among multiple substring hits is a genuine ambiguity.
+  function resolveExact(matches) {
+    if (!matches || matches.length === 0) return null;
+    if (matches.length === 1) return matches[0];
+    const exact = matches.filter(m => normYo((m.text || '').toLowerCase()) === typeNorm);
+    return exact.length === 1 ? exact[0] : null;
+  }
+  async function selectRowAndOk(row) {
+    await page.mouse.click(row.x, row.y);
     await page.waitForTimeout(200);
     await page.click(`#form${formNum}_OK`, { force: true });
     await page.waitForTimeout(ACTION_WAIT);
-    return;
+  }
+  // Focus the grid via evaluate (does NOT punch through the modal overlay like page.click).
+  async function focusGrid() {
+    await page.evaluate(`(() => {
+      const grid = document.getElementById('form${formNum}_ValueList');
+      if (!grid) return;
+      const body = grid.querySelector('.gridBody');
+      if (body) body.focus(); else grid.focus();
+    })()`);
   }
 
+  // Step 1: Scan visible rows (fast path — no Ctrl+F needed for small lists)
+  const scan = await readVisibleRows();
+  const scanPick = resolveExact(scan.matches);
+  if (scanPick) { await selectRowAndOk(scanPick); return; }
   if (scan.matches.length > 1) {
     await dismissTypeDialog();
     await waitForStable();
     throw new Error(`selectValue: multiple types match "${typeName}": ${scan.matches.map(m => '"' + m.text + '"').join(', ')}. Specify a more precise type name`);
   }
 
-  // Step 2: Not found in visible rows — use Ctrl+F (virtual grid may have more items)
-
-  // Focus the grid via evaluate (does NOT punch through modal like page.click)
-  await page.evaluate(`(() => {
-    const grid = document.getElementById('form${formNum}_ValueList');
-    if (!grid) return;
-    const body = grid.querySelector('.gridBody');
-    if (body) body.focus(); else grid.focus();
-  })()`);
+  // Step 2: Not in visible rows — Ctrl+F jumps near the match in the large virtual list.
+  await focusGrid();
   await page.waitForTimeout(300);
 
   // Ctrl+F to open "Найти" dialog
@@ -326,29 +337,40 @@ export async function pickFromTypeDialog(formNum, typeName) {
     throw new Error('selectValue: Ctrl+F did not open "Найти" dialog in type selection');
   }
 
-  // Click "Найти" — search is client-side (no server round-trip), 500ms is enough
+  // Click "Найти" — search is client-side (no server round-trip)
   await page.click(`#form${findFormNum}_Find`, { force: true });
-  await page.waitForTimeout(500);
 
-  // Re-read visible rows after search scrolled to match
-  const afterSearch = await readVisibleRows();
+  // "Найти" positions at the first match; the exact row is at or just below it. Read, and if the
+  // exact match is not yet in view, PageDown a few times (bounded) — virtualised grid, scrollTop
+  // stays 0 but the visible window changes. Poll each window for matches to settle.
+  let resolved = null, lastMatches = [], sawMatches = false;
+  for (let pageStep = 0; pageStep <= 3; pageStep++) {
+    if (pageStep > 0) { await focusGrid(); await page.keyboard.press('PageDown'); }
+    let v = null;
+    for (let w = 0; w < 5; w++) {
+      await page.waitForTimeout(200);
+      v = await readVisibleRows();
+      if (v.matches.length) break;
+    }
+    if (v && v.matches.length) {
+      sawMatches = true;
+      lastMatches = v.matches;
+      resolved = resolveExact(v.matches);
+      if (resolved) break;
+      // matches present but no single exact in this window — scroll to look just below
+    } else if (sawMatches) {
+      break; // scrolled past the matches without finding an exact one
+    }
+  }
+  if (resolved) { await selectRowAndOk(resolved); return; }
 
-  if (afterSearch.matches.length === 0) {
-    await dismissTypeDialog();
-    await waitForStable();
+  await dismissTypeDialog();
+  await waitForStable();
+  if (!sawMatches) {
     throw new Error(`selectValue: type "${typeName}" not found in type selection dialog` +
       `. Visible: ${(scan.visible || []).join(', ')}`);
   }
-
-  if (afterSearch.matches.length > 1) {
-    await dismissTypeDialog();
-    await waitForStable();
-    throw new Error(`selectValue: multiple types match "${typeName}": ${afterSearch.matches.map(m => '"' + m.text + '"').join(', ')}. Specify a more precise type name`);
-  }
-
-  // Click OK on type dialog via page.click({force:true}) — bypasses "Найти" modal
-  await page.click(`#form${formNum}_OK`, { force: true });
-  await page.waitForTimeout(ACTION_WAIT);
+  throw new Error(`selectValue: multiple types match "${typeName}": ${lastMatches.map(m => '"' + m.text + '"').join(', ')}. Specify a more precise type name`);
 }
 
 /**
