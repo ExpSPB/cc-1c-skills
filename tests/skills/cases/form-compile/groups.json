@@ -22,7 +22,7 @@
         { "input": "Поле2", "path": "Поле2", "title": "Поле 2" },
         { "labelField": "Метка", "path": "Поле1", "groupVerticalAlign": "Center" }
       ]},
-      { "group": "vertical", "name": "ГруппаПодвал", "children": [
+      { "group": "vertical", "name": "ГруппаПодвал", "title": { "ru": "Подвал", "en": "Footer" }, "children": [
         { "input": "Поле3", "path": "Поле3", "title": "Поле 3" }
       ]}
     ],

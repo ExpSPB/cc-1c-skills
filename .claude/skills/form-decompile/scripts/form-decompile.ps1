@@ -1,4 +1,4 @@
-﻿# form-decompile v0.8 — Decompile 1C managed Form.xml to JSON DSL (draft)
+﻿# form-decompile v0.9 — Decompile 1C managed Form.xml to JSON DSL (draft)
 # Source: https://github.com/Nikolay-Shirokov/cc-1c-skills
 # ВНИМАНИЕ: раундтрип не гарантируется. Навык исключён из авто-использования моделью.
 param(
@@ -258,8 +258,7 @@ function Add-CommonProps {
 	if ($titleNode) {
 		$t = Get-LangText $titleNode
 		if ($null -ne $t) { $obj['title'] = $t }
-		$fmt = $titleNode.GetAttribute("formatted")
-		if ($fmt -eq 'true') { $obj['titleFormatted'] = $true } elseif ($fmt -eq 'false') { $obj['titleFormatted'] = $false }
+		# formatted у LabelDecoration выводится компилятором из hyperlink — отдельный ключ не нужен (#16 хвост)
 	}
 	$ev = Get-Events $node $elName
 	if ($ev) {

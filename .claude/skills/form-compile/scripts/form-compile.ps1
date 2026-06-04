@@ -1,4 +1,4 @@
-﻿# form-compile v1.30 — Compile 1C managed form from JSON or object metadata
+﻿# form-compile v1.31 — Compile 1C managed form from JSON or object metadata
 # Source: https://github.com/Nikolay-Shirokov/cc-1c-skills
 param(
 	[string]$JsonPath,
@@ -1521,13 +1521,26 @@ function Esc-Xml {
 
 # --- 4. Multilang helper ---
 
+# Эмитит <v8:item> для значения: строка → один ru-элемент; объект {lang:text} → по элементу на язык.
+function Emit-MLItems {
+	param($val, [string]$indent)
+	if ($val -is [System.Collections.IDictionary]) {
+		foreach ($k in $val.Keys) {
+			X "$indent<v8:item>"; X "$indent`t<v8:lang>$k</v8:lang>"; X "$indent`t<v8:content>$(Esc-Xml "$($val[$k])")</v8:content>"; X "$indent</v8:item>"
+		}
+	} elseif ($val -is [System.Management.Automation.PSCustomObject]) {
+		foreach ($p in $val.PSObject.Properties) {
+			X "$indent<v8:item>"; X "$indent`t<v8:lang>$($p.Name)</v8:lang>"; X "$indent`t<v8:content>$(Esc-Xml "$($p.Value)")</v8:content>"; X "$indent</v8:item>"
+		}
+	} else {
+		X "$indent<v8:item>"; X "$indent`t<v8:lang>ru</v8:lang>"; X "$indent`t<v8:content>$(Esc-Xml "$val")</v8:content>"; X "$indent</v8:item>"
+	}
+}
+
 function Emit-MLText {
-	param([string]$tag, [string]$text, [string]$indent)
+	param([string]$tag, $text, [string]$indent)
 	X "$indent<$tag>"
-	X "$indent`t<v8:item>"
-	X "$indent`t`t<v8:lang>ru</v8:lang>"
-	X "$indent`t`t<v8:content>$(Esc-Xml $text)</v8:content>"
-	X "$indent`t</v8:item>"
+	Emit-MLItems -val $text -indent "$indent`t"
 	X "$indent</$tag>"
 }
 
@@ -2045,9 +2058,9 @@ function Emit-Title {
 	param($el, [string]$name, [string]$indent, [switch]$auto)
 	$hasKey = $null -ne $el.PSObject.Properties['title']
 	if ($hasKey) {
-		if ($el.title) { Emit-MLText -tag "Title" -text "$($el.title)" -indent $indent }
+		if ($el.title) { Emit-MLText -tag "Title" -text $el.title -indent $indent }
 	} elseif ($auto -and $name) {
-		Emit-MLText -tag "Title" -text "$(Title-FromName -name $name)" -indent $indent
+		Emit-MLText -tag "Title" -text (Title-FromName -name $name) -indent $indent
 	}
 }
 
@@ -2215,7 +2228,7 @@ function Emit-Input {
 	Emit-Layout -el $el -indent $inner -multiLineDefault ([bool]($el.multiLine -eq $true))
 
 	if ($el.inputHint) {
-		Emit-MLText -tag "InputHint" -text "$($el.inputHint)" -indent $inner
+		Emit-MLText -tag "InputHint" -text $el.inputHint -indent $inner
 	}
 
 	# Companions
@@ -2476,14 +2489,11 @@ function Emit-Label {
 	$inner = "$indent`t"
 
 	$hasTitleKey = $null -ne $el.PSObject.Properties['title']
-	$labelTitle = if ($hasTitleKey) { "$($el.title)" } else { Title-FromName -name $name }
+	$labelTitle = if ($hasTitleKey) { $el.title } else { Title-FromName -name $name }
 	if ($labelTitle) {
 		$formatted = if ($el.hyperlink -eq $true) { "true" } else { "false" }
 		X "$inner<Title formatted=`"$formatted`">"
-		X "$inner`t<v8:item>"
-		X "$inner`t`t<v8:lang>ru</v8:lang>"
-		X "$inner`t`t<v8:content>$(Esc-Xml "$labelTitle")</v8:content>"
-		X "$inner`t</v8:item>"
+		Emit-MLItems -val $labelTitle -indent "$inner`t"
 		X "$inner</Title>"
 	}
 
@@ -2937,9 +2947,9 @@ function Emit-Attributes {
 		X "$indent`t<Attribute name=`"$attrName`" id=`"$attrId`">"
 		$inner = "$indent`t`t"
 
-		$attrTitle = if ($attr.title) { "$($attr.title)" } elseif ($attr.main -ne $true) { Title-FromName -name $attrName } else { '' }
+		$attrTitle = if ($attr.title) { $attr.title } elseif ($attr.main -ne $true) { Title-FromName -name $attrName } else { '' }
 		if ($attrTitle) {
-			Emit-MLText -tag "Title" -text "$attrTitle" -indent $inner
+			Emit-MLText -tag "Title" -text $attrTitle -indent $inner
 		}
 
 		# Type
@@ -2970,7 +2980,7 @@ function Emit-Attributes {
 				$colId = New-Id
 				X "$inner`t<Column name=`"$($col.name)`" id=`"$colId`">"
 				if ($col.title) {
-					Emit-MLText -tag "Title" -text "$($col.title)" -indent "$inner`t`t"
+					Emit-MLText -tag "Title" -text $col.title -indent "$inner`t`t"
 				}
 				Emit-Type -typeStr "$($col.type)" -indent "$inner`t`t"
 				X "$inner`t</Column>"
@@ -3031,13 +3041,13 @@ function Emit-Commands {
 		X "$indent`t<Command name=`"$($cmd.name)`" id=`"$cmdId`">"
 		$inner = "$indent`t`t"
 
-		$cmdTitle = if ($cmd.title) { "$($cmd.title)" } else { Title-FromName -name "$($cmd.name)" }
+		$cmdTitle = if ($cmd.title) { $cmd.title } else { Title-FromName -name "$($cmd.name)" }
 		if ($cmdTitle) {
-			Emit-MLText -tag "Title" -text "$cmdTitle" -indent $inner
+			Emit-MLText -tag "Title" -text $cmdTitle -indent $inner
 		}
 
 		if ($cmd.tooltip) {
-			Emit-MLText -tag "ToolTip" -text "$($cmd.tooltip)" -indent $inner
+			Emit-MLText -tag "ToolTip" -text $cmd.tooltip -indent $inner
 		}
 
 		if ($cmd.action) {
@@ -3289,7 +3299,7 @@ function Compute-MainAcbAutofill {
 
 # Title
 if ($def.title) {
-	Emit-MLText -tag "Title" -text "$($def.title)" -indent "`t"
+	Emit-MLText -tag "Title" -text $def.title -indent "`t"
 }
 
 # Header
@@ -3312,7 +3322,7 @@ if (-not $formTitle -and $def.properties -and $def.properties.title) {
 	$formTitle = $def.properties.title
 }
 if ($formTitle) {
-	Emit-MLText -tag "Title" -text "$formTitle" -indent "`t"
+	Emit-MLText -tag "Title" -text $formTitle -indent "`t"
 }
 
 # 12b. Properties (skip 'title' — handled above as multilingual)

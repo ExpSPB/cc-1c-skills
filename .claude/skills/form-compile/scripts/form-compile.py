@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-# form-compile v1.30 — Compile 1C managed form from JSON or object metadata
+# form-compile v1.31 — Compile 1C managed form from JSON or object metadata
 # Source: https://github.com/Nikolay-Shirokov/cc-1c-skills
 import argparse
 import copy
@@ -1254,15 +1254,27 @@ def esc_xml(s):
     return s.replace('&', '&amp;').replace('<', '&lt;').replace('>', '&gt;').replace('"', '&quot;')
 
 
+def emit_ml_items(lines, indent, val):
+    # строка → один ru-элемент; объект {lang: text} → по элементу на язык
+    if isinstance(val, dict):
+        for k, v in val.items():
+            lines.append(f"{indent}<v8:item>")
+            lines.append(f"{indent}\t<v8:lang>{k}</v8:lang>")
+            lines.append(f"{indent}\t<v8:content>{esc_xml(str(v))}</v8:content>")
+            lines.append(f"{indent}</v8:item>")
+    else:
+        lines.append(f"{indent}<v8:item>")
+        lines.append(f"{indent}\t<v8:lang>ru</v8:lang>")
+        lines.append(f"{indent}\t<v8:content>{esc_xml(str(val))}</v8:content>")
+        lines.append(f"{indent}</v8:item>")
+
+
 def emit_mltext(lines, indent, tag, text):
     if not text:
         lines.append(f"{indent}<{tag}/>")
         return
     lines.append(f"{indent}<{tag}>")
-    lines.append(f"{indent}\t<v8:item>")
-    lines.append(f"{indent}\t\t<v8:lang>ru</v8:lang>")
-    lines.append(f"{indent}\t\t<v8:content>{esc_xml(text)}</v8:content>")
-    lines.append(f"{indent}\t</v8:item>")
+    emit_ml_items(lines, f"{indent}\t", text)
     lines.append(f"{indent}</{tag}>")
 
 
@@ -1630,7 +1642,7 @@ def emit_title(lines, el, name, indent, auto=False):
     # Явный title "" (или None) → подавить. Явный непустой → как есть.
     if 'title' in el:
         if el.get('title'):
-            emit_mltext(lines, indent, 'Title', str(el['title']))
+            emit_mltext(lines, indent, 'Title', el['title'])
     elif auto and name:
         emit_mltext(lines, indent, 'Title', title_from_name(name))
 
@@ -2020,7 +2032,7 @@ def emit_input(lines, el, name, eid, indent):
     emit_layout(lines, el, inner, multi_line_default=(el.get('multiLine') is True))
 
     if el.get('inputHint'):
-        emit_mltext(lines, inner, 'InputHint', str(el['inputHint']))
+        emit_mltext(lines, inner, 'InputHint', el['inputHint'])
 
     # Companions
     emit_companion(lines, 'ContextMenu', f'{name}\u041a\u043e\u043d\u0442\u0435\u043a\u0441\u0442\u043d\u043e\u0435\u041c\u0435\u043d\u044e', inner)
@@ -2127,14 +2139,11 @@ def emit_label(lines, el, name, eid, indent):
     lines.append(f'{indent}<LabelDecoration name="{name}" id="{eid}">')
     inner = f'{indent}\t'
 
-    label_title = str(el['title'] or '') if 'title' in el else title_from_name(name)
+    label_title = el['title'] if 'title' in el else title_from_name(name)
     if label_title:
         formatted = 'true' if el.get('hyperlink') is True else 'false'
         lines.append(f'{inner}<Title formatted="{formatted}">')
-        lines.append(f'{inner}\t<v8:item>')
-        lines.append(f'{inner}\t\t<v8:lang>ru</v8:lang>')
-        lines.append(f'{inner}\t\t<v8:content>{esc_xml(str(label_title))}</v8:content>')
-        lines.append(f'{inner}\t</v8:item>')
+        emit_ml_items(lines, f'{inner}\t', label_title)
         lines.append(f'{inner}</Title>')
 
     emit_common_flags(lines, el, inner)
@@ -2559,7 +2568,7 @@ def emit_attributes(lines, attrs, indent):
         if not attr_title and attr.get('main') is not True:
             attr_title = title_from_name(attr_name)
         if attr_title:
-            emit_mltext(lines, inner, 'Title', str(attr_title))
+            emit_mltext(lines, inner, 'Title', attr_title)
 
         # Type
         if attr.get('type'):
@@ -2585,7 +2594,7 @@ def emit_attributes(lines, attrs, indent):
                 col_id = new_id()
                 lines.append(f'{inner}\t<Column name="{col["name"]}" id="{col_id}">')
                 if col.get('title'):
-                    emit_mltext(lines, f'{inner}\t\t', 'Title', str(col['title']))
+                    emit_mltext(lines, f'{inner}\t\t', 'Title', col['title'])
                 emit_type(lines, str(col.get('type', '')), f'{inner}\t\t')
                 lines.append(f'{inner}\t</Column>')
             lines.append(f'{inner}</Columns>')
@@ -2641,10 +2650,10 @@ def emit_commands(lines, cmds, indent):
 
         cmd_title = cmd.get('title') or title_from_name(str(cmd['name']))
         if cmd_title:
-            emit_mltext(lines, inner, 'Title', str(cmd_title))
+            emit_mltext(lines, inner, 'Title', cmd_title)
 
         if cmd.get('tooltip'):
-            emit_mltext(lines, inner, 'ToolTip', str(cmd['tooltip']))
+            emit_mltext(lines, inner, 'ToolTip', cmd['tooltip'])
 
         if cmd.get('action'):
             lines.append(f'{inner}<Action>{cmd["action"]}</Action>')
@@ -3106,7 +3115,7 @@ def main():
     if not form_title and defn.get('properties') and defn['properties'].get('title'):
         form_title = defn['properties']['title']
     if form_title:
-        emit_mltext(lines, '\t', 'Title', str(form_title))
+        emit_mltext(lines, '\t', 'Title', form_title)
 
     # Properties (skip 'title' — handled above)
     # When form-level Title is set, default autoTitle=false (≈95% of ERP forms do this;
