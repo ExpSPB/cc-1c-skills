@@ -1,4 +1,4 @@
-﻿# form-decompile v0.16 — Decompile 1C managed Form.xml to JSON DSL (draft)
+﻿# form-decompile v0.17 — Decompile 1C managed Form.xml to JSON DSL (draft)
 # Source: https://github.com/Nikolay-Shirokov/cc-1c-skills
 # ВНИМАНИЕ: раундтрип не гарантируется. Навык исключён из авто-использования моделью.
 param(
@@ -241,6 +241,7 @@ function Add-CommonProps {
 	}
 	$ttNode = $node.SelectSingleNode("lf:ToolTip", $ns)
 	if ($ttNode) { $tt = Get-LangText $ttNode; if ($null -ne $tt) { $obj['tooltip'] = $tt } }
+	$ttr = Get-Child $node 'ToolTipRepresentation'; if ($ttr) { $obj['tooltipRepresentation'] = $ttr }
 	$ev = Get-Events $node $elName
 	if ($ev) { $obj['events'] = $ev }
 }

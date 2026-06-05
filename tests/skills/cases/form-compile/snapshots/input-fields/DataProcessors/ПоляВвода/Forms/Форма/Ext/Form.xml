@@ -23,6 +23,7 @@
 					<v8:content>Введите значение поля</v8:content>
 				</v8:item>
 			</ToolTip>
+			<ToolTipRepresentation>ShowBottom</ToolTipRepresentation>
 			<EditMode>EnterOnInput</EditMode>
 			<ContextMenu name="ОбычноеПолеКонтекстноеМеню" id="2"/>
 			<ExtendedTooltip name="ОбычноеПолеРасширеннаяПодсказка" id="3"/>

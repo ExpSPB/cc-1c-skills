@@ -37,6 +37,7 @@
 					<v8:content>Нажмите для перехода</v8:content>
 				</v8:item>
 			</Title>
+			<ToolTipRepresentation>Button</ToolTipRepresentation>
 			<Hyperlink>true</Hyperlink>
 			<ContextMenu name="ПодсказкаКонтекстноеМеню" id="8"/>
 			<ExtendedTooltip name="ПодсказкаРасширеннаяПодсказка" id="9"/>

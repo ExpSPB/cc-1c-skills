@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-# form-compile v1.36 — Compile 1C managed form from JSON or object metadata
+# form-compile v1.37 — Compile 1C managed form from JSON or object metadata
 # Source: https://github.com/Nikolay-Shirokov/cc-1c-skills
 import argparse
 import copy
@@ -1356,7 +1356,7 @@ KNOWN_KEYS = {
     "button", "picture", "picField", "calendar", "cmdBar", "popup",
     "showInHeader",
     "radioButtonType", "choiceList", "columnsCount", "checkBoxType", "editMode",
-    "name", "path", "title", "tooltip",
+    "name", "path", "title", "tooltip", "tooltipRepresentation",
     "visible", "hidden", "enabled", "disabled", "readOnly", "userVisible",
     "events", "on", "handlers",
     "selectionMode", "showCurrentDate", "widthInMonths", "heightInMonths", "showMonthsPanel",
@@ -1678,6 +1678,9 @@ def emit_title(lines, el, name, indent, auto=False):
     # ToolTip элемента (всплывающая подсказка) — по схеме сразу после Title.
     if el.get('tooltip'):
         emit_mltext(lines, indent, 'ToolTip', el['tooltip'])
+    # ToolTipRepresentation — режим показа подсказки (None/Button/ShowBottom/…), после ToolTip.
+    if el.get('tooltipRepresentation'):
+        lines.append(f'{indent}<ToolTipRepresentation>{el["tooltipRepresentation"]}</ToolTipRepresentation>')
 
 
 _TITLE_LOC_MAP = {'none': 'None', 'left': 'Left', 'right': 'Right', 'top': 'Top', 'bottom': 'Bottom', 'auto': 'Auto'}
@@ -2180,6 +2183,8 @@ def emit_label(lines, el, name, eid, indent):
         lines.append(f'{inner}</Title>')
     if el.get('tooltip'):
         emit_mltext(lines, inner, 'ToolTip', el['tooltip'])
+    if el.get('tooltipRepresentation'):
+        lines.append(f'{inner}<ToolTipRepresentation>{el["tooltipRepresentation"]}</ToolTipRepresentation>')
 
     emit_common_flags(lines, el, inner)
 
