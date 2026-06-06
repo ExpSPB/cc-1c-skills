@@ -17,14 +17,14 @@
     "title": "Разные типы",
     "elements": [
       { "input": "Строка", "path": "Строка" },
-      { "input": "Число", "path": "Число" },
+      { "input": "Число", "path": "Число", "userVisible": false },
       { "input": "Дата", "path": "Дата" },
       { "input": "Булево", "path": "Булево" }
     ],
     "attributes": [
       { "name": "Объект", "type": "DataProcessorObject.Типы", "main": true },
-      { "name": "Строка", "type": "string(200)" },
-      { "name": "Число", "type": "decimal(10,0,nonneg)" },
+      { "name": "Строка", "type": "string(200)", "view": false },
+      { "name": "Число", "type": "decimal(10,0,nonneg)", "edit": false },
       { "name": "Дата", "type": "dateTime" },
       { "name": "Булево", "type": "boolean" }
     ]

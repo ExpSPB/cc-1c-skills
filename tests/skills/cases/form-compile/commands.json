@@ -27,7 +27,7 @@
       { "name": "Результат", "type": "string" }
     ],
     "commands": [
-      { "name": "Выполнить", "action": "ВыполнитьОбработка", "shortcut": "Ctrl+Enter" }
+      { "name": "Выполнить", "action": "ВыполнитьОбработка", "shortcut": "Ctrl+Enter", "use": false }
     ]
   }
 }

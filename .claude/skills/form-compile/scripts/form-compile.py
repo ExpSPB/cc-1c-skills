@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-# form-compile v1.46 — Compile 1C managed form from JSON or object metadata
+# form-compile v1.47 — Compile 1C managed form from JSON or object metadata
 # Source: https://github.com/Nikolay-Shirokov/cc-1c-skills
 import argparse
 import copy
@@ -2059,13 +2059,36 @@ def emit_table_addition(lines, tag, table_name, name_suffix, src_type, indent):
     lines.append(f'{indent}</{tag}>')
 
 
+# Role-adjustable boolean (xr:Common + 0..N xr:Value name="Role.X").
+# Единый механизм платформы: UserVisible (элементы), View/Edit (атрибуты), Use (команды/кнопки).
+# Значение DSL: скаляр bool → только <xr:Common>; объект { common, roles:{ Имя: bool } } → +пер-ролевые исключения.
+# Имя роли принимаем с/без префикса "Role." (forgiving); на выход всегда с префиксом.
+def emit_xr_flag(lines, tag, val, indent):
+    if val is None:
+        return
+    if isinstance(val, bool):
+        lines.append(f"{indent}<{tag}>")
+        lines.append(f"{indent}\t<xr:Common>{'true' if val else 'false'}</xr:Common>")
+        lines.append(f"{indent}</{tag}>")
+        return
+    # объектная форма { common, roles }
+    common = bool(val.get('common')) if val.get('common') is not None else False
+    lines.append(f"{indent}<{tag}>")
+    lines.append(f"{indent}\t<xr:Common>{'true' if common else 'false'}</xr:Common>")
+    roles = val.get('roles')
+    if roles:
+        for rname, rval in roles.items():
+            # Forgiving: имя без префикса, с "Role." или кириллическим "Роль." → нормализуем в "Role."
+            rn = "Role." + re.sub(r'^(Role|Роль)\.', '', rname)
+            lines.append(f"{indent}\t<xr:Value name=\"{rn}\">{'true' if rval else 'false'}</xr:Value>")
+    lines.append(f"{indent}</{tag}>")
+
+
 def emit_common_flags(lines, el, indent):
     if el.get('visible') is False or el.get('hidden') is True:
         lines.append(f"{indent}<Visible>false</Visible>")
-    if el.get('userVisible') is False:
-        lines.append(f"{indent}<UserVisible>")
-        lines.append(f"{indent}\t<xr:Common>false</xr:Common>")
-        lines.append(f"{indent}</UserVisible>")
+    if el.get('userVisible') is not None:
+        emit_xr_flag(lines, 'UserVisible', el.get('userVisible'), indent)
     if el.get('enabled') is False or el.get('disabled') is True:
         lines.append(f"{indent}<Enabled>false</Enabled>")
     if el.get('readOnly') is True:
@@ -3180,6 +3203,11 @@ def emit_attributes(lines, attrs, indent):
 
         if attr.get('main') is True:
             lines.append(f'{inner}<MainAttribute>true</MainAttribute>')
+        # Доступ по ролям: просмотр/редактирование (порядок схемы: View → Edit, после MainAttribute)
+        if attr.get('view') is not None:
+            emit_xr_flag(lines, 'View', attr.get('view'), inner)
+        if attr.get('edit') is not None:
+            emit_xr_flag(lines, 'Edit', attr.get('edit'), inner)
         main_saved = False
         if attr.get('main') is True and attr.get('type'):
             t = str(attr['type'])
@@ -3284,6 +3312,10 @@ def emit_commands(lines, cmds, indent):
 
         if cmd.get('tooltip'):
             emit_mltext(lines, inner, 'ToolTip', cmd['tooltip'])
+
+        # Доступность команды по ролям (после ToolTip, до Action)
+        if cmd.get('use') is not None:
+            emit_xr_flag(lines, 'Use', cmd.get('use'), inner)
 
         if cmd.get('action'):
             lines.append(f'{inner}<Action>{cmd["action"]}</Action>')

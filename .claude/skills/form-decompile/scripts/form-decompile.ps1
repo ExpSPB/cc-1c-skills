@@ -1,4 +1,4 @@
-﻿# form-decompile v0.27 — Decompile 1C managed Form.xml to JSON DSL (draft)
+﻿# form-decompile v0.28 — Decompile 1C managed Form.xml to JSON DSL (draft)
 # Source: https://github.com/Nikolay-Shirokov/cc-1c-skills
 # ВНИМАНИЕ: раундтрип не гарантируется. Навык исключён из авто-использования моделью.
 param(
@@ -779,12 +779,36 @@ function Get-Events {
 	return $events
 }
 
+# Инверсия Emit-XrFlag: role-adjustable boolean (UserVisible/View/Edit/Use).
+# <TAG><xr:Common/>[<xr:Value name="Role.X"/>…]</TAG> → скаляр bool (без ролей) или объект { common, roles:{Имя:bool} }.
+# Имя роли отдаём без префикса "Role.". Возвращает $null, если тег отсутствует.
+function Decompile-XrFlag {
+	param($node, [string]$tag)
+	$el = $node.SelectSingleNode("*[local-name()='$tag']")
+	if (-not $el) { return $null }
+	$commonNode = $el.SelectSingleNode("*[local-name()='Common']")
+	$common = ($commonNode -and $commonNode.InnerText -eq 'true')
+	$valNodes = @($el.SelectNodes("*[local-name()='Value']"))
+	if ($valNodes.Count -eq 0) { return $common }
+	$roles = [ordered]@{}
+	foreach ($v in $valNodes) {
+		$rn = $v.GetAttribute("name")
+		if ($rn -match '^Role\.') { $rn = $rn.Substring(5) }
+		$roles[$rn] = ($v.InnerText -eq 'true')
+	}
+	$o = [ordered]@{}
+	$o['common'] = $common
+	$o['roles'] = $roles
+	return $o
+}
+
 # Общие свойства элемента (visible/enabled/readonly/title/events) → в hash
 function Add-CommonProps {
 	param($obj, $node, [string]$elName)
 	if ((Get-Child $node 'Visible') -eq 'false') { $obj['hidden'] = $true }
 	if ((Get-Child $node 'Enabled') -eq 'false') { $obj['disabled'] = $true }
 	if ((Get-Child $node 'ReadOnly') -eq 'true') { $obj['readOnly'] = $true }
+	$uv = Decompile-XrFlag $node 'UserVisible'; if ($null -ne $uv) { $obj['userVisible'] = $uv }
 	$titleNode = $node.SelectSingleNode("lf:Title", $ns)
 	if ($titleNode) {
 		$t = Get-LangText $titleNode
@@ -1186,6 +1210,8 @@ if ($attrsNode) {
 		$ao['name'] = $a.GetAttribute("name")
 		$ty = Decompile-Type ($a.SelectSingleNode("lf:Type", $ns)); if ($ty) { $ao['type'] = $ty }
 		if ((Get-Child $a 'MainAttribute') -eq 'true') { $ao['main'] = $true }
+		$vw = Decompile-XrFlag $a 'View'; if ($null -ne $vw) { $ao['view'] = $vw }
+		$ed = Decompile-XrFlag $a 'Edit'; if ($null -ne $ed) { $ao['edit'] = $ed }
 		$tNode = $a.SelectSingleNode("lf:Title", $ns); if ($tNode) { $t = Get-LangText $tNode; if ($null -ne $t) { $ao['title'] = $t } }
 		if ((Get-Child $a 'SavedData') -eq 'true') { $ao['savedData'] = $true }
 		$fc = Get-Child $a 'FillChecking'; if ($fc) { $ao['fillChecking'] = $fc }
@@ -1279,6 +1305,7 @@ if ($cmdsNode) {
 		$act = Get-Child $c 'Action'; if ($act) { $co['action'] = $act }
 		$tNode = $c.SelectSingleNode("lf:Title", $ns); if ($tNode) { $t = Get-LangText $tNode; if ($null -ne $t) { $co['title'] = $t } }
 		$ttNode = $c.SelectSingleNode("lf:ToolTip", $ns); if ($ttNode) { $t = Get-LangText $ttNode; if ($null -ne $t) { $co['tooltip'] = $t } }
+		$us = Decompile-XrFlag $c 'Use'; if ($null -ne $us) { $co['use'] = $us }
 		$cru = Get-Child $c 'CurrentRowUse'; if ($cru) { $co['currentRowUse'] = $cru }
 		$sc = Get-Child $c 'Shortcut'; if ($sc) { $co['shortcut'] = $sc }
 		$ref = $c.SelectSingleNode("lf:Picture/xr:Ref", $ns); if ($ref) { $co['picture'] = $ref.InnerText }

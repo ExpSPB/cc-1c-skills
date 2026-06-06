@@ -16,6 +16,9 @@
 		</InputField>
 		<InputField name="Число" id="4">
 			<DataPath>Число</DataPath>
+			<UserVisible>
+				<xr:Common>false</xr:Common>
+			</UserVisible>
 			<ContextMenu name="ЧислоКонтекстноеМеню" id="5"/>
 			<ExtendedTooltip name="ЧислоРасширеннаяПодсказка" id="6"/>
 		</InputField>
@@ -51,6 +54,9 @@
 					<v8:AllowedLength>Variable</v8:AllowedLength>
 				</v8:StringQualifiers>
 			</Type>
+			<View>
+				<xr:Common>false</xr:Common>
+			</View>
 		</Attribute>
 		<Attribute name="Число" id="15">
 			<Title>
@@ -67,6 +73,9 @@
 					<v8:AllowedSign>Nonnegative</v8:AllowedSign>
 				</v8:NumberQualifiers>
 			</Type>
+			<Edit>
+				<xr:Common>false</xr:Common>
+			</Edit>
 		</Attribute>
 		<Attribute name="Дата" id="16">
 			<Title>

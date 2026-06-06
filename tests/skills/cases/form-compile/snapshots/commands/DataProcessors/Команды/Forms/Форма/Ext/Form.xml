@@ -68,6 +68,9 @@
 					<v8:content>Выполнить</v8:content>
 				</v8:item>
 			</Title>
+			<Use>
+				<xr:Common>false</xr:Common>
+			</Use>
 			<Action>ВыполнитьОбработка</Action>
 			<Shortcut>Ctrl+Enter</Shortcut>
 		</Command>

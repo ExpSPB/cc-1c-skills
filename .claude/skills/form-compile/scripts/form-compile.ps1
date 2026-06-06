@@ -1,4 +1,4 @@
-﻿# form-compile v1.46 — Compile 1C managed form from JSON or object metadata
+﻿# form-compile v1.47 — Compile 1C managed form from JSON or object metadata
 # Source: https://github.com/Nikolay-Shirokov/cc-1c-skills
 param(
 	[string]$JsonPath,
@@ -2430,14 +2430,39 @@ function Emit-Element {
 	}
 }
 
+# Role-adjustable boolean (xr:Common + 0..N xr:Value name="Role.X").
+# Единый механизм платформы: UserVisible (элементы), View/Edit (атрибуты), Use (команды/кнопки).
+# Значение DSL: скаляр bool → только <xr:Common>; объект { common, roles:{ Имя: bool } } → +пер-ролевые исключения.
+# Имя роли принимаем с/без префикса "Role." (forgiving); на выход всегда с префиксом.
+function Emit-XrFlag {
+	param([string]$tag, $val, [string]$indent)
+	if ($null -eq $val) { return }
+	if ($val -is [bool]) {
+		X "$indent<$tag>"
+		X "$indent`t<xr:Common>$(if ($val){'true'}else{'false'})</xr:Common>"
+		X "$indent</$tag>"
+		return
+	}
+	# объектная форма { common, roles }
+	$common = if ($null -ne $val.common) { [bool]$val.common } else { $false }
+	X "$indent<$tag>"
+	X "$indent`t<xr:Common>$(if ($common){'true'}else{'false'})</xr:Common>"
+	if ($val.roles) {
+		foreach ($r in $val.roles.PSObject.Properties) {
+			# Forgiving: принимаем имя без префикса, с "Role." или кириллическим "Роль." → нормализуем в "Role."
+			$rname = "$($r.Name)" -replace '^(Role|Роль)\.', ''
+			$rname = "Role.$rname"
+			$rval = if ([bool]$r.Value) { 'true' } else { 'false' }
+			X "$indent`t<xr:Value name=`"$rname`">$rval</xr:Value>"
+		}
+	}
+	X "$indent</$tag>"
+}
+
 function Emit-CommonFlags {
 	param($el, [string]$indent)
 	if ($el.visible -eq $false -or $el.hidden -eq $true) { X "$indent<Visible>false</Visible>" }
-	if ($el.userVisible -eq $false) {
-		X "$indent<UserVisible>"
-		X "$indent`t<xr:Common>false</xr:Common>"
-		X "$indent</UserVisible>"
-	}
+	if ($null -ne $el.userVisible) { Emit-XrFlag -tag 'UserVisible' -val $el.userVisible -indent $indent }
 	if ($el.enabled -eq $false -or $el.disabled -eq $true) { X "$indent<Enabled>false</Enabled>" }
 	if ($el.readOnly -eq $true) { X "$indent<ReadOnly>true</ReadOnly>" }
 }
@@ -3526,6 +3551,9 @@ function Emit-Attributes {
 		if ($attr.main -eq $true) {
 			X "$inner<MainAttribute>true</MainAttribute>"
 		}
+		# Доступ по ролям: просмотр/редактирование (порядок схемы: View → Edit, после MainAttribute)
+		if ($null -ne $attr.view) { Emit-XrFlag -tag 'View' -val $attr.view -indent $inner }
+		if ($null -ne $attr.edit) { Emit-XrFlag -tag 'Edit' -val $attr.edit -indent $inner }
 		$mainSaved = $false
 		if ($attr.main -eq $true -and $attr.type) {
 			$mainSaved = ("$($attr.type)") -match '^(CatalogObject|DocumentObject|ChartOfAccountsObject|ChartOfCalculationTypesObject|ChartOfCharacteristicTypesObject|ExchangePlanObject|BusinessProcessObject|TaskObject)\.' -or ("$($attr.type)") -match 'RecordManager\.'
@@ -3646,6 +3674,9 @@ function Emit-Commands {
 		if ($cmd.tooltip) {
 			Emit-MLText -tag "ToolTip" -text $cmd.tooltip -indent $inner
 		}
+
+		# Доступность команды по ролям (после ToolTip, до Action)
+		if ($null -ne $cmd.use) { Emit-XrFlag -tag 'Use' -val $cmd.use -indent $inner }
 
 		if ($cmd.action) {
 			X "$inner<Action>$($cmd.action)</Action>"
