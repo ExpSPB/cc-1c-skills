@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-# form-compile v1.64 — Compile 1C managed form from JSON or object metadata
+# form-compile v1.65 — Compile 1C managed form from JSON or object metadata
 # Source: https://github.com/Nikolay-Shirokov/cc-1c-skills
 import argparse
 import copy
@@ -2266,6 +2266,95 @@ def emit_command_picture(lines, pic, elem_lt, indent):
     lines.append(f'{indent}</Picture>')
 
 
+# --- Оформление элемента: цвета / шрифты / граница (зеркало form-compile.ps1 Emit-Appearance) ---
+# Прямые свойства элемента (<TextColor>/<Font>/<Border> + header/footer у полей). Ключи англ.
+# camelCase 1:1 с тегами + приём рус. синонимов. Цвет — verbatim-строка (style:/web:/win:/#RRGGBB);
+# шрифт — строка-ref/объект-атрибуты; граница — строка-ref/
+# объект {width,style}. Порядок тегов — XSD (профиль по базовому типу).
+APPEARANCE_SPEC = {
+    'titleTextColor':  ('TitleTextColor', 'color'),
+    'titleBackColor':  ('TitleBackColor', 'color'),
+    'titleFont':       ('TitleFont', 'font'),
+    'footerTextColor': ('FooterTextColor', 'color'),
+    'footerBackColor': ('FooterBackColor', 'color'),
+    'footerFont':      ('FooterFont', 'font'),
+    'textColor':       ('TextColor', 'color'),
+    'backColor':       ('BackColor', 'color'),
+    'borderColor':     ('BorderColor', 'color'),
+    'border':          ('Border', 'border'),
+    'font':            ('Font', 'font'),
+}
+APPEARANCE_SYNONYMS = {
+    'цветтекста': 'textColor', 'цветфона': 'backColor', 'цветрамки': 'borderColor',
+    'цветтекстазаголовка': 'titleTextColor', 'цветфоназаголовка': 'titleBackColor', 'шрифтзаголовка': 'titleFont',
+    'цветтекстаподвала': 'footerTextColor', 'цветфонаподвала': 'footerBackColor', 'шрифтподвала': 'footerFont',
+    'шрифт': 'font', 'рамка': 'border',
+}
+APP_ORDER_FIELD = ['titleTextColor', 'titleBackColor', 'titleFont', 'footerTextColor', 'footerBackColor', 'footerFont', 'textColor', 'backColor', 'borderColor', 'border', 'font']
+APP_ORDER_DECORATION = ['textColor', 'font', 'backColor', 'borderColor', 'border']
+APP_ORDER_BUTTON = ['textColor', 'backColor', 'borderColor', 'font']
+
+
+def get_appearance_value(el, canonical):
+    if not isinstance(el, dict):
+        return None
+    if canonical in el:
+        return el[canonical]
+    lowmap = {k.lower(): k for k in el.keys()}
+    if canonical.lower() in lowmap:
+        return el[lowmap[canonical.lower()]]
+    for syn, canon in APPEARANCE_SYNONYMS.items():
+        if canon == canonical and syn in lowmap:
+            return el[lowmap[syn]]
+    return None
+
+
+def emit_font_tag(lines, tag, val, indent):
+    if isinstance(val, str):
+        lines.append(f'{indent}<{tag} ref="{esc_xml(val)}" kind="StyleItem"/>')
+        return
+    attrs = []
+    for a in ('ref', 'faceName', 'height', 'bold', 'italic', 'underline', 'strikeout', 'kind', 'scale'):
+        if a in val and val[a] is not None:
+            v = val[a]
+            if isinstance(v, bool):
+                v = 'true' if v else 'false'
+            attrs.append(f'{a}="{esc_xml(str(v))}"')
+    lines.append(f'{indent}<{tag} {" ".join(attrs)}/>')
+
+
+def emit_border_tag(lines, val, indent):
+    if isinstance(val, str):
+        lines.append(f'{indent}<Border ref="{esc_xml(val)}"/>')
+        return
+    if val.get('ref'):
+        lines.append(f'{indent}<Border ref="{esc_xml(str(val["ref"]))}"/>')
+        return
+    width = val['width'] if val.get('width') is not None else 1
+    style = str(val['style']) if 'style' in val else None
+    lines.append(f'{indent}<Border width="{width}">')
+    if style:
+        lines.append(f'{indent}\t<v8ui:style xsi:type="v8ui:ControlBorderType">{esc_xml(style)}</v8ui:style>')
+    lines.append(f'{indent}</Border>')
+
+
+def emit_appearance(lines, el, indent, profile='field'):
+    if not isinstance(el, dict):
+        return
+    order = {'decoration': APP_ORDER_DECORATION, 'button': APP_ORDER_BUTTON}.get(profile, APP_ORDER_FIELD)
+    for key in order:
+        val = get_appearance_value(el, key)
+        if val is None or (isinstance(val, str) and val == ''):
+            continue
+        tag, kind = APPEARANCE_SPEC[key]
+        if kind == 'color':
+            lines.append(f'{indent}<{tag}>{esc_xml(str(val))}</{tag}>')
+        elif kind == 'font':
+            emit_font_tag(lines, tag, val, indent)
+        else:
+            emit_border_tag(lines, val, indent)
+
+
 def emit_layout(lines, el, indent, skip_height=False, multi_line_default=False):
     # Общие layout-свойства — применимы ко всем элементам. Порядок согласован
     # с историческим выводом input/label, чтобы не сдвигать существующие снапшоты.
@@ -2752,6 +2841,9 @@ def emit_input(lines, el, name, eid, indent):
 
     emit_choice_list(lines, el, inner)
 
+    # Оформление (цвета/шрифты/граница) — перед компаньонами
+    emit_appearance(lines, el, inner, 'field')
+
     # Companions
     emit_companion_panel(lines, 'ContextMenu', f'{name}\u041a\u043e\u043d\u0442\u0435\u043a\u0441\u0442\u043d\u043e\u0435\u041c\u0435\u043d\u044e', inner, el.get('contextMenu'))
     emit_companion(lines, 'ExtendedTooltip', f'{name}\u0420\u0430\u0441\u0448\u0438\u0440\u0435\u043d\u043d\u0430\u044f\u041f\u043e\u0434\u0441\u043a\u0430\u0437\u043a\u0430', inner, el.get('extendedTooltip'))
@@ -2786,6 +2878,9 @@ def emit_check(lines, el, name, eid, indent):
 
     emit_layout(lines, el, inner)
 
+    # Оформление (цвета/шрифты/граница) — перед компаньонами
+    emit_appearance(lines, el, inner, 'field')
+
     # Companions
     emit_companion_panel(lines, 'ContextMenu', f'{name}\u041a\u043e\u043d\u0442\u0435\u043a\u0441\u0442\u043d\u043e\u0435\u041c\u0435\u043d\u044e', inner, el.get('contextMenu'))
     emit_companion(lines, 'ExtendedTooltip', f'{name}\u0420\u0430\u0441\u0448\u0438\u0440\u0435\u043d\u043d\u0430\u044f\u041f\u043e\u0434\u0441\u043a\u0430\u0437\u043a\u0430', inner, el.get('extendedTooltip'))
@@ -2816,6 +2911,9 @@ def emit_radio_button_field(lines, el, name, eid, indent):
     emit_choice_list(lines, el, inner)
 
     emit_layout(lines, el, inner)
+
+    # Оформление (цвета/шрифты/граница) — перед компаньонами
+    emit_appearance(lines, el, inner, 'field')
 
     emit_companion_panel(lines, 'ContextMenu', f'{name}КонтекстноеМеню', inner, el.get('contextMenu'))
     emit_companion(lines, 'ExtendedTooltip', f'{name}РасширеннаяПодсказка', inner, el.get('extendedTooltip'))
@@ -2855,6 +2953,9 @@ def emit_label(lines, el, name, eid, indent):
         lines.append(f'{inner}<Hyperlink>true</Hyperlink>')
     emit_layout(lines, el, inner)
 
+    # Оформление (цвета/шрифт/граница) — перед компаньонами (профиль декорации)
+    emit_appearance(lines, el, inner, 'decoration')
+
     # Companions
     emit_companion_panel(lines, 'ContextMenu', f'{name}\u041a\u043e\u043d\u0442\u0435\u043a\u0441\u0442\u043d\u043e\u0435\u041c\u0435\u043d\u044e', inner, el.get('contextMenu'))
     emit_companion(lines, 'ExtendedTooltip', f'{name}\u0420\u0430\u0441\u0448\u0438\u0440\u0435\u043d\u043d\u0430\u044f\u041f\u043e\u0434\u0441\u043a\u0430\u0437\u043a\u0430', inner, el.get('extendedTooltip'))
@@ -2883,6 +2984,9 @@ def emit_label_field(lines, el, name, eid, indent):
     if el.get('hyperlink') is True:
         lines.append(f'{inner}<Hiperlink>true</Hiperlink>')
     emit_layout(lines, el, inner)
+
+    # Оформление (цвета/шрифты/граница + header/footer) — перед компаньонами
+    emit_appearance(lines, el, inner, 'field')
 
     # Companions
     emit_companion_panel(lines, 'ContextMenu', f'{name}\u041a\u043e\u043d\u0442\u0435\u043a\u0441\u0442\u043d\u043e\u0435\u041c\u0435\u043d\u044e', inner, el.get('contextMenu'))
@@ -3159,6 +3263,9 @@ def emit_button(lines, el, name, eid, indent, in_cmd_bar=False):
         lines.append(f'{inner}<LocationInCommandBar>{el["locationInCommandBar"]}</LocationInCommandBar>')
     emit_layout(lines, el, inner)
 
+    # Оформление (цвета/шрифт/граница) — перед компаньоном (профиль кнопки)
+    emit_appearance(lines, el, inner, 'button')
+
     # Companion
     emit_companion(lines, 'ExtendedTooltip', f'{name}\u0420\u0430\u0441\u0448\u0438\u0440\u0435\u043d\u043d\u0430\u044f\u041f\u043e\u0434\u0441\u043a\u0430\u0437\u043a\u0430', inner, el.get('extendedTooltip'))
 
@@ -3213,9 +3320,9 @@ def emit_picture_field(lines, el, name, eid, indent):
 
     emit_layout(lines, el, inner)
 
-    # ValuesPicture \u2014 picture (collection) used to render the field's value.
+    # ValuesPicture — picture (collection) used to render the field's value.
     # Required for a Boolean-bound PictureField to actually show an icon.
-    # \u0421\u043a\u0430\u043b\u044f\u0440 (Ref) \u0438\u043b\u0438 \u043e\u0431\u044a\u0435\u043a\u0442 {src, loadTransparent}; LoadTransparent \u044d\u043c\u0438\u0442\u0438\u0442\u0441\u044f \u0432\u0441\u0435\u0433\u0434\u0430.
+    # Скаляр (Ref) или объект {src, loadTransparent}; LoadTransparent эмитится всегда.
     emit_picture_ref(lines, el.get('valuesPicture'), 'ValuesPicture', inner)
 
     # Companions
@@ -3244,7 +3351,7 @@ def emit_calendar(lines, el, name, eid, indent):
 
     emit_layout(lines, el, inner)
 
-    # \u041a\u0430\u043b\u0435\u043d\u0434\u0430\u0440\u043d\u043e-\u0441\u043f\u0435\u0446\u0438\u0444\u0438\u0447\u043d\u044b\u0435 \u0441\u0432\u043e\u0439\u0441\u0442\u0432\u0430 (\u043f\u043e\u0440\u044f\u0434\u043e\u043a \u0441\u0445\u0435\u043c\u044b: \u043f\u043e\u0441\u043b\u0435 layout, \u0434\u043e companions)
+    # Календарно-специфичные свойства (порядок схемы: после layout, до companions)
     if el.get('selectionMode'):
         lines.append(f'{inner}<SelectionMode>{el["selectionMode"]}</SelectionMode>')
     if el.get('showCurrentDate') is not None:

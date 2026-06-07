@@ -1,4 +1,4 @@
-﻿# form-compile v1.64 — Compile 1C managed form from JSON or object metadata
+﻿# form-compile v1.65 — Compile 1C managed form from JSON or object metadata
 # Source: https://github.com/Nikolay-Shirokov/cc-1c-skills
 param(
 	[string]$JsonPath,
@@ -2601,6 +2601,102 @@ function Emit-CommandPicture {
 	X "$indent</Picture>"
 }
 
+# --- Оформление элемента: цвета / шрифты / граница ---
+# Прямые свойства элемента (<TextColor>/<Font>/<Border> + header/footer-варианты у полей).
+# Ключи DSL — англ. camelCase 1:1 с тегами; принимаем рус. синонимы (forgiving).
+# Значения: цвет — verbatim-строка (style:/web:/sys:/win:/#RRGGBB); шрифт — строка-ref или
+# объект-атрибуты; граница — строка-ref или объект {width,style|ref}. Порядок тегов — XSD (профиль).
+$script:appearanceSpec = @{
+	titleTextColor  = @{ tag='TitleTextColor';  kind='color' }
+	titleBackColor  = @{ tag='TitleBackColor';  kind='color' }
+	titleFont       = @{ tag='TitleFont';       kind='font'  }
+	footerTextColor = @{ tag='FooterTextColor'; kind='color' }
+	footerBackColor = @{ tag='FooterBackColor'; kind='color' }
+	footerFont      = @{ tag='FooterFont';      kind='font'  }
+	textColor       = @{ tag='TextColor';       kind='color' }
+	backColor       = @{ tag='BackColor';       kind='color' }
+	borderColor     = @{ tag='BorderColor';     kind='color' }
+	border          = @{ tag='Border';          kind='border'}
+	font            = @{ tag='Font';            kind='font'  }
+}
+# Рус. синоним (lower) → canonical key
+$script:appearanceSynonyms = @{
+	'цветтекста'='textColor'; 'цветфона'='backColor'; 'цветрамки'='borderColor'
+	'цветтекстазаголовка'='titleTextColor'; 'цветфоназаголовка'='titleBackColor'; 'шрифтзаголовка'='titleFont'
+	'цветтекстаподвала'='footerTextColor'; 'цветфонаподвала'='footerBackColor'; 'шрифтподвала'='footerFont'
+	'шрифт'='font'; 'рамка'='border'
+}
+# Профили порядка тегов по базовым типам (XSD-последовательность)
+$script:appOrderField      = @('titleTextColor','titleBackColor','titleFont','footerTextColor','footerBackColor','footerFont','textColor','backColor','borderColor','border','font')
+$script:appOrderDecoration = @('textColor','font','backColor','borderColor','border')
+$script:appOrderButton     = @('textColor','backColor','borderColor','font')
+
+function Get-AppearanceValue {
+	param($el, [string]$canonical)
+	if ($null -eq $el) { return $null }
+	$p = $el.PSObject.Properties[$canonical]
+	if ($p) { return $p.Value }
+	foreach ($syn in $script:appearanceSynonyms.Keys) {
+		if ($script:appearanceSynonyms[$syn] -eq $canonical) {
+			$pp = $el.PSObject.Properties[$syn]
+			if ($pp) { return $pp.Value }
+		}
+	}
+	return $null
+}
+
+# <Font|TitleFont|FooterFont …> — строка = ref на стиль (kind=StyleItem); объект = атрибуты.
+function Emit-FontTag {
+	param([string]$tag, $val, [string]$indent)
+	if ($val -is [string]) {
+		X "$indent<$tag ref=`"$(Esc-Xml $val)`" kind=`"StyleItem`"/>"
+		return
+	}
+	$attrs = @()
+	foreach ($a in @('ref','faceName','height','bold','italic','underline','strikeout','kind','scale')) {
+		$pp = $val.PSObject.Properties[$a]
+		if ($pp -and $null -ne $pp.Value) {
+			$v = $pp.Value
+			if ($v -is [bool]) { $v = if ($v) {'true'} else {'false'} }
+			$attrs += "$a=`"$(Esc-Xml "$v")`""
+		}
+	}
+	X "$indent<$tag $($attrs -join ' ')/>"
+}
+
+# <Border> — строка/{ref} = из стиля (<Border ref="style:X"/>); {width,style} = явная.
+function Emit-BorderTag {
+	param($val, [string]$indent)
+	if ($val -is [string]) { X "$indent<Border ref=`"$(Esc-Xml $val)`"/>"; return }
+	$refP = $val.PSObject.Properties['ref']
+	if ($refP -and $refP.Value) { X "$indent<Border ref=`"$(Esc-Xml "$($refP.Value)")`"/>"; return }
+	$width = if ($val.PSObject.Properties['width'] -and $null -ne $val.width) { $val.width } else { 1 }
+	$style = if ($val.PSObject.Properties['style']) { "$($val.style)" } else { $null }
+	X "$indent<Border width=`"$width`">"
+	if ($style) { X "$indent`t<v8ui:style xsi:type=`"v8ui:ControlBorderType`">$(Esc-Xml $style)</v8ui:style>" }
+	X "$indent</Border>"
+}
+
+function Emit-Appearance {
+	param($el, [string]$indent, [string]$profile = 'field')
+	if ($null -eq $el) { return }
+	$order = switch ($profile) {
+		'decoration' { $script:appOrderDecoration }
+		'button'     { $script:appOrderButton }
+		default      { $script:appOrderField }
+	}
+	foreach ($key in $order) {
+		$val = Get-AppearanceValue -el $el -canonical $key
+		if ($null -eq $val -or ($val -is [string] -and $val -eq '')) { continue }
+		$spec = $script:appearanceSpec[$key]
+		switch ($spec.kind) {
+			'color'  { X "$indent<$($spec.tag)>$(Esc-Xml "$val")</$($spec.tag)>" }
+			'font'   { Emit-FontTag -tag $spec.tag -val $val -indent $indent }
+			'border' { Emit-BorderTag -val $val -indent $indent }
+		}
+	}
+}
+
 function Emit-Layout {
 	param($el, [string]$indent, [switch]$skipHeight, [bool]$multiLineDefault = $false)
 	Emit-CommonElementProps -el $el -indent $indent
@@ -2838,6 +2934,9 @@ function Emit-Input {
 
 	Emit-ChoiceList -el $el -indent $inner
 
+	# Оформление (цвета/шрифты/граница) — перед компаньонами
+	Emit-Appearance -el $el -indent $inner -profile 'field'
+
 	# Companions
 	Emit-CompanionPanel -tag "ContextMenu" -name "${name}КонтекстноеМеню" -indent $inner -panel $el.contextMenu
 	Emit-Companion -tag "ExtendedTooltip" -name "${name}РасширеннаяПодсказка" -indent $inner -content $el.extendedTooltip
@@ -2871,6 +2970,9 @@ function Emit-Check {
 	Emit-TitleLocation -el $el -indent $inner -smartDefault "Right"
 
 	Emit-Layout -el $el -indent $inner
+
+	# Оформление (цвета/шрифты/граница) — перед компаньонами
+	Emit-Appearance -el $el -indent $inner -profile 'field'
 
 	# Companions
 	Emit-CompanionPanel -tag "ContextMenu" -name "${name}КонтекстноеМеню" -indent $inner -panel $el.contextMenu
@@ -3100,6 +3202,9 @@ function Emit-Radio {
 
 	Emit-Layout -el $el -indent $inner
 
+	# Оформление (цвета/шрифты/граница) — перед компаньонами
+	Emit-Appearance -el $el -indent $inner -profile 'field'
+
 	# Companions
 	Emit-CompanionPanel -tag "ContextMenu" -name "${name}КонтекстноеМеню" -indent $inner -panel $el.contextMenu
 	Emit-Companion -tag "ExtendedTooltip" -name "${name}РасширеннаяПодсказка" -indent $inner -content $el.extendedTooltip
@@ -3140,6 +3245,9 @@ function Emit-Label {
 	if ($el.hyperlink -eq $true) { X "$inner<Hyperlink>true</Hyperlink>" }
 	Emit-Layout -el $el -indent $inner
 
+	# Оформление (цвета/шрифт/граница) — перед компаньонами (профиль декорации)
+	Emit-Appearance -el $el -indent $inner -profile 'decoration'
+
 	# Companions
 	Emit-CompanionPanel -tag "ContextMenu" -name "${name}КонтекстноеМеню" -indent $inner -panel $el.contextMenu
 	Emit-Companion -tag "ExtendedTooltip" -name "${name}РасширеннаяПодсказка" -indent $inner -content $el.extendedTooltip
@@ -3166,6 +3274,9 @@ function Emit-LabelField {
 	# ВНИМАНИЕ: у LabelField платформенный тег именно <Hiperlink> (опечатка 1С), не <Hyperlink>.
 	if ($el.hyperlink -eq $true) { X "$inner<Hiperlink>true</Hiperlink>" }
 	Emit-Layout -el $el -indent $inner
+
+	# Оформление (цвета/шрифты/граница + header/footer) — перед компаньонами
+	Emit-Appearance -el $el -indent $inner -profile 'field'
 
 	# Companions
 	Emit-CompanionPanel -tag "ContextMenu" -name "${name}КонтекстноеМеню" -indent $inner -panel $el.contextMenu
@@ -3454,6 +3565,9 @@ function Emit-Button {
 		X "$inner<LocationInCommandBar>$($el.locationInCommandBar)</LocationInCommandBar>"
 	}
 	Emit-Layout -el $el -indent $inner
+
+	# Оформление (цвета/шрифт/граница) — перед компаньоном (профиль кнопки)
+	Emit-Appearance -el $el -indent $inner -profile 'button'
 
 	# Companion
 	Emit-Companion -tag "ExtendedTooltip" -name "${name}РасширеннаяПодсказка" -indent $inner -content $el.extendedTooltip

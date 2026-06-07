@@ -1,4 +1,4 @@
-﻿# form-decompile v0.46 — Decompile 1C managed Form.xml to JSON DSL (draft)
+﻿# form-decompile v0.47 — Decompile 1C managed Form.xml to JSON DSL (draft)
 # Source: https://github.com/Nikolay-Shirokov/cc-1c-skills
 # ВНИМАНИЕ: раундтрип не гарантируется. Навык исключён из авто-использования моделью.
 param(
@@ -867,8 +867,61 @@ function Get-PictureRef {
 	return $ref.InnerText
 }
 
+# Шрифт <Font ...> → строка-ref (если только ref+kind=StyleItem) или объект-атрибуты.
+function Build-FontValue {
+	param($f)
+	$present = @()
+	foreach ($a in @('ref','faceName','height','bold','italic','underline','strikeout','kind','scale')) {
+		if ($f.HasAttribute($a)) { $present += $a }
+	}
+	# Чистый style-ref (ref + kind=StyleItem) → строка-шорткат
+	if ($present.Count -eq 2 -and ($present -contains 'ref') -and $f.GetAttribute('kind') -eq 'StyleItem') {
+		return $f.GetAttribute('ref')
+	}
+	$o = [ordered]@{}
+	foreach ($k in $present) {
+		$v = $f.GetAttribute($k)
+		if ($k -in @('height','scale') -and $v -match '^-?\d+$') { $o[$k] = [int]$v }
+		elseif ($k -in @('bold','italic','underline','strikeout')) { $o[$k] = ($v -eq 'true') }
+		else { $o[$k] = $v }
+	}
+	return $o
+}
+
+# Граница <Border> → строка-ref (из стиля) или объект {width, style}.
+function Build-BorderValue {
+	param($b)
+	if ($b.HasAttribute('ref')) { return $b.GetAttribute('ref') }
+	$o = [ordered]@{}
+	if ($b.HasAttribute('width')) { $w = $b.GetAttribute('width'); $o['width'] = if ($w -match '^-?\d+$') { [int]$w } else { $w } }
+	$st = $b.SelectSingleNode("v8ui:style", $ns)
+	if ($st) { $o['style'] = $st.InnerText }
+	return $o
+}
+
+# Оформление элемента (цвета/шрифты/граница) → canonical DSL-ключи. Цвет — verbatim-строка.
+function Add-Appearance {
+	param($obj, $node)
+	$colorMap = @{
+		'TitleTextColor'='titleTextColor'; 'TitleBackColor'='titleBackColor'
+		'FooterTextColor'='footerTextColor'; 'FooterBackColor'='footerBackColor'
+		'TextColor'='textColor'; 'BackColor'='backColor'; 'BorderColor'='borderColor'
+	}
+	foreach ($tag in $colorMap.Keys) {
+		$c = $node.SelectSingleNode("lf:$tag", $ns)
+		if ($c) { $obj[$colorMap[$tag]] = $c.InnerText }
+	}
+	foreach ($pair in @(@('Font','font'), @('TitleFont','titleFont'), @('FooterFont','footerFont'))) {
+		$f = $node.SelectSingleNode("lf:$($pair[0])", $ns)
+		if ($f) { $obj[$pair[1]] = (Build-FontValue $f) }
+	}
+	$b = $node.SelectSingleNode("lf:Border", $ns)
+	if ($b) { $obj['border'] = (Build-BorderValue $b) }
+}
+
 function Add-CommonProps {
 	param($obj, $node, [string]$elName)
+	Add-Appearance $obj $node
 	if ((Get-Child $node 'Visible') -eq 'false') { $obj['hidden'] = $true }
 	if ((Get-Child $node 'Enabled') -eq 'false') { $obj['disabled'] = $true }
 	if ((Get-Child $node 'ReadOnly') -eq 'true') { $obj['readOnly'] = $true }

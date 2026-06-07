@@ -195,6 +195,36 @@ companion-панели с собственным контентом. Оба не
     { "button": "Карта", "commandName": "CommonCommand.КартаМаршрута" } ] } }
 ```
 
+### 4.1e. Оформление элемента (цвета / шрифты / граница)
+
+Прямые свойства оформления элемента. Ключи — англ. camelCase 1:1 с тегами; **принимаются рус. синонимы** (forgiving). Применимо к полям (input/check/radio/labelField), декорациям (label) и кнопкам (button); порядок тегов в XML — по базовому типу (профиль), компилятор расставляет сам.
+
+| Ключ | Тег | Рус. синоним |
+|------|-----|--------------|
+| `textColor` / `backColor` / `borderColor` | `<TextColor>`/`<BackColor>`/`<BorderColor>` | `ЦветТекста` / `ЦветФона` / `ЦветРамки` |
+| `titleTextColor` / `titleBackColor` / `titleFont` | `<Title*>` (заголовок колонки) | `ЦветТекстаЗаголовка` / `ЦветФонаЗаголовка` / `ШрифтЗаголовка` |
+| `footerTextColor` / `footerBackColor` / `footerFont` | `<Footer*>` (подвал колонки) | `ЦветТекстаПодвала` / `ЦветФонаПодвала` / `ШрифтПодвала` |
+| `font` | `<Font>` | `Шрифт` |
+| `border` | `<Border>` | `Рамка` |
+
+**Цвет** — строка verbatim (компилятор не валидирует, эмитит как есть): `style:ИмяСтиля` (ссылка на элемент стиля конфигурации/платформы), `web:Имя` (web-палитра, напр. `web:FireBrick`), `win:Имя` (системная палитра Windows, напр. `win:MenuBar`, `win:ButtonText`, `win:DisabledText`), `#RRGGBB` (RGB-hex). Имя должно существовать в своей палитре (несуществующее, напр. `win:InactiveTitleBar`, или ссылка на отсутствующий `style:X` — приводит к ошибке загрузки). Префикс `sys:` в типовых выгрузках не встречается.
+
+**Шрифт** (`font`/`titleFont`/`footerFont`):
+- строка `"style:X"` → `<Font ref="style:X" kind="StyleItem"/>` (минимальная форма, платформа её принимает);
+- объект — эмитятся **только указанные** атрибуты (дефолты не досочиняются): `{ ref?, faceName?, height?, bold?, italic?, underline?, strikeout?, kind?, scale? }`. Для `kind="Absolute"` задают `faceName`+`height`; для `WindowsFont` — `ref="sys:…"`.
+
+**Граница** (`border`):
+- строка `"style:X"` (или `{ ref }`) → `<Border ref="style:X"/>` (граница из стиля);
+- объект `{ width, style }` → `<Border width="N"><v8ui:style…>СТИЛЬ</v8ui:style></Border>`. `style` — системное перечисление `ControlBorderType`: `Single`, `Double`, `Underline`, `DoubleUnderline`, `Overline`, `Embossed`, `Indented`, `WithoutBorder`.
+
+```json
+{ "label": "Внимание!", "textColor": "web:FireBrick",
+  "font": { "faceName": "Arial", "height": 12, "bold": true, "kind": "Absolute", "scale": 100 },
+  "border": { "width": 1, "style": "Single" } }
+{ "input": "Цена", "path": "Объект.Цена", "textColor": "#FF0000", "borderColor": "style:BorderColor" }
+{ "labelField": "Код", "цветТекстаЗаголовка": "web:HoneyDew", "border": "style:ControlBorder" }
+```
+
 ### 4.1a. Общие layout-свойства
 
 Применимы к любому элементу (размеры, растягивание, выравнивание внутри родителя). Эмитятся только при указании.
