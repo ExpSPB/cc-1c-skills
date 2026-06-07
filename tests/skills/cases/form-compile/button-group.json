@@ -22,7 +22,10 @@
           { "button": "Вверх", "command": "Вверх" },
           { "button": "Вниз", "command": "Вниз" }
         ]},
-        { "buttonGroup": "ГруппаГлобальныеКоманды", "commandSource": "FormCommandPanelGlobalCommands" }
+        { "buttonGroup": "ГруппаГлобальныеКоманды", "commandSource": "FormCommandPanelGlobalCommands" },
+        { "popup": "ПодменюПечать", "title": "Печать", "picture": "StdPicture.Print", "representation": "PictureAndText", "children": [
+          { "button": "ПечатьСчёта", "command": "Выполнить" }
+        ]}
       ]}
     ],
     "attributes": [

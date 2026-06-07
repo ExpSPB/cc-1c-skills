@@ -1,4 +1,4 @@
-﻿# form-compile v1.58 — Compile 1C managed form from JSON or object metadata
+﻿# form-compile v1.59 — Compile 1C managed form from JSON or object metadata
 # Source: https://github.com/Nikolay-Shirokov/cc-1c-skills
 param(
 	[string]$JsonPath,
@@ -2392,7 +2392,9 @@ function Emit-Element {
 	$typeKey = $null
 	$xmlTag = $null
 
-	foreach ($key in @("columnGroup","buttonGroup","group","input","check","radio","label","labelField","table","pages","page","button","picture","picField","calendar","cmdBar","popup")) {
+	# picture/picField — НИЗКИЙ приоритет: 'picture' это и тип (PictureDecoration), и свойство-иконка
+	# у popup/button/cmdBar. Тип-ключ владельца (popup/button/…) должен выиграть.
+	foreach ($key in @("columnGroup","buttonGroup","group","input","check","radio","label","labelField","table","pages","page","button","calendar","cmdBar","popup","picField","picture")) {
 		if ($el.$key -ne $null) {
 			$typeKey = $key
 			break
@@ -3384,6 +3386,8 @@ function Emit-Button {
 			X "$inner<CommandName>Form.StandardCommand.$sc</CommandName>"
 		}
 	}
+	# DataPath — привязка команды кнопки к контексту (Объект.Ref, Items.X.CurrentData.Поле)
+	if ($el.path) { X "$inner<DataPath>$($el.path)</DataPath>" }
 
 	$btnAuto = -not ($el.command -or $el.commandName -or $el.stdCommand)
 	Emit-Title -el $el -name $name -indent $inner -auto:$btnAuto

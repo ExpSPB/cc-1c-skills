@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-# form-compile v1.58 — Compile 1C managed form from JSON or object metadata
+# form-compile v1.59 — Compile 1C managed form from JSON or object metadata
 # Source: https://github.com/Nikolay-Shirokov/cc-1c-skills
 import argparse
 import copy
@@ -1796,8 +1796,10 @@ KNOWN_KEYS = {
     "userSettingsGroup", "rowsPicture",
 }
 
+# picture/picField — НИЗКИЙ приоритет: 'picture' это и тип (PictureDecoration), и свойство-иконка
+# у popup/button/cmdBar. Тип-ключ владельца (popup/button/…) должен выиграть.
 TYPE_KEYS = ["columnGroup", "buttonGroup", "group", "input", "check", "radio", "label", "labelField", "table", "pages", "page",
-             "button", "picture", "picField", "calendar", "cmdBar", "popup"]
+             "button", "calendar", "cmdBar", "popup", "picField", "picture"]
 
 # Synonyms: model often writes XML name or Russian (ПолеПереключателя/RadioButtonField → radio)
 ELEMENT_TYPE_SYNONYMS = {
@@ -3081,6 +3083,9 @@ def emit_button(lines, el, name, eid, indent, in_cmd_bar=False):
             lines.append(f'{inner}<CommandName>Form.Item.{m.group(1)}.StandardCommand.{m.group(2)}</CommandName>')
         else:
             lines.append(f'{inner}<CommandName>Form.StandardCommand.{sc}</CommandName>')
+    # DataPath — привязка команды кнопки к контексту (Объект.Ref, Items.X.CurrentData.Поле)
+    if el.get('path'):
+        lines.append(f'{inner}<DataPath>{el["path"]}</DataPath>')
 
     emit_title(lines, el, name, inner, auto=not (el.get('command') or el.get('commandName') or el.get('stdCommand')))
     emit_common_flags(lines, el, inner)
