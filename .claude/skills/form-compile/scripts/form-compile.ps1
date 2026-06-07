@@ -1,4 +1,4 @@
-﻿# form-compile v1.54 — Compile 1C managed form from JSON or object metadata
+﻿# form-compile v1.55 — Compile 1C managed form from JSON or object metadata
 # Source: https://github.com/Nikolay-Shirokov/cc-1c-skills
 param(
 	[string]$JsonPath,
@@ -3616,6 +3616,17 @@ function Emit-FunctionalOptions {
 	X "$indent</FunctionalOptions>"
 }
 
+# Колонка реквизита (ValueTable/Tree или AdditionalColumns): name/Title/Type/FunctionalOptions.
+function Emit-AttrColumn {
+	param($col, [string]$indent)
+	$colId = New-Id
+	X "$indent<Column name=`"$($col.name)`" id=`"$colId`">"
+	if ($col.title) { Emit-MLText -tag "Title" -text $col.title -indent "$indent`t" }
+	Emit-Type -typeStr "$($col.type)" -indent "$indent`t"
+	Emit-FunctionalOptions -fo $col.functionalOptions -indent "$indent`t"
+	X "$indent</Column>"
+}
+
 function Emit-Attributes {
 	param($attrs, [string]$indent)
 
@@ -3684,19 +3695,22 @@ function Emit-Attributes {
 
 		Emit-FunctionalOptions -fo $attr.functionalOptions -indent $inner
 
-		# Columns (for ValueTable/ValueTree). Для дин-списка (есть settings) колонки НЕ эмитим —
-		# они служат лишь для формирования UseAlways (поля выше).
-		if ($attr.columns -and $attr.columns.Count -gt 0 -and -not $attr.settings) {
+		# Columns: прямые <Column> (ValueTable/Tree) + <AdditionalColumns table="X"> (доп. колонки
+		# табличных частей объекта). Порядок схемы: прямые сначала, затем AdditionalColumns-группы.
+		# Для дин-списка (есть settings) прямые колонки НЕ эмитим (служат лишь для UseAlways).
+		$hasDirectCols = $attr.columns -and $attr.columns.Count -gt 0 -and -not $attr.settings
+		$hasAddCols = $attr.additionalColumns -and @($attr.additionalColumns).Count -gt 0
+		if ($hasDirectCols -or $hasAddCols) {
 			X "$inner<Columns>"
-			foreach ($col in $attr.columns) {
-				$colId = New-Id
-				X "$inner`t<Column name=`"$($col.name)`" id=`"$colId`">"
-				if ($col.title) {
-					Emit-MLText -tag "Title" -text $col.title -indent "$inner`t`t"
+			if ($hasDirectCols) {
+				foreach ($col in $attr.columns) { Emit-AttrColumn -col $col -indent "$inner`t" }
+			}
+			if ($hasAddCols) {
+				foreach ($ac in @($attr.additionalColumns)) {
+					X "$inner`t<AdditionalColumns table=`"$($ac.table)`">"
+					foreach ($col in @($ac.columns)) { Emit-AttrColumn -col $col -indent "$inner`t`t" }
+					X "$inner`t</AdditionalColumns>"
 				}
-				Emit-Type -typeStr "$($col.type)" -indent "$inner`t`t"
-				Emit-FunctionalOptions -fo $col.functionalOptions -indent "$inner`t`t"
-				X "$inner`t</Column>"
 			}
 			X "$inner</Columns>"
 		}

@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-# form-compile v1.54 — Compile 1C managed form from JSON or object metadata
+# form-compile v1.55 — Compile 1C managed form from JSON or object metadata
 # Source: https://github.com/Nikolay-Shirokov/cc-1c-skills
 import argparse
 import copy
@@ -3292,6 +3292,17 @@ def emit_functional_options(lines, fo, indent):
     lines.append(f'{indent}</FunctionalOptions>')
 
 
+def emit_attr_column(lines, col, indent):
+    # Колонка реквизита (ValueTable/Tree или AdditionalColumns): name/Title/Type/FunctionalOptions.
+    col_id = new_id()
+    lines.append(f'{indent}<Column name="{col["name"]}" id="{col_id}">')
+    if col.get('title'):
+        emit_mltext(lines, f'{indent}\t', 'Title', col['title'])
+    emit_type(lines, str(col.get('type', '')), f'{indent}\t')
+    emit_functional_options(lines, col.get('functionalOptions'), f'{indent}\t')
+    lines.append(f'{indent}</Column>')
+
+
 def emit_attributes(lines, attrs, indent):
     if not attrs or len(attrs) == 0:
         return
@@ -3354,18 +3365,21 @@ def emit_attributes(lines, attrs, indent):
 
         emit_functional_options(lines, attr.get('functionalOptions'), inner)
 
-        # Columns (for ValueTable/ValueTree). Для дин-списка (есть settings) колонки НЕ эмитим —
-        # они служат лишь для формирования UseAlways.
-        if attr.get('columns') and len(attr['columns']) > 0 and not attr.get('settings'):
+        # Columns: прямые <Column> + <AdditionalColumns table="X"> (доп. колонки табличных частей объекта).
+        # Прямые сначала, затем AdditionalColumns-группы. Для дин-списка (settings) прямые НЕ эмитим.
+        has_direct_cols = bool(attr.get('columns')) and len(attr['columns']) > 0 and not attr.get('settings')
+        has_add_cols = bool(attr.get('additionalColumns')) and len(attr['additionalColumns']) > 0
+        if has_direct_cols or has_add_cols:
             lines.append(f'{inner}<Columns>')
-            for col in attr['columns']:
-                col_id = new_id()
-                lines.append(f'{inner}\t<Column name="{col["name"]}" id="{col_id}">')
-                if col.get('title'):
-                    emit_mltext(lines, f'{inner}\t\t', 'Title', col['title'])
-                emit_type(lines, str(col.get('type', '')), f'{inner}\t\t')
-                emit_functional_options(lines, col.get('functionalOptions'), f'{inner}\t\t')
-                lines.append(f'{inner}\t</Column>')
+            if has_direct_cols:
+                for col in attr['columns']:
+                    emit_attr_column(lines, col, f'{inner}\t')
+            if has_add_cols:
+                for ac in attr['additionalColumns']:
+                    lines.append(f'{inner}\t<AdditionalColumns table="{ac["table"]}">')
+                    for col in (ac.get('columns') or []):
+                        emit_attr_column(lines, col, f'{inner}\t\t')
+                    lines.append(f'{inner}\t</AdditionalColumns>')
             lines.append(f'{inner}</Columns>')
 
         # Settings (динамический список)

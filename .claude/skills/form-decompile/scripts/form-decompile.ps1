@@ -1,4 +1,4 @@
-﻿# form-decompile v0.36 — Decompile 1C managed Form.xml to JSON DSL (draft)
+﻿# form-decompile v0.37 — Decompile 1C managed Form.xml to JSON DSL (draft)
 # Source: https://github.com/Nikolay-Shirokov/cc-1c-skills
 # ВНИМАНИЕ: раундтрип не гарантируется. Навык исключён из авто-использования моделью.
 param(
@@ -816,6 +816,16 @@ function Decompile-FunctionalOptions {
 	return $null
 }
 
+# Колонка реквизита (прямая или внутри AdditionalColumns): name/type/title/functionalOptions.
+function Decompile-AttrColumn {
+	param($c)
+	$co = [ordered]@{}; $co['name'] = $c.GetAttribute("name")
+	$cty = Decompile-Type ($c.SelectSingleNode("lf:Type", $ns)); if ($cty) { $co['type'] = $cty }
+	$ctNode = $c.SelectSingleNode("lf:Title", $ns); if ($ctNode) { $t = Get-LangText $ctNode; if ($null -ne $t) { $co['title'] = $t } }
+	$cfo = Decompile-FunctionalOptions $c; if ($cfo) { $co['functionalOptions'] = $cfo }
+	return $co
+}
+
 # Общие свойства элемента (visible/enabled/readonly/title/events) → в hash
 function Add-CommonProps {
 	param($obj, $node, [string]$elName)
@@ -1320,14 +1330,21 @@ if ($attrsNode) {
 		$colsNode = $a.SelectSingleNode("lf:Columns", $ns)
 		if ($colsNode) {
 			$cols = New-Object System.Collections.ArrayList
-			foreach ($c in @($colsNode.SelectNodes("lf:Column", $ns))) {
-				$co = [ordered]@{}; $co['name'] = $c.GetAttribute("name")
-				$cty = Decompile-Type ($c.SelectSingleNode("lf:Type", $ns)); if ($cty) { $co['type'] = $cty }
-				$ctNode = $c.SelectSingleNode("lf:Title", $ns); if ($ctNode) { $t = Get-LangText $ctNode; if ($null -ne $t) { $co['title'] = $t } }
-				$cfo = Decompile-FunctionalOptions $c; if ($cfo) { $co['functionalOptions'] = $cfo }
-				[void]$cols.Add($co)
-			}
+			foreach ($c in @($colsNode.SelectNodes("lf:Column", $ns))) { [void]$cols.Add((Decompile-AttrColumn $c)) }
 			if ($cols.Count -gt 0) { $ao['columns'] = @($cols) }
+			# AdditionalColumns: доп. колонки табличных частей объекта (группа на табличную часть)
+			$addNodes = @($colsNode.SelectNodes("lf:AdditionalColumns", $ns))
+			if ($addNodes.Count -gt 0) {
+				$addList = New-Object System.Collections.ArrayList
+				foreach ($an in $addNodes) {
+					$acObj = [ordered]@{}; $acObj['table'] = $an.GetAttribute("table")
+					$acCols = New-Object System.Collections.ArrayList
+					foreach ($c in @($an.SelectNodes("lf:Column", $ns))) { [void]$acCols.Add((Decompile-AttrColumn $c)) }
+					$acObj['columns'] = @($acCols)
+					[void]$addList.Add($acObj)
+				}
+				$ao['additionalColumns'] = @($addList)
+			}
 		}
 		# UseAlways: поля, всегда читаемые. Префикс "ИмяРеквизита." снимаем.
 		# ValueTable (есть columns): useAlways:true на совпавшей колонке; остальные → массив атрибута.

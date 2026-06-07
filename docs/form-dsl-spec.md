@@ -615,7 +615,8 @@ Pages поддерживает `pagesRepresentation`: `None`, `TabsOnTop`, `Tabs
 | `useAlways` | array | Поля, всегда читаемые (`<UseAlways><Field>Имя.Поле</Field>…`). Массив коротких имён полей (forgiving: с/без префикса `Имя.`). **Две формы**: этот массив на реквизите ИЛИ `useAlways: true` на колонке (`columns[*]`) — компилятор сливает. Для дин-списка — только массив (колонки не эмитятся, но формируют `<UseAlways>`) |
 | `savedData` | bool | Сохраняемые данные |
 | `fillChecking` | string | `Show`, `DontShow` |
-| `columns` | array | Колонки для ValueTable/ValueTree |
+| `columns` | array | Колонки для ValueTable/ValueTree (`{ name, type, title?, functionalOptions?, useAlways? }`) |
+| `additionalColumns` | array | Доп. колонки табличных частей объекта: `[{ table: "Объект.ТабЧасть", columns: [<col>] }]`. У главного реквизита-объекта; `<col>` — та же грамматика, что у `columns`. Эмитятся в `<Columns>` после прямых колонок |
 | `settings` | object | Настройки динамического списка (только `type: "DynamicList"`) |
 
 ### settings — динамический список
