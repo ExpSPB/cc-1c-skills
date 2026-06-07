@@ -1,4 +1,4 @@
-﻿# form-decompile v0.41 — Decompile 1C managed Form.xml to JSON DSL (draft)
+﻿# form-decompile v0.42 — Decompile 1C managed Form.xml to JSON DSL (draft)
 # Source: https://github.com/Nikolay-Shirokov/cc-1c-skills
 # ВНИМАНИЕ: раундтрип не гарантируется. Навык исключён из авто-использования моделью.
 param(
@@ -1194,6 +1194,8 @@ function Decompile-Element {
 			if ($type) { $tmap=@{'CommandBarButton'='commandBar';'UsualButton'='usual';'Hyperlink'='hyperlink';'CommandBarHyperlink'='hyperlink'}; if ($tmap.ContainsKey($type)) { $obj['type']=$tmap[$type] } else { $obj['type']=$type } }
 			if ((Get-Child $node 'DefaultButton') -eq 'true') { $obj['defaultButton'] = $true }
 			$ref = $node.SelectSingleNode("lf:Picture/xr:Ref", $ns); if ($ref) { $obj['picture'] = $ref.InnerText }
+			# Дефолт у picture кнопки/попапа = true → фиксируем только отклонение false (true опускаем)
+			$lt = $node.SelectSingleNode("lf:Picture/xr:LoadTransparent", $ns); if ($lt -and $lt.InnerText -eq 'false') { $obj['loadTransparent'] = $false }
 			$rep = Get-Child $node 'Representation'; if ($rep) { $obj['representation'] = $rep }
 			$lic = Get-Child $node 'LocationInCommandBar'; if ($lic) { $obj['locationInCommandBar'] = $lic }
 		}
@@ -1217,6 +1219,8 @@ function Decompile-Element {
 			$obj[$key] = $name
 			Add-CommonProps $obj $node $name
 			$ref = $node.SelectSingleNode("lf:Picture/xr:Ref", $ns); if ($ref) { $obj['picture'] = $ref.InnerText }
+			# Дефолт у picture кнопки/попапа = true → фиксируем только отклонение false (true опускаем)
+			$lt = $node.SelectSingleNode("lf:Picture/xr:LoadTransparent", $ns); if ($lt -and $lt.InnerText -eq 'false') { $obj['loadTransparent'] = $false }
 			$rep = Get-Child $node 'Representation'; if ($rep) { $obj['representation'] = $rep }
 			$kids = Decompile-Children $node
 			if ($kids) { $obj['children'] = $kids }
@@ -1469,6 +1473,8 @@ if ($cmdsNode) {
 		$cru = Get-Child $c 'CurrentRowUse'; if ($cru) { $co['currentRowUse'] = $cru }
 		$sc = Get-Child $c 'Shortcut'; if ($sc) { $co['shortcut'] = $sc }
 		$ref = $c.SelectSingleNode("lf:Picture/xr:Ref", $ns); if ($ref) { $co['picture'] = $ref.InnerText }
+		# Дефолт у picture команды = true → фиксируем только отклонение false (true опускаем)
+		$lt = $c.SelectSingleNode("lf:Picture/xr:LoadTransparent", $ns); if ($lt -and $lt.InnerText -eq 'false') { $co['loadTransparent'] = $false }
 		$rep = Get-Child $c 'Representation'; if ($rep) { $co['representation'] = $rep }
 		[void]$cmds.Add($co)
 	}

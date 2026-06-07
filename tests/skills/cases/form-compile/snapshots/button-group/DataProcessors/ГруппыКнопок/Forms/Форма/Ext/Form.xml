@@ -54,7 +54,7 @@
 					</Title>
 					<Picture>
 						<xr:Ref>StdPicture.Print</xr:Ref>
-						<xr:LoadTransparent>true</xr:LoadTransparent>
+						<xr:LoadTransparent>false</xr:LoadTransparent>
 					</Picture>
 					<Representation>PictureAndText</Representation>
 					<ExtendedTooltip name="ПодменюПечатьРасширеннаяПодсказка" id="14"/>

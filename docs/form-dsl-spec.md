@@ -500,6 +500,8 @@ Pages поддерживает `pagesRepresentation`: `None`, `TabsOnTop`, `Tabs
 | `type` | string | `usual`, `hyperlink`, `commandBar` |
 | `defaultButton` | bool | Кнопка по умолчанию |
 | `picture` | string | Ссылка на картинку (`StdPicture.Name`) |
+| `loadTransparent` | bool | Загружать картинку прозрачной (у `<Picture>` кнопки/команды/попапа). **Дефолт `true`** (эмитится всегда; `false` — явно). Также у `command` (§7) и `popup` |
+| `path` | string | DataPath кнопки общей команды (`Объект.Ref`, `Items.X.CurrentData.Поле`) — привязка к контексту |
 | `representation` | string | `Auto`, `Picture`, `Text`, `PictureAndText` |
 | `locationInCommandBar` | string | `InCommandBar`, `InAdditionalSubmenu` |
 

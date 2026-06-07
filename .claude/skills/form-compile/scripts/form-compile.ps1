@@ -1,4 +1,4 @@
-﻿# form-compile v1.59 — Compile 1C managed form from JSON or object metadata
+﻿# form-compile v1.60 — Compile 1C managed form from JSON or object metadata
 # Source: https://github.com/Nikolay-Shirokov/cc-1c-skills
 param(
 	[string]$JsonPath,
@@ -3399,7 +3399,7 @@ function Emit-Button {
 	if ($el.picture) {
 		X "$inner<Picture>"
 		X "$inner`t<xr:Ref>$($el.picture)</xr:Ref>"
-		X "$inner`t<xr:LoadTransparent>true</xr:LoadTransparent>"
+		X "$inner`t<xr:LoadTransparent>$(if ($el.loadTransparent -eq $false){'false'}else{'true'})</xr:LoadTransparent>"
 		X "$inner</Picture>"
 	}
 
@@ -3598,7 +3598,7 @@ function Emit-Popup {
 	if ($el.picture) {
 		X "$inner<Picture>"
 		X "$inner`t<xr:Ref>$($el.picture)</xr:Ref>"
-		X "$inner`t<xr:LoadTransparent>true</xr:LoadTransparent>"
+		X "$inner`t<xr:LoadTransparent>$(if ($el.loadTransparent -eq $false){'false'}else{'true'})</xr:LoadTransparent>"
 		X "$inner</Picture>"
 	}
 
@@ -3852,7 +3852,7 @@ function Emit-Commands {
 		if ($cmd.picture) {
 			X "$inner<Picture>"
 			X "$inner`t<xr:Ref>$($cmd.picture)</xr:Ref>"
-			X "$inner`t<xr:LoadTransparent>true</xr:LoadTransparent>"
+			X "$inner`t<xr:LoadTransparent>$(if ($cmd.loadTransparent -eq $false){'false'}else{'true'})</xr:LoadTransparent>"
 			X "$inner</Picture>"
 		}
 

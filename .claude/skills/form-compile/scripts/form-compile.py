@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-# form-compile v1.59 — Compile 1C managed form from JSON or object metadata
+# form-compile v1.60 — Compile 1C managed form from JSON or object metadata
 # Source: https://github.com/Nikolay-Shirokov/cc-1c-skills
 import argparse
 import copy
@@ -3097,7 +3097,7 @@ def emit_button(lines, el, name, eid, indent, in_cmd_bar=False):
     if el.get('picture'):
         lines.append(f'{inner}<Picture>')
         lines.append(f'{inner}\t<xr:Ref>{el["picture"]}</xr:Ref>')
-        lines.append(f'{inner}\t<xr:LoadTransparent>true</xr:LoadTransparent>')
+        lines.append(f'{inner}\t<xr:LoadTransparent>{"false" if el.get("loadTransparent") is False else "true"}</xr:LoadTransparent>')
         lines.append(f'{inner}</Picture>')
 
     if el.get('representation'):
@@ -3251,7 +3251,7 @@ def emit_popup(lines, el, name, eid, indent):
     if el.get('picture'):
         lines.append(f'{inner}<Picture>')
         lines.append(f'{inner}\t<xr:Ref>{el["picture"]}</xr:Ref>')
-        lines.append(f'{inner}\t<xr:LoadTransparent>true</xr:LoadTransparent>')
+        lines.append(f'{inner}\t<xr:LoadTransparent>{"false" if el.get("loadTransparent") is False else "true"}</xr:LoadTransparent>')
         lines.append(f'{inner}</Picture>')
 
     if el.get('representation'):
@@ -3509,7 +3509,7 @@ def emit_commands(lines, cmds, indent):
         if cmd.get('picture'):
             lines.append(f'{inner}<Picture>')
             lines.append(f'{inner}\t<xr:Ref>{cmd["picture"]}</xr:Ref>')
-            lines.append(f'{inner}\t<xr:LoadTransparent>true</xr:LoadTransparent>')
+            lines.append(f'{inner}\t<xr:LoadTransparent>{"false" if cmd.get("loadTransparent") is False else "true"}</xr:LoadTransparent>')
             lines.append(f'{inner}</Picture>')
 
         if cmd.get('representation'):
