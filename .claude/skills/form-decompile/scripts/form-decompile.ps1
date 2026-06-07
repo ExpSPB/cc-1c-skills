@@ -1,4 +1,4 @@
-﻿# form-decompile v0.48 — Decompile 1C managed Form.xml to JSON DSL (draft)
+﻿# form-decompile v0.49 — Decompile 1C managed Form.xml to JSON DSL (draft)
 # Source: https://github.com/Nikolay-Shirokov/cc-1c-skills
 # ВНИМАНИЕ: раундтрип не гарантируется. Навык исключён из авто-использования моделью.
 param(
@@ -1173,7 +1173,12 @@ function Decompile-ChoiceList {
 			$xsiType = $valNode.GetAttribute("type", $NS_XSI)
 			$ci['value'] = Convert-TypedValue $valNode.InnerText $xsiType
 		}
-		if ($presNode) { $p = Get-LangText $presNode; if ($p) { $ci['presentation'] = $p } }
+		# Presentation: непустой → текст/мультиязык; пустой <Presentation/> → "" — суппресс-маркер,
+		# подавляет авто-вывод компилятора (иначе компилятор додумает presentation из значения).
+		if ($presNode) {
+			$p = Get-LangText $presNode
+			if ($null -ne $p -and $p -ne '') { $ci['presentation'] = $p } else { $ci['presentation'] = '' }
+		}
 		[void]$items.Add($ci)
 	}
 	if ($items.Count -gt 0) { return ,@($items) }
