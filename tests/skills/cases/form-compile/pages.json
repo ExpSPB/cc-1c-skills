@@ -21,7 +21,7 @@
         { "page": "Шаг1", "title": "", "children": [
           { "input": "Параметр1", "path": "Параметр1" }
         ]},
-        { "page": "Шаг2", "title": "Результат", "tooltip": "Шаг \"Результат\"", "children": [
+        { "page": "Шаг2", "title": "Результат", "tooltip": "Шаг \"Результат\"", "group": "horizontal", "children": [
           { "input": "Итог", "path": "Итог", "readOnly": true }
         ]}
       ]},

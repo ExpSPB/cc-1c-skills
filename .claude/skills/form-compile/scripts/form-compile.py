@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-# form-compile v1.60 — Compile 1C managed form from JSON or object metadata
+# form-compile v1.61 — Compile 1C managed form from JSON or object metadata
 # Source: https://github.com/Nikolay-Shirokov/cc-1c-skills
 import argparse
 import copy
@@ -1798,7 +1798,9 @@ KNOWN_KEYS = {
 
 # picture/picField — НИЗКИЙ приоритет: 'picture' это и тип (PictureDecoration), и свойство-иконка
 # у popup/button/cmdBar. Тип-ключ владельца (popup/button/…) должен выиграть.
-TYPE_KEYS = ["columnGroup", "buttonGroup", "group", "input", "check", "radio", "label", "labelField", "table", "pages", "page",
+# pages/page ПЕРЕД group: у Page/Pages ключ 'group' — это направление раскладки детей
+# (<Group>Horizontal</Group>), а не тип UsualGroup. Реальная UsualGroup ключа page/pages не несёт.
+TYPE_KEYS = ["columnGroup", "buttonGroup", "pages", "page", "group", "input", "check", "radio", "label", "labelField", "table",
              "button", "calendar", "cmdBar", "popup", "picField", "picture"]
 
 # Synonyms: model often writes XML name or Russian (ПолеПереключателя/RadioButtonField → radio)
