@@ -670,6 +670,7 @@ Pages поддерживает `pagesRepresentation`: `None`, `TabsOnTop`, `Tabs
 | `query` | string | Текст запроса (`ManualQuery=true`). Поддерживает `@file.sql` (путь относительно JSON) |
 | `dynamicDataRead` | bool | Динамическое считывание. **Умолчание `true`** — указывать только для отключения (`false`) |
 | `fields` | array | Явные поля набора (редко): `{ field, dataPath?, title? }` — для переопределения заголовка. Обычно поля выводятся из запроса автоматически |
+| `parameters` | array | Параметры схемы запроса (`DataCompositionSchemaParameter`) — см. ниже |
 | `order` | array | Сортировка списка (см. ниже) |
 | `filter` | array | Отбор списка (грамматика как в СКД) |
 | `conditionalAppearance` | array | Условное оформление списка (грамматика как в СКД) |
@@ -677,6 +678,32 @@ Pages поддерживает `pagesRepresentation`: `None`, `TabsOnTop`, `Tabs
 `ManualQuery` выводится из наличия `query` — отдельным ключом не задаётся.
 
 Пустой блок настроек компоновщика (`ListSettings`) генерируется автоматически (каноничный скелет платформы); указывать ничего не нужно.
+
+#### parameters — параметры схемы дин-списка
+
+Параметры запроса дин-списка — это та же сущность `DataCompositionSchemaParameter`, что и параметры СКД (`&Параметр` в тексте запроса). **Грамматика идентична параметрам СКД** (см. [skd-dsl-spec.md](skd-dsl-spec.md)): shorthand `"Имя [Заголовок]: Тип = Значение @valueList @hidden"` или объект. Используй те же ключи — модель переносит знание один-в-один.
+
+```json
+"settings": {
+  "query": "ВЫБРАТЬ … ГДЕ Товары.Артикул = &Артикул И … ПОДОБНО &Маска",
+  "parameters": [
+    "Артикул",
+    "Маска: string = %",
+    { "name": "ВидЦен", "valueListAllowed": true },
+    { "name": "Период", "type": "dateTime", "useRestriction": false }
+  ]
+}
+```
+
+Отличия контекста дин-списка от параметров отчёта СКД (видимы только в дефолтах — модель просто опускает ключ):
+
+| Поведение | Дин-список |
+|-----------|-----------|
+| `title` | Авто из имени (camelCase → «Заполнена серия»); явный `title`/`[Заголовок]` — только для переопределения |
+| `useRestriction` | Эмитится всегда, **умолчание `true`**; для выключения — объект `{ "useRestriction": false }` |
+| `value` | Умолчание — пустое (`xsi:nil`), даже при заданном типе |
+
+Объектные ключи (как в СКД): `name`, `title`, `type`/`valueType`, `value`, `valueListAllowed`, `useRestriction`, `availableAsField`, `expression`, `availableValues` (`[{ value, presentation }]`), `inputParameters`, `denyIncompleteValues`, `use`.
 
 #### order / filter / conditionalAppearance
 

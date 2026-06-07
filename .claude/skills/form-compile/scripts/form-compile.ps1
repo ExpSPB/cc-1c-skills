@@ -1,4 +1,4 @@
-﻿# form-compile v1.63 — Compile 1C managed form from JSON or object metadata
+﻿# form-compile v1.64 — Compile 1C managed form from JSON or object metadata
 # Source: https://github.com/Nikolay-Shirokov/cc-1c-skills
 param(
 	[string]$JsonPath,
@@ -3684,6 +3684,257 @@ function Emit-AttrColumn {
 	X "$indent</Column>"
 }
 
+# --- Schema-параметры динамического списка (DataCompositionSchemaParameter) ---
+# Та же сущность, что параметры СКД (см. skd-compile), но в форме: обёртка <Parameter>
+# + дети с префиксом dcssch:. DSL переиспользует грамматику параметров СКД (shorthand +
+# объект). Контекстные дефолты дин-списка (паттерн «умный дефолт у всегда-эмитируемого тега»):
+#   useRestriction — эмитим ВСЕГДА, дефолт TRUE (в СКД дефолт false);
+#   title — авто из имени (Title-FromName), если ключ не задан.
+# Канон. порядок детей (по корпусу acc/erp 8.3.24): name, title, valueType, value,
+#   useRestriction, expression, availableValue*, valueListAllowed, availableAsField,
+#   inputParameters, denyIncompleteValues, use.
+
+# Многоязычный текст в DCS-контексте — с xsi:type="v8:LocalStringType" (form-compile
+# Emit-MLText его НЕ ставит, т.к. формовые <Title> голые; в dcssch:* — обязателен).
+function Emit-DLMLText {
+	param([string]$tag, $text, [string]$indent)
+	X "$indent<$tag xsi:type=`"v8:LocalStringType`">"
+	Emit-MLItems -val $text -indent "$indent`t"
+	X "$indent</$tag>"
+}
+
+function Has-DLProp {
+	param($obj, [string]$name)
+	if ($null -eq $obj) { return $false }
+	if ($obj -is [System.Collections.IDictionary]) { return $obj.Contains($name) }
+	if ($obj.PSObject -and $obj.PSObject.Properties[$name]) { return $true }
+	return $false
+}
+
+function Split-DLValueListCsv {
+	param([string]$s)
+	$result = @()
+	if ($null -eq $s) { return ,$result }
+	$items = @(); $buf = New-Object System.Text.StringBuilder; $inQuote = $null
+	for ($i = 0; $i -lt $s.Length; $i++) {
+		$ch = $s[$i]
+		if ($inQuote) { [void]$buf.Append($ch); if ($ch -eq $inQuote) { $inQuote = $null } }
+		elseif ($ch -eq "'" -or $ch -eq '"') { $inQuote = $ch; [void]$buf.Append($ch) }
+		elseif ($ch -eq ',') { $items += $buf.ToString(); [void]$buf.Clear() }
+		else { [void]$buf.Append($ch) }
+	}
+	if ($buf.Length -gt 0) { $items += $buf.ToString() }
+	foreach ($raw in $items) {
+		$t = $raw.Trim()
+		if ($t.Length -ge 2 -and (($t[0] -eq "'" -and $t[-1] -eq "'") -or ($t[0] -eq '"' -and $t[-1] -eq '"'))) { $t = $t.Substring(1, $t.Length - 2) }
+		if ($t -ne "") { $result += $t }
+	}
+	return ,$result
+}
+
+# Shorthand: "Имя [Заголовок]: Тип = Значение @valueList @hidden"
+function Parse-DLParamShorthand {
+	param([string]$s)
+	$result = @{ name = ""; type = ""; value = $null; title = $null }
+	if ($s -match '@valueList') { $result.valueListAllowed = $true; $s = $s -replace '\s*@valueList', '' }
+	if ($s -match '@hidden')    { $result.hidden = $true; $s = $s -replace '\s*@hidden', '' }
+	if ($s -match '\[([^\]]*)\]') { $result.title = $Matches[1].Trim(); $s = ($s -replace '\s*\[[^\]]*\]\s*', ' ').Trim() }
+	if ($s -match '^([^:]+):\s*(\S+)(\s*=\s*(.*))?$') {
+		$result.name = $Matches[1].Trim()
+		$result.type = Resolve-TypeStr ($Matches[2].Trim())
+		if ($Matches[4]) {
+			$rhs = $Matches[4].Trim()
+			$items = Split-DLValueListCsv $rhs
+			if ($items.Count -ge 2) { $result.value = $items; $result.valueListAllowed = $true }
+			elseif ($items.Count -eq 1) { $result.value = $items[0] }
+			else { $result.value = $rhs }
+		}
+	} else { $result.name = $s.Trim() }
+	return $result
+}
+
+function Test-DLEmptyValue {
+	param($v)
+	if ($null -eq $v) { return $true }
+	$s = "$v".Trim()
+	if ($s -eq "" -or $s -eq "_" -or $s.ToLowerInvariant() -eq "null") { return $true }
+	return $false
+}
+
+# Эмиссия <dcssch:value> по типу/значению (xs:* или dcscor:DesignTimeValue для ссылок).
+function Emit-DLValue {
+	param([string]$type, $val, [string]$indent, [bool]$valueListAllowed = $false)
+	if (Test-DLEmptyValue $val) {
+		# Дин-список: пустое значение платформа ВСЕГДА пишет как xsi:nil, даже при известном
+		# типе (в отличие от типизированного пустого в параметрах отчёта СКД).
+		if ($valueListAllowed) { return }
+		X "$indent<dcssch:value xsi:nil=`"true`"/>"
+		return
+	}
+	$valStr = if ($val -is [bool]) { if ($val) { 'true' } else { 'false' } } else { "$val" }
+	if ($type -match '^(date|dateTime|time)') { X "$indent<dcssch:value xsi:type=`"xs:dateTime`">$(Esc-Xml $valStr)</dcssch:value>" }
+	elseif ($type -eq "boolean") { X "$indent<dcssch:value xsi:type=`"xs:boolean`">$(Esc-Xml $valStr)</dcssch:value>" }
+	elseif ($type -match '^decimal') { X "$indent<dcssch:value xsi:type=`"xs:decimal`">$(Esc-Xml $valStr)</dcssch:value>" }
+	elseif ($type -match '^string') { X "$indent<dcssch:value xsi:type=`"xs:string`">$(Esc-Xml $valStr)</dcssch:value>" }
+	elseif ($type -match '^(CatalogRef|DocumentRef|EnumRef|ChartOfAccountsRef|ChartOfCharacteristicTypesRef|ChartOfCalculationTypesRef|BusinessProcessRef|TaskRef|ExchangePlanRef)\.') { X "$indent<dcssch:value xsi:type=`"dcscor:DesignTimeValue`">$(Esc-Xml $valStr)</dcssch:value>" }
+	else {
+		if ($valStr -match '^\d{4}-\d{2}-\d{2}T') { X "$indent<dcssch:value xsi:type=`"xs:dateTime`">$(Esc-Xml $valStr)</dcssch:value>" }
+		elseif ($valStr -eq "true" -or $valStr -eq "false") { X "$indent<dcssch:value xsi:type=`"xs:boolean`">$(Esc-Xml $valStr)</dcssch:value>" }
+		elseif ($valStr -match '^(ПланСчетов|Справочник|Перечисление|Документ|ПланВидовХарактеристик|ПланВидовРасчета|БизнесПроцесс|Задача|РегистрСведений|ПланОбмена)\.' -or $valStr -match '^(ChartOfAccounts|Catalog|Enum|Document|ChartOfCharacteristicTypes|ChartOfCalculationTypes|BusinessProcess|Task|InformationRegister|ExchangePlan)\.') { X "$indent<dcssch:value xsi:type=`"dcscor:DesignTimeValue`">$(Esc-Xml $valStr)</dcssch:value>" }
+		else { X "$indent<dcssch:value xsi:type=`"xs:string`">$(Esc-Xml $valStr)</dcssch:value>" }
+	}
+}
+
+# <dcssch:valueType> — обёртка + тело через Emit-SingleType (ref-типы → cfg:, как в форме).
+function Emit-DLValueType {
+	param($typeStr, [string]$indent)
+	if (-not $typeStr) { return }
+	X "$indent<dcssch:valueType>"
+	$parts = "$typeStr" -split '\s*[|+]\s*'
+	foreach ($part in $parts) { Emit-SingleType -typeStr $part.Trim() -indent "$indent`t" }
+	X "$indent</dcssch:valueType>"
+}
+
+function Emit-DLAvailableValue {
+	param($av, [string]$type, [string]$indent)
+	X "$indent<dcssch:availableValue>"
+	$avVal = if (Has-DLProp $av 'value') { $av.value } else { $null }
+	Emit-DLValue -type $type -val $avVal -indent "$indent`t" -valueListAllowed $false
+	$pres = if ($av.presentation) { $av.presentation } elseif ($av.title) { $av.title } else { $null }
+	if ($pres) { Emit-DLMLText -tag "dcssch:presentation" -text $pres -indent "$indent`t" }
+	X "$indent</dcssch:availableValue>"
+}
+
+# <dcssch:inputParameters> — ChoiceParameters / ChoiceParameterLinks / простое значение (порт из skd).
+function Emit-DLInputParameters {
+	param($ip, [string]$indent)
+	if ($null -eq $ip) { return }
+	$items = @($ip)
+	if ($items.Count -eq 0) { return }
+	X "$indent<dcssch:inputParameters>"
+	foreach ($item in $items) {
+		X "$indent`t<dcscor:item>"
+		if ((Has-DLProp $item 'use') -and $null -ne $item.use -and -not $item.use) { X "$indent`t`t<dcscor:use>false</dcscor:use>" }
+		X "$indent`t`t<dcscor:parameter>$(Esc-Xml "$($item.parameter)")</dcscor:parameter>"
+		if (Has-DLProp $item 'choiceParameters') {
+			$cpItems = if ($null -ne $item.choiceParameters) { @($item.choiceParameters) } else { @() }
+			if ($cpItems.Count -eq 0) { X "$indent`t`t<dcscor:value xsi:type=`"dcscor:ChoiceParameters`"/>" }
+			else {
+				X "$indent`t`t<dcscor:value xsi:type=`"dcscor:ChoiceParameters`">"
+				foreach ($cpItem in $cpItems) {
+					X "$indent`t`t`t<dcscor:item>"
+					X "$indent`t`t`t`t<dcscor:choiceParameter>$(Esc-Xml "$($cpItem.name)")</dcscor:choiceParameter>"
+					foreach ($v in @($cpItem.values)) {
+						if ($v -is [bool]) { X "$indent`t`t`t`t<dcscor:value xsi:type=`"xs:boolean`">$(if ($v) { 'true' } else { 'false' })</dcscor:value>" }
+						elseif ($v -is [int] -or $v -is [long] -or $v -is [double] -or $v -is [decimal]) { X "$indent`t`t`t`t<dcscor:value xsi:type=`"xs:decimal`">$v</dcscor:value>" }
+						else { X "$indent`t`t`t`t<dcscor:value xsi:type=`"dcscor:DesignTimeValue`">$(Esc-Xml "$v")</dcscor:value>" }
+					}
+					X "$indent`t`t`t</dcscor:item>"
+				}
+				X "$indent`t`t</dcscor:value>"
+			}
+		} elseif (Has-DLProp $item 'choiceParameterLinks') {
+			$cplItems = if ($null -ne $item.choiceParameterLinks) { @($item.choiceParameterLinks) } else { @() }
+			if ($cplItems.Count -eq 0) { X "$indent`t`t<dcscor:value xsi:type=`"dcscor:ChoiceParameterLinks`"/>" }
+			else {
+				X "$indent`t`t<dcscor:value xsi:type=`"dcscor:ChoiceParameterLinks`">"
+				foreach ($cplItem in $cplItems) {
+					X "$indent`t`t`t<dcscor:item>"
+					X "$indent`t`t`t`t<dcscor:choiceParameter>$(Esc-Xml "$($cplItem.name)")</dcscor:choiceParameter>"
+					X "$indent`t`t`t`t<dcscor:value>$(Esc-Xml "$($cplItem.value)")</dcscor:value>"
+					$mode = if ($cplItem.mode) { "$($cplItem.mode)" } else { 'Auto' }
+					X "$indent`t`t`t`t<dcscor:mode xmlns:d8p1=`"http://v8.1c.ru/8.1/data/enterprise`" xsi:type=`"d8p1:LinkedValueChangeMode`">$mode</dcscor:mode>"
+					X "$indent`t`t`t</dcscor:item>"
+				}
+				X "$indent`t`t</dcscor:value>"
+			}
+		} elseif (Has-DLProp $item 'value') {
+			$val = $item.value
+			if ($val -is [bool]) { X "$indent`t`t<dcscor:value xsi:type=`"xs:boolean`">$(if ($val) { 'true' } else { 'false' })</dcscor:value>" }
+			elseif ($val -is [int] -or $val -is [long] -or $val -is [double] -or $val -is [decimal]) { X "$indent`t`t<dcscor:value xsi:type=`"xs:decimal`">$val</dcscor:value>" }
+			elseif ($val -is [hashtable] -or $val -is [System.Collections.IDictionary] -or $val -is [PSCustomObject]) { Emit-DLMLText -tag "dcscor:value" -text $val -indent "$indent`t`t" }
+			else { X "$indent`t`t<dcscor:value xsi:type=`"xs:string`">$(Esc-Xml "$val")</dcscor:value>" }
+		}
+		X "$indent`t</dcscor:item>"
+	}
+	X "$indent</dcssch:inputParameters>"
+}
+
+function Emit-DLParameter {
+	param($p, $parsed, [string]$indent)
+	X "$indent<Parameter>"
+	$ci = "$indent`t"
+	X "$ci<dcssch:name>$(Esc-Xml $parsed.name)</dcssch:name>"
+	# Title: явный override (shorthand [..] / объект title/presentation) или авто из имени.
+	$title = $null
+	if ($parsed.title) { $title = $parsed.title }
+	elseif ($p -isnot [string] -and (Has-DLProp $p 'title') -and $p.title) { $title = $p.title }
+	elseif ($p -isnot [string] -and (Has-DLProp $p 'presentation') -and $p.presentation) { $title = $p.presentation }
+	if ($null -eq $title -or ($title -is [string] -and $title -eq '')) { $title = Title-FromName -name $parsed.name }
+	Emit-DLMLText -tag "dcssch:title" -text $title -indent $ci
+	# valueType
+	if ($parsed.type) { Emit-DLValueType -typeStr $parsed.type -indent $ci }
+	# value (дефолт nil; при valueListAllowed пустое — опускаем)
+	$vla = [bool]$parsed.valueListAllowed
+	$valIsArray = ($parsed.value -is [array]) -or ($parsed.value -is [System.Collections.IList] -and $parsed.value -isnot [string])
+	if ($valIsArray) {
+		foreach ($v in @($parsed.value)) { Emit-DLValue -type $parsed.type -val $v -indent $ci -valueListAllowed $false }
+	} else {
+		Emit-DLValue -type $parsed.type -val $parsed.value -indent $ci -valueListAllowed $vla
+	}
+	# useRestriction — ВСЕГДА; дефолт true; false только при явном useRestriction:false.
+	$ur = $true
+	if ($p -isnot [string] -and (Has-DLProp $p 'useRestriction')) { $ur = [bool]$p.useRestriction }
+	X "$ci<dcssch:useRestriction>$(if ($ur) { 'true' } else { 'false' })</dcssch:useRestriction>"
+	# expression
+	$expr = $null
+	if ($p -isnot [string] -and (Has-DLProp $p 'expression') -and $p.expression) { $expr = "$($p.expression)" }
+	if ($expr) { X "$ci<dcssch:expression>$(Esc-Xml $expr)</dcssch:expression>" }
+	# availableValues
+	if ($p -isnot [string] -and (Has-DLProp $p 'availableValues') -and $p.availableValues) {
+		foreach ($av in @($p.availableValues)) { Emit-DLAvailableValue -av $av -type $parsed.type -indent $ci }
+	}
+	# valueListAllowed
+	if ($vla) { X "$ci<dcssch:valueListAllowed>true</dcssch:valueListAllowed>" }
+	# availableAsField=false (hidden или явный)
+	$aaf = $null
+	if ($parsed.hidden -eq $true) { $aaf = $false }
+	if ($p -isnot [string] -and (Has-DLProp $p 'availableAsField')) { $aaf = [bool]$p.availableAsField }
+	if ($aaf -eq $false) { X "$ci<dcssch:availableAsField>false</dcssch:availableAsField>" }
+	# inputParameters
+	if ($p -isnot [string] -and (Has-DLProp $p 'inputParameters') -and $p.inputParameters) { Emit-DLInputParameters -ip $p.inputParameters -indent $ci }
+	# denyIncompleteValues
+	if ($p -isnot [string] -and (Has-DLProp $p 'denyIncompleteValues') -and $p.denyIncompleteValues -eq $true) { X "$ci<dcssch:denyIncompleteValues>true</dcssch:denyIncompleteValues>" }
+	# use
+	$useVal = $null
+	if ($p -isnot [string] -and (Has-DLProp $p 'use') -and $p.use) { $useVal = "$($p.use)" }
+	if ($useVal) { X "$ci<dcssch:use>$(Esc-Xml $useVal)</dcssch:use>" }
+	X "$indent</Parameter>"
+}
+
+function Emit-DLParameters {
+	param($params, [string]$indent)
+	if (-not $params) { return }
+	foreach ($p in @($params)) {
+		if ($p -is [string]) {
+			$parsed = Parse-DLParamShorthand $p
+		} else {
+			$resolvedType = ""
+			if ((Has-DLProp $p 'type') -and $p.type) {
+				if ($p.type -is [array] -or ($p.type -is [System.Collections.IList] -and $p.type -isnot [string])) {
+					$resolvedType = (@($p.type | ForEach-Object { Resolve-TypeStr "$_" })) -join ' | '
+				} else { $resolvedType = Resolve-TypeStr "$($p.type)" }
+			} elseif ((Has-DLProp $p 'valueType') -and $p.valueType) {
+				$resolvedType = Resolve-TypeStr "$($p.valueType)"
+			}
+			$parsed = @{ name = "$($p.name)"; type = $resolvedType; value = $(if (Has-DLProp $p 'value') { $p.value } else { $null }); title = $null }
+			if ((Has-DLProp $p 'valueListAllowed') -and $p.valueListAllowed -eq $true) { $parsed.valueListAllowed = $true }
+			if ((Has-DLProp $p 'hidden') -and $p.hidden -eq $true) { $parsed.hidden = $true }
+		}
+		Emit-DLParameter -p $p -parsed $parsed -indent $indent
+	}
+}
+
 function Emit-Attributes {
 	param($attrs, [string]$indent)
 
@@ -3807,6 +4058,8 @@ function Emit-Attributes {
 					X "$si</Field>"
 				}
 			}
+			# Schema-параметры дин-списка (DataCompositionSchemaParameter) — после Field*, до MainTable.
+			Emit-DLParameters -params $st.parameters -indent $si
 			if ($st.mainTable) { X "$si<MainTable>$(Normalize-MetaTypeRef "$($st.mainTable)")</MainTable>" }
 			# ListSettings: filter/order/conditionalAppearance (skd-грамматика) + каноничные блок-GUID.
 			# Нет items → контейнеры всё равно эмитятся (blockMeta) = каноничный пустой скелет платформы.

@@ -1,4 +1,4 @@
-﻿# form-decompile v0.45 — Decompile 1C managed Form.xml to JSON DSL (draft)
+﻿# form-decompile v0.46 — Decompile 1C managed Form.xml to JSON DSL (draft)
 # Source: https://github.com/Nikolay-Shirokov/cc-1c-skills
 # ВНИМАНИЕ: раундтрип не гарантируется. Навык исключён из авто-использования моделью.
 param(
@@ -949,6 +949,111 @@ function Decompile-Type {
 	return ($parts -join ' | ')
 }
 
+# Schema-параметры динамического списка (<Parameter> под <Settings>) — зеркало эмиссии
+# form-compile (Emit-DLParameters). Инверсия контекстных дефолтов: useRestriction=true и
+# title==Title-FromName опускаем (компилятор восстановит). Сущность = DataCompositionSchemaParameter.
+function Build-DLInputParameters {
+	param($ipNode)
+	$items = New-Object System.Collections.ArrayList
+	foreach ($it in @($ipNode.SelectNodes("dcscor:item", $ns))) {
+		$io = [ordered]@{}
+		$io['parameter'] = Get-Child $it 'parameter'
+		$useN = $it.SelectSingleNode("dcscor:use", $ns)
+		if ($useN -and $useN.InnerText -eq 'false') { $io['use'] = $false }
+		$valN = $it.SelectSingleNode("dcscor:value", $ns)
+		if ($valN) {
+			$vt = $valN.GetAttribute("type", $NS_XSI)
+			if ($vt -match 'ChoiceParameters$') {
+				$cps = New-Object System.Collections.ArrayList
+				foreach ($cpi in @($valN.SelectNodes("dcscor:item", $ns))) {
+					$cpo = [ordered]@{}
+					$cpo['name'] = Get-Child $cpi 'choiceParameter'
+					$vals = New-Object System.Collections.ArrayList
+					foreach ($cv in @($cpi.SelectNodes("dcscor:value", $ns))) {
+						[void]$vals.Add((Convert-TypedValue -raw $cv.InnerText -xsiType ($cv.GetAttribute("type", $NS_XSI))))
+					}
+					$cpo['values'] = @($vals)
+					[void]$cps.Add($cpo)
+				}
+				$io['choiceParameters'] = @($cps)
+			} elseif ($vt -match 'ChoiceParameterLinks$') {
+				$cpls = New-Object System.Collections.ArrayList
+				foreach ($cpi in @($valN.SelectNodes("dcscor:item", $ns))) {
+					$cpo = [ordered]@{}
+					$cpo['name'] = Get-Child $cpi 'choiceParameter'
+					$cpo['value'] = Get-Child $cpi 'value'
+					$md = Get-Child $cpi 'mode'; if ($md -and $md -ne 'Auto') { $cpo['mode'] = $md }
+					[void]$cpls.Add($cpo)
+				}
+				$io['choiceParameterLinks'] = @($cpls)
+			} else {
+				if ($valN.GetAttribute("nil", $NS_XSI) -ne 'true') { $io['value'] = Convert-TypedValue -raw $valN.InnerText -xsiType $vt }
+			}
+		}
+		[void]$items.Add($io)
+	}
+	return @($items)
+}
+
+function Build-DLParameter {
+	param($pNode)
+	$name = Get-Child $pNode 'name'
+	$o = [ordered]@{}
+	$o['name'] = $name
+	# title — опускаем, если совпадает с авто-выводом из имени (ru-only)
+	$titleNode = $pNode.SelectSingleNode("dcssch:title", $ns)
+	if ($titleNode) {
+		$t = Get-LangText $titleNode
+		if ($null -ne $t) {
+			$auto = Title-FromName -name $name
+			if (-not (($t -is [string]) -and ($t -eq $auto))) { $o['title'] = $t }
+		}
+	}
+	# valueType
+	$vtNode = $pNode.SelectSingleNode("dcssch:valueType", $ns)
+	$typeVal = $null
+	if ($vtNode) { $typeVal = Decompile-Type $vtNode; if ($typeVal) { $o['type'] = $typeVal } }
+	# value — опускаем nil (дефолт)
+	$vNode = $pNode.SelectSingleNode("dcssch:value", $ns)
+	if ($vNode -and ($vNode.GetAttribute("nil", $NS_XSI) -ne 'true')) {
+		$o['value'] = Convert-TypedValue -raw $vNode.InnerText -xsiType ($vNode.GetAttribute("type", $NS_XSI))
+	}
+	# useRestriction — опускаем true (дефолт), фиксируем false
+	if ((Get-Child $pNode 'useRestriction') -eq 'false') { $o['useRestriction'] = $false }
+	# expression
+	$expr = Get-Child $pNode 'expression'; if ($null -ne $expr -and $expr -ne '') { $o['expression'] = $expr }
+	# availableValues
+	$avNodes = @($pNode.SelectNodes("dcssch:availableValue", $ns))
+	if ($avNodes.Count -gt 0) {
+		$avs = New-Object System.Collections.ArrayList
+		foreach ($avn in $avNodes) {
+			$avo = [ordered]@{}
+			$avv = $avn.SelectSingleNode("dcssch:value", $ns)
+			if ($avv -and ($avv.GetAttribute("nil", $NS_XSI) -ne 'true')) { $avo['value'] = Convert-TypedValue -raw $avv.InnerText -xsiType ($avv.GetAttribute("type", $NS_XSI)) }
+			else { $avo['value'] = $null }
+			$avp = $avn.SelectSingleNode("dcssch:presentation", $ns)
+			if ($avp) { $pres = Get-LangText $avp; if ($null -ne $pres) { $avo['presentation'] = $pres } }
+			[void]$avs.Add($avo)
+		}
+		$o['availableValues'] = @($avs)
+	}
+	# valueListAllowed / availableAsField
+	if ((Get-Child $pNode 'valueListAllowed') -eq 'true') { $o['valueListAllowed'] = $true }
+	if ((Get-Child $pNode 'availableAsField') -eq 'false') { $o['availableAsField'] = $false }
+	# inputParameters
+	$ipNode = $pNode.SelectSingleNode("dcssch:inputParameters", $ns)
+	if ($ipNode) { $ip = Build-DLInputParameters $ipNode; if (@($ip).Count -gt 0) { $o['inputParameters'] = $ip } }
+	# denyIncompleteValues / use
+	if ((Get-Child $pNode 'denyIncompleteValues') -eq 'true') { $o['denyIncompleteValues'] = $true }
+	$use = Get-Child $pNode 'use'; if ($null -ne $use -and $use -ne '') { $o['use'] = $use }
+
+	# Компактизация: {name} → строка "name"; {name, type} → "name: type"; иначе объект.
+	$keys = @($o.Keys)
+	if ($keys.Count -eq 1) { return $name }
+	if ($keys.Count -eq 2 -and $o.Contains('type') -and ($typeVal -is [string])) { return ("{0}: {1}" -f $name, $typeVal) }
+	return $o
+}
+
 # --- 4. Element dispatch ---
 $ELEMENT_KEY = @{
 	'UsualGroup'='group'; 'ColumnGroup'='columnGroup'; 'ButtonGroup'='buttonGroup'; 'InputField'='input'; 'CheckBoxField'='check';
@@ -1467,6 +1572,13 @@ if ($attrsNode) {
 					[void]$fields.Add($fo)
 				}
 				$so['fields'] = @($fields)
+			}
+			# Schema-параметры дин-списка (прямые <Parameter> под Settings, не в ListSettings)
+			$paramNodes = @($setNode.SelectNodes("lf:Parameter", $ns))
+			if ($paramNodes.Count -gt 0) {
+				$dlPars = New-Object System.Collections.ArrayList
+				foreach ($pn in $paramNodes) { [void]$dlPars.Add((Build-DLParameter $pn)) }
+				$so['parameters'] = @($dlPars)
 			}
 			# ListSettings: пустой скелет (только viewMode+GUID) опускаем — компилятор
 			# регенерит каноничный скелет. Захватываем только контейнеры с реальными

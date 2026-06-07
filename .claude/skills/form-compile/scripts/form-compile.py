@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-# form-compile v1.63 — Compile 1C managed form from JSON or object metadata
+# form-compile v1.64 — Compile 1C managed form from JSON or object metadata
 # Source: https://github.com/Nikolay-Shirokov/cc-1c-skills
 import argparse
 import copy
@@ -3374,6 +3374,286 @@ def emit_attr_column(lines, col, indent):
     lines.append(f'{indent}</Column>')
 
 
+# --- Schema-параметры динамического списка (DataCompositionSchemaParameter) ---
+# Зеркало form-compile.ps1 (Emit-DLParameters). Та же сущность, что параметры СКД, но в
+# форме: обёртка <Parameter> + дети dcssch:. DSL переиспользует грамматику параметров СКД.
+# Контекстные дефолты: useRestriction эмитим ВСЕГДА, дефолт true (в СКД false); title — авто
+# из имени; пустое value — всегда xsi:nil (даже при известном типе). Канон. порядок детей
+# (по корпусу): name, title, valueType, value, useRestriction, expression, availableValue*,
+# valueListAllowed, availableAsField, inputParameters, denyIncompleteValues, use.
+
+def emit_dl_mltext(lines, indent, tag, text):
+    # ML-текст с xsi:type="v8:LocalStringType" (в dcssch:* обязателен; emit_mltext его не ставит).
+    lines.append(f'{indent}<{tag} xsi:type="v8:LocalStringType">')
+    emit_ml_items(lines, f'{indent}\t', text)
+    lines.append(f'{indent}</{tag}>')
+
+
+def split_dl_valuelist_csv(s):
+    result = []
+    if s is None:
+        return result
+    items = []
+    buf = []
+    in_quote = None
+    for ch in s:
+        if in_quote:
+            buf.append(ch)
+            if ch == in_quote:
+                in_quote = None
+        elif ch in ("'", '"'):
+            in_quote = ch
+            buf.append(ch)
+        elif ch == ',':
+            items.append(''.join(buf)); buf = []
+        else:
+            buf.append(ch)
+    if buf:
+        items.append(''.join(buf))
+    for raw in items:
+        t = raw.strip()
+        if len(t) >= 2 and ((t[0] == "'" and t[-1] == "'") or (t[0] == '"' and t[-1] == '"')):
+            t = t[1:-1]
+        if t != '':
+            result.append(t)
+    return result
+
+
+def parse_dl_param_shorthand(s):
+    result = {'name': '', 'type': '', 'value': None, 'title': None}
+    if '@valueList' in s:
+        result['valueListAllowed'] = True
+        s = re.sub(r'\s*@valueList', '', s)
+    if '@hidden' in s:
+        result['hidden'] = True
+        s = re.sub(r'\s*@hidden', '', s)
+    m = re.search(r'\[([^\]]*)\]', s)
+    if m:
+        result['title'] = m.group(1).strip()
+        s = re.sub(r'\s*\[[^\]]*\]\s*', ' ', s).strip()
+    m = re.match(r'^([^:]+):\s*(\S+)(\s*=\s*(.*))?$', s)
+    if m:
+        result['name'] = m.group(1).strip()
+        result['type'] = resolve_type_str(m.group(2).strip())
+        if m.group(4):
+            rhs = m.group(4).strip()
+            items = split_dl_valuelist_csv(rhs)
+            if len(items) >= 2:
+                result['value'] = items
+                result['valueListAllowed'] = True
+            elif len(items) == 1:
+                result['value'] = items[0]
+            else:
+                result['value'] = rhs
+    else:
+        result['name'] = s.strip()
+    return result
+
+
+def is_dl_empty_value(v):
+    if v is None:
+        return True
+    sv = str(v).strip()
+    return sv == '' or sv == '_' or sv.lower() == 'null'
+
+
+def emit_dl_value(lines, type_str, val, indent, value_list_allowed=False):
+    if is_dl_empty_value(val):
+        # Дин-список: пустое значение платформа ВСЕГДА пишет как xsi:nil (даже при известном типе).
+        if value_list_allowed:
+            return
+        lines.append(f'{indent}<dcssch:value xsi:nil="true"/>')
+        return
+    if isinstance(val, bool):
+        val_str = 'true' if val else 'false'
+    else:
+        val_str = str(val)
+    t = type_str or ''
+    if re.match(r'^(date|dateTime|time)', t):
+        lines.append(f'{indent}<dcssch:value xsi:type="xs:dateTime">{esc_xml(val_str)}</dcssch:value>')
+    elif t == 'boolean':
+        lines.append(f'{indent}<dcssch:value xsi:type="xs:boolean">{esc_xml(val_str)}</dcssch:value>')
+    elif re.match(r'^decimal', t):
+        lines.append(f'{indent}<dcssch:value xsi:type="xs:decimal">{esc_xml(val_str)}</dcssch:value>')
+    elif re.match(r'^string', t):
+        lines.append(f'{indent}<dcssch:value xsi:type="xs:string">{esc_xml(val_str)}</dcssch:value>')
+    elif re.match(r'^(CatalogRef|DocumentRef|EnumRef|ChartOfAccountsRef|ChartOfCharacteristicTypesRef|ChartOfCalculationTypesRef|BusinessProcessRef|TaskRef|ExchangePlanRef)\.', t):
+        lines.append(f'{indent}<dcssch:value xsi:type="dcscor:DesignTimeValue">{esc_xml(val_str)}</dcssch:value>')
+    else:
+        if re.match(r'^\d{4}-\d{2}-\d{2}T', val_str):
+            lines.append(f'{indent}<dcssch:value xsi:type="xs:dateTime">{esc_xml(val_str)}</dcssch:value>')
+        elif val_str in ('true', 'false'):
+            lines.append(f'{indent}<dcssch:value xsi:type="xs:boolean">{esc_xml(val_str)}</dcssch:value>')
+        elif re.match(r'^(ПланСчетов|Справочник|Перечисление|Документ|ПланВидовХарактеристик|ПланВидовРасчета|БизнесПроцесс|Задача|РегистрСведений|ПланОбмена)\.', val_str) or re.match(r'^(ChartOfAccounts|Catalog|Enum|Document|ChartOfCharacteristicTypes|ChartOfCalculationTypes|BusinessProcess|Task|InformationRegister|ExchangePlan)\.', val_str):
+            lines.append(f'{indent}<dcssch:value xsi:type="dcscor:DesignTimeValue">{esc_xml(val_str)}</dcssch:value>')
+        else:
+            lines.append(f'{indent}<dcssch:value xsi:type="xs:string">{esc_xml(val_str)}</dcssch:value>')
+
+
+def emit_dl_value_type(lines, type_str, indent):
+    if not type_str:
+        return
+    lines.append(f'{indent}<dcssch:valueType>')
+    for part in re.split(r'\s*[|+]\s*', str(type_str)):
+        emit_single_type(lines, part.strip(), f'{indent}\t')
+    lines.append(f'{indent}</dcssch:valueType>')
+
+
+def emit_dl_available_value(lines, av, type_str, indent):
+    lines.append(f'{indent}<dcssch:availableValue>')
+    av_val = av.get('value') if isinstance(av, dict) else None
+    emit_dl_value(lines, type_str, av_val, f'{indent}\t', False)
+    pres = (av.get('presentation') or av.get('title')) if isinstance(av, dict) else None
+    if pres:
+        emit_dl_mltext(lines, f'{indent}\t', 'dcssch:presentation', pres)
+    lines.append(f'{indent}</dcssch:availableValue>')
+
+
+def emit_dl_input_parameters(lines, ip, indent):
+    if ip is None:
+        return
+    items = ip if isinstance(ip, list) else [ip]
+    if len(items) == 0:
+        return
+    lines.append(f'{indent}<dcssch:inputParameters>')
+    for item in items:
+        lines.append(f'{indent}\t<dcscor:item>')
+        if 'use' in item and item.get('use') is not None and not item.get('use'):
+            lines.append(f'{indent}\t\t<dcscor:use>false</dcscor:use>')
+        lines.append(f'{indent}\t\t<dcscor:parameter>{esc_xml(str(item.get("parameter", "")))}</dcscor:parameter>')
+        if 'choiceParameters' in item:
+            cp_items = item.get('choiceParameters') or []
+            if len(cp_items) == 0:
+                lines.append(f'{indent}\t\t<dcscor:value xsi:type="dcscor:ChoiceParameters"/>')
+            else:
+                lines.append(f'{indent}\t\t<dcscor:value xsi:type="dcscor:ChoiceParameters">')
+                for cp in cp_items:
+                    lines.append(f'{indent}\t\t\t<dcscor:item>')
+                    lines.append(f'{indent}\t\t\t\t<dcscor:choiceParameter>{esc_xml(str(cp.get("name", "")))}</dcscor:choiceParameter>')
+                    for v in (cp.get('values') or []):
+                        if isinstance(v, bool):
+                            lines.append(f'{indent}\t\t\t\t<dcscor:value xsi:type="xs:boolean">{"true" if v else "false"}</dcscor:value>')
+                        elif isinstance(v, (int, float)):
+                            lines.append(f'{indent}\t\t\t\t<dcscor:value xsi:type="xs:decimal">{v}</dcscor:value>')
+                        else:
+                            lines.append(f'{indent}\t\t\t\t<dcscor:value xsi:type="dcscor:DesignTimeValue">{esc_xml(str(v))}</dcscor:value>')
+                    lines.append(f'{indent}\t\t\t</dcscor:item>')
+                lines.append(f'{indent}\t\t</dcscor:value>')
+        elif 'choiceParameterLinks' in item:
+            cpl_items = item.get('choiceParameterLinks') or []
+            if len(cpl_items) == 0:
+                lines.append(f'{indent}\t\t<dcscor:value xsi:type="dcscor:ChoiceParameterLinks"/>')
+            else:
+                lines.append(f'{indent}\t\t<dcscor:value xsi:type="dcscor:ChoiceParameterLinks">')
+                for cpl in cpl_items:
+                    lines.append(f'{indent}\t\t\t<dcscor:item>')
+                    lines.append(f'{indent}\t\t\t\t<dcscor:choiceParameter>{esc_xml(str(cpl.get("name", "")))}</dcscor:choiceParameter>')
+                    lines.append(f'{indent}\t\t\t\t<dcscor:value>{esc_xml(str(cpl.get("value", "")))}</dcscor:value>')
+                    mode = str(cpl.get('mode') or 'Auto')
+                    lines.append(f'{indent}\t\t\t\t<dcscor:mode xmlns:d8p1="http://v8.1c.ru/8.1/data/enterprise" xsi:type="d8p1:LinkedValueChangeMode">{mode}</dcscor:mode>')
+                    lines.append(f'{indent}\t\t\t</dcscor:item>')
+                lines.append(f'{indent}\t\t</dcscor:value>')
+        elif 'value' in item:
+            val = item.get('value')
+            if isinstance(val, bool):
+                lines.append(f'{indent}\t\t<dcscor:value xsi:type="xs:boolean">{"true" if val else "false"}</dcscor:value>')
+            elif isinstance(val, (int, float)):
+                lines.append(f'{indent}\t\t<dcscor:value xsi:type="xs:decimal">{val}</dcscor:value>')
+            elif isinstance(val, dict):
+                emit_dl_mltext(lines, f'{indent}\t\t', 'dcscor:value', val)
+            else:
+                lines.append(f'{indent}\t\t<dcscor:value xsi:type="xs:string">{esc_xml(str(val))}</dcscor:value>')
+        lines.append(f'{indent}\t</dcscor:item>')
+    lines.append(f'{indent}</dcssch:inputParameters>')
+
+
+def emit_dl_parameter(lines, p, parsed, indent):
+    is_obj = not isinstance(p, str)
+    lines.append(f'{indent}<Parameter>')
+    ci = f'{indent}\t'
+    lines.append(f'{ci}<dcssch:name>{esc_xml(parsed["name"])}</dcssch:name>')
+    # Title: явный override (shorthand [..] / объект title/presentation) или авто из имени.
+    title = None
+    if parsed.get('title'):
+        title = parsed['title']
+    elif is_obj and p.get('title'):
+        title = p['title']
+    elif is_obj and p.get('presentation'):
+        title = p['presentation']
+    if title is None or (isinstance(title, str) and title == ''):
+        title = title_from_name(parsed['name'])
+    emit_dl_mltext(lines, ci, 'dcssch:title', title)
+    # valueType
+    if parsed.get('type'):
+        emit_dl_value_type(lines, parsed['type'], ci)
+    # value (дефолт nil; при valueListAllowed пустое — опускаем)
+    vla = bool(parsed.get('valueListAllowed'))
+    pv = parsed.get('value')
+    if isinstance(pv, list):
+        for v in pv:
+            emit_dl_value(lines, parsed.get('type', ''), v, ci, False)
+    else:
+        emit_dl_value(lines, parsed.get('type', ''), pv, ci, vla)
+    # useRestriction — ВСЕГДА; дефолт true; false только при явном useRestriction:false.
+    ur = True
+    if is_obj and 'useRestriction' in p:
+        ur = bool(p['useRestriction'])
+    lines.append(f'{ci}<dcssch:useRestriction>{"true" if ur else "false"}</dcssch:useRestriction>')
+    # expression
+    expr = str(p['expression']) if (is_obj and p.get('expression')) else None
+    if expr:
+        lines.append(f'{ci}<dcssch:expression>{esc_xml(expr)}</dcssch:expression>')
+    # availableValues
+    if is_obj and p.get('availableValues'):
+        for av in p['availableValues']:
+            emit_dl_available_value(lines, av, parsed.get('type', ''), ci)
+    # valueListAllowed
+    if vla:
+        lines.append(f'{ci}<dcssch:valueListAllowed>true</dcssch:valueListAllowed>')
+    # availableAsField=false (hidden или явный)
+    aaf = None
+    if parsed.get('hidden') is True:
+        aaf = False
+    if is_obj and 'availableAsField' in p:
+        aaf = bool(p['availableAsField'])
+    if aaf is False:
+        lines.append(f'{ci}<dcssch:availableAsField>false</dcssch:availableAsField>')
+    # inputParameters
+    if is_obj and p.get('inputParameters'):
+        emit_dl_input_parameters(lines, p['inputParameters'], ci)
+    # denyIncompleteValues
+    if is_obj and p.get('denyIncompleteValues') is True:
+        lines.append(f'{ci}<dcssch:denyIncompleteValues>true</dcssch:denyIncompleteValues>')
+    # use
+    if is_obj and p.get('use'):
+        lines.append(f'{ci}<dcssch:use>{esc_xml(str(p["use"]))}</dcssch:use>')
+    lines.append(f'{indent}</Parameter>')
+
+
+def emit_dl_parameters(lines, params, indent):
+    if not params:
+        return
+    for p in params:
+        if isinstance(p, str):
+            parsed = parse_dl_param_shorthand(p)
+        else:
+            resolved_type = ''
+            if p.get('type'):
+                if isinstance(p['type'], list):
+                    resolved_type = ' | '.join(resolve_type_str(str(x)) for x in p['type'])
+                else:
+                    resolved_type = resolve_type_str(str(p['type']))
+            elif p.get('valueType'):
+                resolved_type = resolve_type_str(str(p['valueType']))
+            parsed = {'name': str(p.get('name', '')), 'type': resolved_type,
+                      'value': p.get('value') if 'value' in p else None, 'title': None}
+            if p.get('valueListAllowed') is True:
+                parsed['valueListAllowed'] = True
+            if p.get('hidden') is True:
+                parsed['hidden'] = True
+        emit_dl_parameter(lines, p, parsed, indent)
+
+
 def emit_attributes(lines, attrs, indent):
     if not attrs or len(attrs) == 0:
         return
@@ -3482,6 +3762,8 @@ def emit_attributes(lines, attrs, indent):
                         emit_ml_items(lines, f'{si}\t\t', fld['title'])
                         lines.append(f'{si}\t</dcssch:title>')
                     lines.append(f'{si}</Field>')
+            # Schema-параметры дин-списка (DataCompositionSchemaParameter) — после Field*, до MainTable.
+            emit_dl_parameters(lines, s.get('parameters'), si)
             if s.get('mainTable'):
                 lines.append(f'{si}<MainTable>{normalize_meta_type_ref(str(s["mainTable"]))}</MainTable>')
             # ListSettings: filter/order/conditionalAppearance (skd-грамматика) + каноничные блок-GUID.
