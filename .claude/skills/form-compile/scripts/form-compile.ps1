@@ -1,4 +1,4 @@
-﻿# form-compile v1.72 — Compile 1C managed form from JSON or object metadata
+﻿# form-compile v1.73 — Compile 1C managed form from JSON or object metadata
 # Source: https://github.com/Nikolay-Shirokov/cc-1c-skills
 param(
 	[string]$JsonPath,
@@ -2468,7 +2468,13 @@ function Emit-Element {
 		"src"=1;"valuesPicture"=1;"loadTransparent"=1;"headerPicture"=1;"footerPicture"=1
 		# cmdBar-specific
 		"autofill"=1
+		# AutoCommandBar-маркер (autofill heuristic) на элементе/таблице
+		"autoCmdBar"=1
 	}
+	# Оформление (цвета/шрифты/граница) — авто-регистрация из самих структур, чтобы allowlist
+	# не дрейфовал при добавлении новых ключей/синонимов. Канонические + forgiving-синонимы.
+	foreach ($k in $script:appearanceSpec.Keys)     { $knownKeys[$k] = 1 }
+	foreach ($k in $script:appearanceSynonyms.Keys) { $knownKeys[$k] = 1 }
 	foreach ($p in $el.PSObject.Properties) {
 		if ($p.Name -like '_*') { continue }  # внутренние маркеры (напр. _dynList)
 		if (-not $knownKeys.ContainsKey($p.Name)) {

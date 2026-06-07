@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-# form-compile v1.72 — Compile 1C managed form from JSON or object metadata
+# form-compile v1.73 — Compile 1C managed form from JSON or object metadata
 # Source: https://github.com/Nikolay-Shirokov/cc-1c-skills
 import argparse
 import copy
@@ -1795,6 +1795,8 @@ KNOWN_KEYS = {
     "autoRefreshPeriod", "choiceFoldersAndItems", "restoreCurrentRow", "showRoot",
     "allowRootChoice", "updateOnDataChange", "allowGettingCurrentRowURL",
     "userSettingsGroup", "rowsPicture",
+    # AutoCommandBar-маркер (autofill heuristic) на элементе/таблице
+    "autoCmdBar",
 }
 
 # picture/picField — НИЗКИЙ приоритет: 'picture' это и тип (PictureDecoration), и свойство-иконка
@@ -2819,11 +2821,13 @@ def emit_element(lines, el, indent, in_cmd_bar=False):
         print("WARNING: Unknown element type, skipping", file=sys.stderr)
         return
 
-    # Validate known keys (внутренние маркеры на _ пропускаем)
+    # Validate known keys (внутренние маркеры на _ пропускаем). Оформление (цвета/шрифты/граница)
+    # проверяем против самих структур appearance — канонические ключи + forgiving-синонимы, чтобы
+    # allowlist не дрейфовал при добавлении новых.
     for p_name in el.keys():
         if p_name.startswith('_'):
             continue
-        if p_name not in KNOWN_KEYS:
+        if p_name not in KNOWN_KEYS and p_name not in APPEARANCE_SPEC and p_name not in APPEARANCE_SYNONYMS:
             print(f"WARNING: Element '{el.get(type_key, '')}': unknown key '{p_name}' -- ignored. Check SKILL.md for valid keys.", file=sys.stderr)
 
     name = get_element_name(el, type_key)
