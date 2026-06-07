@@ -58,12 +58,12 @@
 			</SearchControlAddition>
 			<ChildItems>
 				<InputField name="Код" id="14">
-					<DataPath>Список.Code</DataPath>
+					<DataPath>Список.Код</DataPath>
 					<ContextMenu name="КодКонтекстноеМеню" id="15"/>
 					<ExtendedTooltip name="КодРасширеннаяПодсказка" id="16"/>
 				</InputField>
 				<InputField name="Наименование" id="17">
-					<DataPath>Список.Description</DataPath>
+					<DataPath>Список.Наименование</DataPath>
 					<ContextMenu name="НаименованиеКонтекстноеМеню" id="18"/>
 					<ExtendedTooltip name="НаименованиеРасширеннаяПодсказка" id="19"/>
 				</InputField>
