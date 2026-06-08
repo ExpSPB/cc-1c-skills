@@ -121,7 +121,7 @@
 | `titleLocation` | string | Расположение заголовка: `none`/`left`/`right`/`top`/`bottom`/`auto`. Эмитится при наличии (input, labelField, picField, table, calendar). У `check`/`radio` — особая семантика с умным дефолтом (см. их разделы) |
 | `tooltip` | string/object | Всплывающая подсказка элемента (`<ToolTip>`). Строка → ru, объект `{ "ru": …, "en": … }` → мультиязычный (как `title`). Эмитится сразу после `title` |
 | `tooltipRepresentation` | string | Режим показа подсказки (`<ToolTipRepresentation>`): `None`, `Button`, `ShowBottom`, `ShowTop`, `ShowLeft`, `ShowRight`, `ShowAuto`, `Balloon`. Эмитится при наличии |
-| `extendedTooltip` | string/object | Расширенная подсказка (контент companion `<ExtendedTooltip>`). См. форму ML-текста ниже. Синоним: `extTooltip` |
+| `extendedTooltip` | string/object | Расширенная подсказка (companion `<ExtendedTooltip>`, по сути LabelDecoration). **Текст-форма**: строка / ML / `{text, formatted}`. **Own-content форма** (объект с layout/оформлением/флагами): `{ text?, formatted?, width?, autoMaxWidth?, maxWidth?, height?, horizontalStretch?, verticalAlign?, titleHeight?, hyperlink?, visible?, enabled?, textColor?, font?, … }` — own-content эмитится перед `Title`. (События компаньона пока не поддержаны.) Синоним: `extTooltip` |
 
 #### Форма ML-текста и `formatted`
 

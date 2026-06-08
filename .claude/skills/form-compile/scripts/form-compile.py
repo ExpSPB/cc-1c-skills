@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-# form-compile v1.80 — Compile 1C managed form from JSON or object metadata
+# form-compile v1.81 — Compile 1C managed form from JSON or object metadata
 # Source: https://github.com/Nikolay-Shirokov/cc-1c-skills
 import argparse
 import copy
@@ -2296,17 +2296,42 @@ def resolve_ml_formatted(val):
     return val, _has_real_markup(val)
 
 
+# ExtendedTooltip — это LabelDecoration: own-content (layout/оформление/флаги/hyperlink) ±текст.
+# Признак структурированной формы: объект с любым НЕ-текстовым ключом ({text,formatted}/{ru,en} → текст).
+COMPANION_STRUCT_KEYS = {
+    'width', 'autoMaxWidth', 'maxWidth', 'height', 'autoMaxHeight', 'maxHeight', 'verticalAlign', 'titleHeight',
+    'horizontalStretch', 'verticalStretch', 'horizontalAlign', 'groupHorizontalAlign', 'groupVerticalAlign',
+    'visible', 'hidden', 'enabled', 'disabled', 'hyperlink',
+    'textColor', 'backColor', 'borderColor', 'font', 'border', 'цветтекста', 'цветфона', 'цветрамки', 'шрифт', 'рамка',
+}
+
+
+def emit_companion_title(lines, content, indent):
+    text, fmt = resolve_ml_formatted(content)
+    lines.append(f'{indent}<Title formatted="{"true" if fmt else "false"}">')
+    emit_ml_items(lines, f'{indent}\t', text)
+    lines.append(f'{indent}</Title>')
+
+
 def emit_companion(lines, tag, name, indent, content=None):
     cid = new_id()
     has_content = content is not None and not (isinstance(content, str) and content == '')
     if not has_content:
         lines.append(f'{indent}<{tag} name="{name}" id="{cid}"/>')
         return
+    inner = f'{indent}\t'
     lines.append(f'{indent}<{tag} name="{name}" id="{cid}">')
-    text, fmt = resolve_ml_formatted(content)
-    lines.append(f'{indent}\t<Title formatted="{"true" if fmt else "false"}">')
-    emit_ml_items(lines, f'{indent}\t\t', text)
-    lines.append(f'{indent}\t</Title>')
+    if isinstance(content, dict) and any(k in content for k in COMPANION_STRUCT_KEYS):
+        # own-content ПЕРЕД Title (в корпусе layout-first 582 vs 10).
+        emit_common_flags(lines, content, inner)
+        if content.get('hyperlink') is True:
+            lines.append(f'{inner}<Hyperlink>true</Hyperlink>')
+        emit_layout(lines, content, inner)
+        emit_appearance(lines, content, inner, 'decoration')
+        if 'text' in content:
+            emit_companion_title(lines, content, inner)
+    else:
+        emit_companion_title(lines, content, inner)
     lines.append(f'{indent}</{tag}>')
 
 

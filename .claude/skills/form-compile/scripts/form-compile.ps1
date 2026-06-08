@@ -1,4 +1,4 @@
-﻿# form-compile v1.80 — Compile 1C managed form from JSON or object metadata
+﻿# form-compile v1.81 — Compile 1C managed form from JSON or object metadata
 # Source: https://github.com/Nikolay-Shirokov/cc-1c-skills
 param(
 	[string]$JsonPath,
@@ -2287,6 +2287,34 @@ function Emit-Events {
 	X "$indent</Events>"
 }
 
+# ExtendedTooltip — это LabelDecoration: может нести own-content (layout/оформление/флаги/hyperlink)
+# вместо/вместе с текстом. Признак структурированной формы: объект с любым НЕ-текстовым ключом
+# ({text,formatted} и языковые ключи {ru,en} → обычная текст-форма).
+$script:companionStructKeys = @(
+	'width','autoMaxWidth','maxWidth','height','autoMaxHeight','maxHeight','verticalAlign','titleHeight',
+	'horizontalStretch','verticalStretch','horizontalAlign','groupHorizontalAlign','groupVerticalAlign',
+	'visible','hidden','enabled','disabled','hyperlink',
+	'textColor','backColor','borderColor','font','border','цветтекста','цветфона','цветрамки','шрифт','рамка'
+)
+function Test-CompanionStructured {
+	param($content)
+	if (-not (($content -is [System.Collections.IDictionary]) -or ($content -is [System.Management.Automation.PSCustomObject]))) { return $false }
+	foreach ($k in $script:companionStructKeys) {
+		$present = if ($content -is [System.Collections.IDictionary]) { $content.Contains($k) } else { [bool]$content.PSObject.Properties[$k] }
+		if ($present) { return $true }
+	}
+	return $false
+}
+
+function Emit-CompanionTitle {
+	param($content, [string]$indent)
+	$r = Resolve-MLFormatted $content
+	$fmt = if ($r.formatted) { 'true' } else { 'false' }
+	X "$indent<Title formatted=`"$fmt`">"
+	Emit-MLItems -val $r.text -indent "$indent`t"
+	X "$indent</Title>"
+}
+
 function Emit-Companion {
 	param([string]$tag, [string]$name, [string]$indent, $content = $null)
 	$id = New-Id
@@ -2295,13 +2323,20 @@ function Emit-Companion {
 		X "$indent<$tag name=`"$name`" id=`"$id`"/>"
 		return
 	}
-	# Companion с контентом: <Title formatted="…"> (расширенная подсказка)
+	$inner = "$indent`t"
 	X "$indent<$tag name=`"$name`" id=`"$id`">"
-	$r = Resolve-MLFormatted $content
-	$fmt = if ($r.formatted) { 'true' } else { 'false' }
-	X "$indent`t<Title formatted=`"$fmt`">"
-	Emit-MLItems -val $r.text -indent "$indent`t`t"
-	X "$indent`t</Title>"
+	if (Test-CompanionStructured $content) {
+		# структурированная форма (own-content). Порядок как у платформы: own-content (флаги/hyperlink/
+		# layout/оформление) ПЕРЕД Title (в корпусе layout-first 582 vs 10).
+		$txtPresent = if ($content -is [System.Collections.IDictionary]) { $content.Contains('text') } else { [bool]$content.PSObject.Properties['text'] }
+		Emit-CommonFlags -el $content -indent $inner
+		if ($content.hyperlink -eq $true) { X "$inner<Hyperlink>true</Hyperlink>" }
+		Emit-Layout -el $content -indent $inner
+		Emit-Appearance -el $content -indent $inner -profile 'decoration'
+		if ($txtPresent) { Emit-CompanionTitle -content $content -indent $inner }
+	} else {
+		Emit-CompanionTitle -content $content -indent $inner
+	}
 	X "$indent</$tag>"
 }
 

@@ -40,7 +40,16 @@
 				</v8:item>
 			</EditFormat>
 			<ContextMenu name="ОбычноеПолеКонтекстноеМеню" id="2"/>
-			<ExtendedTooltip name="ОбычноеПолеРасширеннаяПодсказка" id="3"/>
+			<ExtendedTooltip name="ОбычноеПолеРасширеннаяПодсказка" id="3">
+				<AutoMaxWidth>false</AutoMaxWidth>
+				<Width>30</Width>
+				<Title formatted="false">
+					<v8:item>
+						<v8:lang>ru</v8:lang>
+						<v8:content>Расширенная подсказка поля</v8:content>
+					</v8:item>
+				</Title>
+			</ExtendedTooltip>
 		</InputField>
 		<LabelField name="Ссылка" id="4">
 			<DataPath>ОбычноеПоле</DataPath>
@@ -308,7 +317,9 @@
 			<CheckBoxType>Auto</CheckBoxType>
 			<TitleLocation>Right</TitleLocation>
 			<ContextMenu name="ФлагКонтекстноеМеню" id="29"/>
-			<ExtendedTooltip name="ФлагРасширеннаяПодсказка" id="30"/>
+			<ExtendedTooltip name="ФлагРасширеннаяПодсказка" id="30">
+				<Width>45</Width>
+			</ExtendedTooltip>
 		</CheckBoxField>
 		<CheckBoxField name="ФлагПлатформенный" id="31">
 			<DataPath>ФлагПлатформенный</DataPath>
