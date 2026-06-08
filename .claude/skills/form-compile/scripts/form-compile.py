@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-# form-compile v1.75 — Compile 1C managed form from JSON or object metadata
+# form-compile v1.76 — Compile 1C managed form from JSON or object metadata
 # Source: https://github.com/Nikolay-Shirokov/cc-1c-skills
 import argparse
 import copy
@@ -4124,6 +4124,29 @@ def emit_attributes(lines, attrs, indent):
             main_saved = bool(re.match(r'^(CatalogObject|DocumentObject|ChartOfAccountsObject|ChartOfCalculationTypesObject|ChartOfCharacteristicTypesObject|ExchangePlanObject|BusinessProcessObject|TaskObject)\.', t)) or ('RecordManager.' in t)
         if attr.get('savedData') is True or main_saved:
             lines.append(f'{inner}<SavedData>true</SavedData>')
+        # Save: сохранение значения реквизита в пользовательских настройках. true → <Field>имя</Field>;
+        # строка/массив → под-поля с авто-префиксом "имя." (путь с точкой / UUID / =имя — как есть).
+        # Нет ключа или false → не эмитим.
+        if 'save' in attr and attr['save'] is not None:
+            save_fields = []
+            sv = attr['save']
+            if isinstance(sv, bool):
+                if sv:
+                    save_fields.append(attr_name)
+            else:
+                for e in (sv if isinstance(sv, (list, tuple)) else [sv]):
+                    fld = str(e)
+                    if not fld:
+                        continue
+                    if fld != attr_name and '.' not in fld and not re.match(r'^\d+/\d+:', fld):
+                        fld = f'{attr_name}.{fld}'
+                    if fld not in save_fields:
+                        save_fields.append(fld)
+            if save_fields:
+                lines.append(f'{inner}<Save>')
+                for f in save_fields:
+                    lines.append(f'{inner}\t<Field>{esc_xml(f)}</Field>')
+                lines.append(f'{inner}</Save>')
         if attr.get('fillChecking'):
             lines.append(f'{inner}<FillChecking>{attr["fillChecking"]}</FillChecking>')
 

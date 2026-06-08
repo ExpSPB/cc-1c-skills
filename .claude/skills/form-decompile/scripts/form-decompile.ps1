@@ -1,4 +1,4 @@
-﻿# form-decompile v0.52 — Decompile 1C managed Form.xml to JSON DSL (draft)
+﻿# form-decompile v0.53 — Decompile 1C managed Form.xml to JSON DSL (draft)
 # Source: https://github.com/Nikolay-Shirokov/cc-1c-skills
 # ВНИМАНИЕ: раундтрип не гарантируется. Навык исключён из авто-использования моделью.
 param(
@@ -1689,6 +1689,21 @@ if ($attrsNode) {
 			$ao['title'] = ''
 		}
 		if ((Get-Child $a 'SavedData') -eq 'true') { $ao['savedData'] = $true }
+		# Save: сохранение значения реквизита в пользовательских настройках. Один Field=имя → save:true;
+		# иначе снимаем префикс "имя." (голое имя/UUID/прочее — как есть) → строка (1) или массив.
+		$saveNode = $a.SelectSingleNode("lf:Save", $ns)
+		if ($saveNode) {
+			$nm = "$($ao['name'])"
+			$flds = @($saveNode.SelectNodes("lf:Field", $ns) | ForEach-Object { $_.InnerText })
+			if ($flds.Count -eq 1 -and $flds[0] -eq $nm) {
+				$ao['save'] = $true
+			} elseif ($flds.Count -gt 0) {
+				$stripped = @($flds | ForEach-Object {
+					if ($_ -match "^$([regex]::Escape($nm))\.(.+)$") { $matches[1] } else { $_ }
+				})
+				if ($stripped.Count -eq 1) { $ao['save'] = $stripped[0] } else { $ao['save'] = $stripped }
+			}
+		}
 		$fc = Get-Child $a 'FillChecking'; if ($fc) { $ao['fillChecking'] = $fc }
 		$afo = Decompile-FunctionalOptions $a; if ($afo) { $ao['functionalOptions'] = $afo }
 		$colsNode = $a.SelectSingleNode("lf:Columns", $ns)

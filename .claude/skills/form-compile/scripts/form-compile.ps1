@@ -1,4 +1,4 @@
-﻿# form-compile v1.75 — Compile 1C managed form from JSON or object metadata
+﻿# form-compile v1.76 — Compile 1C managed form from JSON or object metadata
 # Source: https://github.com/Nikolay-Shirokov/cc-1c-skills
 param(
 	[string]$JsonPath,
@@ -4399,6 +4399,27 @@ function Emit-Attributes {
 		}
 		if ($attr.savedData -eq $true -or $mainSaved) {
 			X "$inner<SavedData>true</SavedData>"
+		}
+		# Save: сохранение значения реквизита в пользовательских настройках. true → <Field>имя</Field>;
+		# строка/массив → под-поля с авто-префиксом "имя." (путь с точкой / UUID / =имя — как есть).
+		# Нет ключа или false → не эмитим.
+		if ($null -ne $attr.PSObject.Properties['save'] -and $null -ne $attr.save) {
+			$saveFields = New-Object System.Collections.ArrayList
+			if ($attr.save -is [bool]) {
+				if ($attr.save) { [void]$saveFields.Add($attrName) }
+			} else {
+				foreach ($e in @($attr.save)) {
+					$fld = "$e"
+					if ([string]::IsNullOrEmpty($fld)) { continue }
+					if ($fld -ne $attrName -and $fld -notmatch '\.' -and $fld -notmatch '^\d+/\d+:') { $fld = "$attrName.$fld" }
+					if (-not $saveFields.Contains($fld)) { [void]$saveFields.Add($fld) }
+				}
+			}
+			if ($saveFields.Count -gt 0) {
+				X "$inner<Save>"
+				foreach ($f in $saveFields) { X "$inner`t<Field>$(Esc-Xml $f)</Field>" }
+				X "$inner</Save>"
+			}
 		}
 		if ($attr.fillChecking) {
 			X "$inner<FillChecking>$($attr.fillChecking)</FillChecking>"
