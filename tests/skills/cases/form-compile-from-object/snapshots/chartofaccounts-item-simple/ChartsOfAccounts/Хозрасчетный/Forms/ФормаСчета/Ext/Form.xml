@@ -115,31 +115,31 @@
 				<ExtendedTooltip name="ВидыСубконтоУправлениеПоискомРасширеннаяПодсказка" id="39"/>
 			</SearchControlAddition>
 			<ChildItems>
-				<InputField name="ВидСубконто" id="40">
+				<InputField name="ВидыСубконтоВидСубконто" id="40">
 					<DataPath>Объект.ExtDimensionTypes.ExtDimensionType</DataPath>
-					<ContextMenu name="ВидСубконтоКонтекстноеМеню" id="41"/>
-					<ExtendedTooltip name="ВидСубконтоРасширеннаяПодсказка" id="42"/>
+					<ContextMenu name="ВидыСубконтоВидСубконтоКонтекстноеМеню" id="41"/>
+					<ExtendedTooltip name="ВидыСубконтоВидСубконтоРасширеннаяПодсказка" id="42"/>
 				</InputField>
-				<CheckBoxField name="ТолькоОбороты" id="43">
+				<CheckBoxField name="ВидыСубконтоТолькоОбороты" id="43">
 					<DataPath>Объект.ExtDimensionTypes.TurnoversOnly</DataPath>
 					<CheckBoxType>Auto</CheckBoxType>
 					<TitleLocation>Right</TitleLocation>
-					<ContextMenu name="ТолькоОборотыКонтекстноеМеню" id="44"/>
-					<ExtendedTooltip name="ТолькоОборотыРасширеннаяПодсказка" id="45"/>
+					<ContextMenu name="ВидыСубконтоТолькоОборотыКонтекстноеМеню" id="44"/>
+					<ExtendedTooltip name="ВидыСубконтоТолькоОборотыРасширеннаяПодсказка" id="45"/>
 				</CheckBoxField>
-				<CheckBoxField name="Валютный" id="46">
+				<CheckBoxField name="ВидыСубконтоВалютный" id="46">
 					<DataPath>Объект.ExtDimensionTypes.Валютный</DataPath>
 					<CheckBoxType>Auto</CheckBoxType>
 					<TitleLocation>Right</TitleLocation>
-					<ContextMenu name="ВалютныйКонтекстноеМеню" id="47"/>
-					<ExtendedTooltip name="ВалютныйРасширеннаяПодсказка" id="48"/>
+					<ContextMenu name="ВидыСубконтоВалютныйКонтекстноеМеню" id="47"/>
+					<ExtendedTooltip name="ВидыСубконтоВалютныйРасширеннаяПодсказка" id="48"/>
 				</CheckBoxField>
-				<CheckBoxField name="Количественный" id="49">
+				<CheckBoxField name="ВидыСубконтоКоличественный" id="49">
 					<DataPath>Объект.ExtDimensionTypes.Количественный</DataPath>
 					<CheckBoxType>Auto</CheckBoxType>
 					<TitleLocation>Right</TitleLocation>
-					<ContextMenu name="КоличественныйКонтекстноеМеню" id="50"/>
-					<ExtendedTooltip name="КоличественныйРасширеннаяПодсказка" id="51"/>
+					<ContextMenu name="ВидыСубконтоКоличественныйКонтекстноеМеню" id="50"/>
+					<ExtendedTooltip name="ВидыСубконтоКоличественныйРасширеннаяПодсказка" id="51"/>
 				</CheckBoxField>
 			</ChildItems>
 		</Table>

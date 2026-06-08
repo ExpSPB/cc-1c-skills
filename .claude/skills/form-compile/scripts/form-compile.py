@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-# form-compile v1.73 — Compile 1C managed form from JSON or object metadata
+# form-compile v1.74 — Compile 1C managed form from JSON or object metadata
 # Source: https://github.com/Nikolay-Shirokov/cc-1c-skills
 import argparse
 import copy
@@ -1157,14 +1157,17 @@ def generate_chart_of_accounts_item_dsl(meta, p, fd, preset_data):
 
     # ExtDimensionTypes table
     if meta.get('MaxExtDimensionCount', 0) > 0:
+        # Column names are prefixed with the table name (like the generic TS path and stock 1C),
+        # else a subconto flag column collides with a same-named account accounting-flag checkbox.
+        ed_table = '\u0412\u0438\u0434\u044b\u0421\u0443\u0431\u043a\u043e\u043d\u0442\u043e'
         ed_cols = []
-        ed_cols.append(OrderedDict([('input', '\u0412\u0438\u0434\u0421\u0443\u0431\u043a\u043e\u043d\u0442\u043e'), ('path', '\u041e\u0431\u044a\u0435\u043a\u0442.ExtDimensionTypes.ExtDimensionType')]))
-        ed_cols.append(OrderedDict([('check', '\u0422\u043e\u043b\u044c\u043a\u043e\u041e\u0431\u043e\u0440\u043e\u0442\u044b'), ('path', '\u041e\u0431\u044a\u0435\u043a\u0442.ExtDimensionTypes.TurnoversOnly')]))
+        ed_cols.append(OrderedDict([('input', f"{ed_table}\u0412\u0438\u0434\u0421\u0443\u0431\u043a\u043e\u043d\u0442\u043e"), ('path', '\u041e\u0431\u044a\u0435\u043a\u0442.ExtDimensionTypes.ExtDimensionType')]))
+        ed_cols.append(OrderedDict([('check', f"{ed_table}\u0422\u043e\u043b\u044c\u043a\u043e\u041e\u0431\u043e\u0440\u043e\u0442\u044b"), ('path', '\u041e\u0431\u044a\u0435\u043a\u0442.ExtDimensionTypes.TurnoversOnly')]))
         if meta.get('ExtDimensionAccountingFlags'):
             for ed_flag in meta['ExtDimensionAccountingFlags']:
-                ed_cols.append(OrderedDict([('check', ed_flag['Name']), ('path', f"\u041e\u0431\u044a\u0435\u043a\u0442.ExtDimensionTypes.{ed_flag['Name']}")]))
+                ed_cols.append(OrderedDict([('check', f"{ed_table}{ed_flag['Name']}"), ('path', f"\u041e\u0431\u044a\u0435\u043a\u0442.ExtDimensionTypes.{ed_flag['Name']}")]))
         elements.append(OrderedDict([
-            ('table', '\u0412\u0438\u0434\u044b\u0421\u0443\u0431\u043a\u043e\u043d\u0442\u043e'),
+            ('table', ed_table),
             ('path', '\u041e\u0431\u044a\u0435\u043a\u0442.ExtDimensionTypes'),
             ('columns', ed_cols),
         ]))
@@ -1701,6 +1704,17 @@ def new_id():
     global _next_id
     _next_id += 1
     return _next_id
+
+
+# Уникальность имён внутри коллекции (1С: элементы/реквизиты/команды/параметры/колонки — каждое своё
+# пространство имён). Дубль → битый XML, форма не открывается, поэтому fail-fast.
+_seen_element_names = set()  # пул имён элементов (глобально по всей форме)
+
+def _ensure_unique(name, seen, kind):
+    if name in seen:
+        print(f"[ERROR] Duplicate {kind} name '{name}' — names must be unique within their collection in a 1C form (set a unique 'name')", file=sys.stderr)
+        sys.exit(1)
+    seen.add(name)
 
 
 # --- Event handler name generator ---
@@ -2831,6 +2845,7 @@ def emit_element(lines, el, indent, in_cmd_bar=False):
             print(f"WARNING: Element '{el.get(type_key, '')}': unknown key '{p_name}' -- ignored. Check SKILL.md for valid keys.", file=sys.stderr)
 
     name = get_element_name(el, type_key)
+    _ensure_unique(name, _seen_element_names, 'element')
     eid = new_id()
 
     emitters = {
@@ -3975,9 +3990,11 @@ def emit_attributes(lines, attrs, indent):
         return
 
     lines.append(f'{indent}<Attributes>')
+    seen_attrs = set()
     for attr in attrs:
         attr_id = new_id()
         attr_name = str(attr['name'])
+        _ensure_unique(attr_name, seen_attrs, 'attribute')
 
         lines.append(f'{indent}\t<Attribute name="{attr_name}" id="{attr_id}">')
         inner = f'{indent}\t\t'
@@ -4041,12 +4058,16 @@ def emit_attributes(lines, attrs, indent):
         if has_direct_cols or has_add_cols:
             lines.append(f'{inner}<Columns>')
             if has_direct_cols:
+                seen_cols = set()  # колонки уникальны в пределах своего реквизита
                 for col in attr['columns']:
+                    _ensure_unique(str(col['name']), seen_cols, f"column of '{attr_name}'")
                     emit_attr_column(lines, col, f'{inner}\t')
             if has_add_cols:
                 for ac in attr['additionalColumns']:
                     lines.append(f'{inner}\t<AdditionalColumns table="{ac["table"]}">')
+                    seen_ac_cols = set()  # уникальность в пределах группы AdditionalColumns
                     for col in (ac.get('columns') or []):
+                        _ensure_unique(str(col['name']), seen_ac_cols, f"column of '{attr_name}'")
                         emit_attr_column(lines, col, f'{inner}\t\t')
                     lines.append(f'{inner}\t</AdditionalColumns>')
             lines.append(f'{inner}</Columns>')
@@ -4105,7 +4126,9 @@ def emit_parameters(lines, params, indent):
         return
 
     lines.append(f'{indent}<Parameters>')
+    seen_params = set()
     for param in params:
+        _ensure_unique(str(param['name']), seen_params, 'parameter')
         lines.append(f'{indent}\t<Parameter name="{param["name"]}">')
         inner = f'{indent}\t\t'
 
@@ -4125,8 +4148,10 @@ def emit_commands(lines, cmds, indent):
         return
 
     lines.append(f'{indent}<Commands>')
+    seen_cmds = set()
     for cmd in cmds:
         cmd_id = new_id()
+        _ensure_unique(str(cmd['name']), seen_cmds, 'command')
         lines.append(f'{indent}\t<Command name="{cmd["name"]}" id="{cmd_id}">')
         inner = f'{indent}\t\t'
 
@@ -4607,6 +4632,7 @@ def main():
 
     # --- 2. Main compilation ---
     _next_id = 0
+    _seen_element_names.clear()  # пул имён элементов (на случай повторного вызова в одном процессе)
     lines = []
 
     lines.append('<?xml version="1.0" encoding="UTF-8"?>')

@@ -1,4 +1,4 @@
-﻿# form-compile v1.73 — Compile 1C managed form from JSON or object metadata
+﻿# form-compile v1.74 — Compile 1C managed form from JSON or object metadata
 # Source: https://github.com/Nikolay-Shirokov/cc-1c-skills
 param(
 	[string]$JsonPath,
@@ -1230,16 +1230,19 @@ function Generate-ChartOfAccountsItemDSL($meta, [hashtable]$p, [hashtable]$fd, [
 
 	# ExtDimensionTypes table
 	if ($meta.MaxExtDimensionCount -gt 0) {
+		# Имена колонок табчасти префиксуются именем таблицы (как generic-путь и типовая 1С),
+		# иначе флаг субконто (напр. "Валютный") столкнётся с одноимённым признаком учёта счёта.
+		$edTable = "ВидыСубконто"
 		$edCols = @()
-		$edCols += [ordered]@{ input = "ВидСубконто"; path = "Объект.ExtDimensionTypes.ExtDimensionType" }
-		$edCols += [ordered]@{ check = "ТолькоОбороты"; path = "Объект.ExtDimensionTypes.TurnoversOnly" }
+		$edCols += [ordered]@{ input = "${edTable}ВидСубконто"; path = "Объект.ExtDimensionTypes.ExtDimensionType" }
+		$edCols += [ordered]@{ check = "${edTable}ТолькоОбороты"; path = "Объект.ExtDimensionTypes.TurnoversOnly" }
 		if ($meta.ExtDimensionAccountingFlags) {
 			foreach ($edFlag in $meta.ExtDimensionAccountingFlags) {
-				$edCols += [ordered]@{ check = $edFlag.Name; path = "Объект.ExtDimensionTypes.$($edFlag.Name)" }
+				$edCols += [ordered]@{ check = "${edTable}$($edFlag.Name)"; path = "Объект.ExtDimensionTypes.$($edFlag.Name)" }
 			}
 		}
 		$elements += [ordered]@{
-			table = "ВидыСубконто"
+			table = $edTable
 			path = "Объект.ExtDimensionTypes"
 			columns = $edCols
 		}
@@ -1519,6 +1522,17 @@ function New-Id {
 	$id = $script:nextId
 	$script:nextId++
 	return $id
+}
+
+# Уникальность имён внутри коллекции (1С: элементы/реквизиты/команды/параметры/колонки — каждое своё
+# пространство имён). Дубль → битый XML, форма не открывается, поэтому fail-fast.
+function Assert-UniqueName {
+	param([string]$name, [hashtable]$seen, [string]$kind)
+	if ($seen.ContainsKey($name)) {
+		Write-Error "Duplicate $kind name '$name' — names must be unique within their collection in a 1C form (set a unique 'name')"
+		exit 1
+	}
+	$seen[$name] = $true
 }
 
 # --- 3. XML helper ---
@@ -2483,6 +2497,7 @@ function Emit-Element {
 	}
 
 	$name = Get-ElementName -el $el -typeKey $typeKey
+	Assert-UniqueName -name $name -seen $script:seenElementNames -kind 'element'
 	$id = New-Id
 
 	switch ($typeKey) {
@@ -4259,9 +4274,11 @@ function Emit-Attributes {
 	if (-not $attrs -or $attrs.Count -eq 0) { return }
 
 	X "$indent<Attributes>"
+	$seenAttrs = @{}
 	foreach ($attr in $attrs) {
 		$attrId = New-Id
 		$attrName = "$($attr.name)"
+		Assert-UniqueName -name $attrName -seen $seenAttrs -kind 'attribute'
 
 		X "$indent`t<Attribute name=`"$attrName`" id=`"$attrId`">"
 		$inner = "$indent`t`t"
@@ -4333,12 +4350,20 @@ function Emit-Attributes {
 		if ($hasDirectCols -or $hasAddCols) {
 			X "$inner<Columns>"
 			if ($hasDirectCols) {
-				foreach ($col in $attr.columns) { Emit-AttrColumn -col $col -indent "$inner`t" }
+				$seenCols = @{}  # колонки уникальны в пределах своего реквизита
+				foreach ($col in $attr.columns) {
+					Assert-UniqueName -name "$($col.name)" -seen $seenCols -kind "column of '$attrName'"
+					Emit-AttrColumn -col $col -indent "$inner`t"
+				}
 			}
 			if ($hasAddCols) {
 				foreach ($ac in @($attr.additionalColumns)) {
 					X "$inner`t<AdditionalColumns table=`"$($ac.table)`">"
-					foreach ($col in @($ac.columns)) { Emit-AttrColumn -col $col -indent "$inner`t`t" }
+					$seenAcCols = @{}  # уникальность в пределах группы AdditionalColumns
+					foreach ($col in @($ac.columns)) {
+						Assert-UniqueName -name "$($col.name)" -seen $seenAcCols -kind "column of '$attrName'"
+						Emit-AttrColumn -col $col -indent "$inner`t`t"
+					}
 					X "$inner`t</AdditionalColumns>"
 				}
 			}
@@ -4405,7 +4430,9 @@ function Emit-Parameters {
 	if (-not $params -or $params.Count -eq 0) { return }
 
 	X "$indent<Parameters>"
+	$seenParams = @{}
 	foreach ($param in $params) {
+		Assert-UniqueName -name "$($param.name)" -seen $seenParams -kind 'parameter'
 		X "$indent`t<Parameter name=`"$($param.name)`">"
 		$inner = "$indent`t`t"
 
@@ -4428,8 +4455,10 @@ function Emit-Commands {
 	if (-not $cmds -or $cmds.Count -eq 0) { return }
 
 	X "$indent<Commands>"
+	$seenCmds = @{}
 	foreach ($cmd in $cmds) {
 		$cmdId = New-Id
+		Assert-UniqueName -name "$($cmd.name)" -seen $seenCmds -kind 'command'
 		X "$indent`t<Command name=`"$($cmd.name)`" id=`"$cmdId`">"
 		$inner = "$indent`t`t"
 
@@ -4746,6 +4775,7 @@ X "<Form xmlns=`"http://v8.1c.ru/8.3/xcf/logform`" xmlns:app=`"http://v8.1c.ru/8
 # Reset and rebuild properly
 $script:xml = New-Object System.Text.StringBuilder 8192
 $script:nextId = 1
+$script:seenElementNames = @{}  # пул имён элементов (глобально по всей форме)
 
 X '<?xml version="1.0" encoding="UTF-8"?>'
 X "<Form xmlns=`"http://v8.1c.ru/8.3/xcf/logform`" xmlns:app=`"http://v8.1c.ru/8.2/managed-application/core`" xmlns:cfg=`"http://v8.1c.ru/8.1/data/enterprise/current-config`" xmlns:dcscor=`"http://v8.1c.ru/8.1/data-composition-system/core`" xmlns:dcssch=`"http://v8.1c.ru/8.1/data-composition-system/schema`" xmlns:dcsset=`"http://v8.1c.ru/8.1/data-composition-system/settings`" xmlns:ent=`"http://v8.1c.ru/8.1/data/enterprise`" xmlns:lf=`"http://v8.1c.ru/8.2/managed-application/logform`" xmlns:style=`"http://v8.1c.ru/8.1/data/ui/style`" xmlns:sys=`"http://v8.1c.ru/8.1/data/ui/fonts/system`" xmlns:v8=`"http://v8.1c.ru/8.1/data/core`" xmlns:v8ui=`"http://v8.1c.ru/8.1/data/ui`" xmlns:web=`"http://v8.1c.ru/8.1/data/ui/colors/web`" xmlns:win=`"http://v8.1c.ru/8.1/data/ui/colors/windows`" xmlns:xr=`"http://v8.1c.ru/8.3/xcf/readable`" xmlns:xs=`"http://www.w3.org/2001/XMLSchema`" xmlns:xsi=`"http://www.w3.org/2001/XMLSchema-instance`" version=`"$($script:formatVersion)`">"

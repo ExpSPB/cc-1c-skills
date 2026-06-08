@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-# form-validate v1.6 — Validate 1C managed form
+# form-validate v1.7 — Validate 1C managed form
 # Source: https://github.com/Nikolay-Shirokov/cc-1c-skills
 
 import argparse
@@ -182,7 +182,8 @@ def main():
             report_error("AutoCommandBar element missing")
 
     # --- Collect all elements with IDs ---
-    element_ids = {}  # id -> name
+    element_ids = {}    # id -> name
+    element_names = {}  # name -> id (имена элементов уникальны в пределах формы)
     all_elements = []  # list of dicts {Name, Tag, Id, ParentName, Node}
 
     def collect_elements(node, parent_name):
@@ -210,6 +211,12 @@ def main():
                         report_error(f"Duplicate element id={eid}: '{name}' and '{element_ids[eid]}'")
                     else:
                         element_ids[eid] = name
+
+                    # Имена элементов уникальны (требование 1С)
+                    if name in element_names:
+                        report_error(f"Duplicate element name '{name}': id={eid} and id={element_names[name]}")
+                    else:
+                        element_names[name] = eid
 
                 child_items = child.find(f"{{{F_NS}}}ChildItems")
                 if child_items is not None:
@@ -252,6 +259,9 @@ def main():
         attr_name = attr.get("name", "")
         attr_id = attr.get("id", "")
         if attr_name:
+            # Имена реквизитов уникальны среди реквизитов (отдельный неймспейс от элементов)
+            if attr_name in attr_map:
+                report_error(f"Duplicate attribute name '{attr_name}': id={attr_id} and id={attr_map[attr_name].get('id', '')}")
             attr_map[attr_name] = attr
         if attr_id:
             if attr_id in attr_ids:
@@ -261,6 +271,7 @@ def main():
 
         # Column IDs uniqueness within parent
         col_ids = {}
+        col_names = {}  # имена колонок уникальны в пределах своего реквизита
         columns = attr.find(f"{{{F_NS}}}Columns")
         if columns is not None:
             for col in columns.findall(f"{{{F_NS}}}Column"):
@@ -271,6 +282,11 @@ def main():
                         report_error(f"Duplicate column id={col_id} in '{attr_name}': '{col_name}' and '{col_ids[col_id]}'")
                     else:
                         col_ids[col_id] = col_name
+                if col_name:
+                    if col_name in col_names:
+                        report_error(f"Duplicate column name '{col_name}' in '{attr_name}': id={col_id} and id={col_names[col_name]}")
+                    else:
+                        col_names[col_name] = col_id
 
     if not stopped:
         if attr_ids:
@@ -289,6 +305,9 @@ def main():
         cmd_name = cmd.get("name", "")
         cmd_id = cmd.get("id", "")
         if cmd_name:
+            # Имена команд уникальны среди команд (отдельный неймспейс)
+            if cmd_name in cmd_map:
+                report_error(f"Duplicate command name '{cmd_name}': id={cmd_id} and id={cmd_map[cmd_name].get('id', '')}")
             cmd_map[cmd_name] = cmd
         if cmd_id:
             if cmd_id in cmd_ids:
@@ -299,6 +318,18 @@ def main():
     if not stopped:
         if cmd_ids:
             report_ok(f"Unique command IDs: {len(cmd_ids)} entries")
+
+    # --- Collect parameters (separate name pool, без id) ---
+    param_names = {}  # name -> True (имена параметров уникальны среди параметров)
+    params_parent = root.find(f"{{{F_NS}}}Parameters")
+    if params_parent is not None:
+        for param in params_parent.findall(f"{{{F_NS}}}Parameter"):
+            param_name = param.get("name", "")
+            if param_name:
+                if param_name in param_names:
+                    report_error(f"Duplicate parameter name '{param_name}'")
+                else:
+                    param_names[param_name] = True
 
     # --- Check 4: Companion elements ---
     companion_rules = {

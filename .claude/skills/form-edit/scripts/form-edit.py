@@ -1,4 +1,4 @@
-# form-edit v1.0 — Edit 1C managed form elements (Python port)
+# form-edit v1.1 — Edit 1C managed form elements (Python port)
 # Source: https://github.com/Nikolay-Shirokov/cc-1c-skills
 import argparse
 import json
@@ -363,6 +363,14 @@ def get_element_name(el, type_key):
     if "name" in el and el["name"]:
         return str(el["name"])
     return str(el[type_key])
+
+
+def _assert_edit_unique(name, seen, ctx):
+    # Уникальность имён внутри JSON-определения (1С: своя коллекция — свой неймспейс).
+    if name in seen:
+        print(f"[ERROR] Duplicate {ctx} '{name}' in JSON definition — names must be unique in 1C form")
+        sys.exit(1)
+    seen.add(name)
 
 
 known_events = {
@@ -988,7 +996,26 @@ if elements_list:
     # Detect indent level
     child_indent = get_child_indent(target_ci)
 
-    # Check for duplicate element names
+    # Имена элементов уникальны (требование 1С). Сначала — внутри самого JSON-определения
+    # (рекурсивно по children/columns).
+    def _walk_elem_names(el, seen):
+        tk = None
+        for key in ELEMENT_KEYS:
+            if key in el and el[key] is not None:
+                tk = key
+                break
+        if tk:
+            _assert_edit_unique(get_element_name(el, tk), seen, "element name")
+        for c in el.get("children", []):
+            _walk_elem_names(c, seen)
+        for c in el.get("columns", []):
+            _walk_elem_names(c, seen)
+
+    dsl_elem_names = set()
+    for el in elements_list:
+        _walk_elem_names(el, dsl_elem_names)
+
+    # Затем — против уже существующих элементов формы (дубль = битый XML, форма не откроется).
     for el in elements_list:
         type_key = None
         for key in ELEMENT_KEYS:
@@ -999,7 +1026,8 @@ if elements_list:
             el_name = get_element_name(el, type_key)
             existing = find_element(root_ci, el_name) if root_ci is not None else None
             if existing is not None:
-                print(f"[WARN] Element '{el_name}' already exists in form (id={existing.get('id')})")
+                print(f"[ERROR] Element '{el_name}' already exists in form (id={existing.get('id')}) — element names must be unique")
+                sys.exit(1)
 
     # Remember starting element ID for companion counting
     start_elem_id = next_elem_id
@@ -1054,6 +1082,19 @@ if attrs_list:
     attr_child_indent = get_child_indent(attrs_section)
     if not attr_child_indent:
         attr_child_indent = "\t\t"
+
+    # Уникальность имён реквизитов: внутри JSON-определения (+ колонки в пределах реквизита) и
+    # против уже существующих реквизитов формы.
+    dsl_attr_names = set()
+    for attr in attrs_list:
+        _assert_edit_unique(str(attr["name"]), dsl_attr_names, "attribute name")
+        if attr.get("columns"):
+            dsl_col_names = set()
+            for col in attr["columns"]:
+                _assert_edit_unique(str(col["name"]), dsl_col_names, f"column name of '{attr['name']}'")
+        if attrs_section.find(f"f:Attribute[@name='{attr['name']}']", NS) is not None:
+            print(f"[ERROR] Attribute '{attr['name']}' already exists in form — attribute names must be unique")
+            sys.exit(1)
 
     # Generate attribute fragments
     xml_lines.clear()
@@ -1115,6 +1156,14 @@ if cmds_list:
     cmd_child_indent = get_child_indent(cmds_section)
     if not cmd_child_indent:
         cmd_child_indent = "\t\t"
+
+    # Уникальность имён команд: внутри JSON-определения и против существующих команд формы.
+    dsl_cmd_names = set()
+    for cmd in cmds_list:
+        _assert_edit_unique(str(cmd["name"]), dsl_cmd_names, "command name")
+        if cmds_section.find(f"f:Command[@name='{cmd['name']}']", NS) is not None:
+            print(f"[ERROR] Command '{cmd['name']}' already exists in form — command names must be unique")
+            sys.exit(1)
 
     xml_lines.clear()
     X(f"<_F {ALL_NS_DECL}>")
