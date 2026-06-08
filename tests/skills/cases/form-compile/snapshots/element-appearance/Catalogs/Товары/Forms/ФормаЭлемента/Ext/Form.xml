@@ -10,17 +10,17 @@
 	<AutoCommandBar name="ФормаКоманднаяПанель" id="-1"/>
 	<ChildItems>
 		<LabelDecoration name="Внимание!" id="1">
+			<TextColor>web:FireBrick</TextColor>
+			<Font faceName="Arial" height="12" bold="true" italic="false" underline="false" strikeout="false" kind="Absolute" scale="100"/>
+			<Border width="1">
+				<v8ui:style xsi:type="v8ui:ControlBorderType">Single</v8ui:style>
+			</Border>
 			<Title formatted="false">
 				<v8:item>
 					<v8:lang>ru</v8:lang>
 					<v8:content>Внимание!</v8:content>
 				</v8:item>
 			</Title>
-			<TextColor>web:FireBrick</TextColor>
-			<Font faceName="Arial" height="12" bold="true" italic="false" underline="false" strikeout="false" kind="Absolute" scale="100"/>
-			<Border width="1">
-				<v8ui:style xsi:type="v8ui:ControlBorderType">Single</v8ui:style>
-			</Border>
 			<ContextMenu name="Внимание!КонтекстноеМеню" id="2"/>
 			<ExtendedTooltip name="Внимание!РасширеннаяПодсказка" id="3"/>
 		</LabelDecoration>
@@ -32,15 +32,15 @@
 			<ExtendedTooltip name="ЦенаРасширеннаяПодсказка" id="6"/>
 		</InputField>
 		<LabelDecoration name="Из стиля" id="7">
+			<TextColor>web:DimGray</TextColor>
+			<Font ref="style:NormalTextFont" kind="StyleItem"/>
+			<Border ref="style:ControlBorder"/>
 			<Title formatted="false">
 				<v8:item>
 					<v8:lang>ru</v8:lang>
 					<v8:content>Из стиля</v8:content>
 				</v8:item>
 			</Title>
-			<TextColor>web:DimGray</TextColor>
-			<Font ref="style:NormalTextFont" kind="StyleItem"/>
-			<Border ref="style:ControlBorder"/>
 			<ContextMenu name="Из стиляКонтекстноеМеню" id="8"/>
 			<ExtendedTooltip name="Из стиляРасширеннаяПодсказка" id="9"/>
 		</LabelDecoration>

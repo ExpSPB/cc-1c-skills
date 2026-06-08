@@ -1,4 +1,4 @@
-﻿# form-decompile v0.58 — Decompile 1C managed Form.xml to JSON DSL (draft)
+﻿# form-decompile v0.59 — Decompile 1C managed Form.xml to JSON DSL (draft)
 # Source: https://github.com/Nikolay-Shirokov/cc-1c-skills
 # ВНИМАНИЕ: раундтрип не гарантируется. Навык исключён из авто-использования моделью.
 param(
@@ -1436,7 +1436,9 @@ function Decompile-Element {
 			# title декорации — единая ML-text форма с formatted (атрибут <Title formatted> у PictureDecoration)
 			$tiNode = $node.SelectSingleNode("lf:Title", $ns)
 			if ($tiNode) { $tv = Get-MLFormattedValue $tiNode; if ($null -ne $tv) { $obj['title'] = $tv } }
-			$ref = $node.SelectSingleNode("lf:Picture/xr:Ref", $ns); if ($ref) { $obj['src'] = $ref.InnerText }
+			$ref = $node.SelectSingleNode("lf:Picture/xr:Ref", $ns)
+			$abs = $node.SelectSingleNode("lf:Picture/xr:Abs", $ns)
+			if ($ref) { $obj['src'] = $ref.InnerText } elseif ($abs) { $obj['src'] = "abs:$($abs.InnerText)" }  # встроенная картинка → префикс abs:
 			$lt = $node.SelectSingleNode("lf:Picture/xr:LoadTransparent", $ns); if ($lt -and $lt.InnerText -eq 'true') { $obj['loadTransparent'] = $true }
 			if ((Get-Child $node 'Hyperlink') -eq 'true') { $obj['hyperlink'] = $true }
 		}

@@ -1,4 +1,4 @@
-﻿# form-compile v1.82 — Compile 1C managed form from JSON or object metadata
+﻿# form-compile v1.83 — Compile 1C managed form from JSON or object metadata
 # Source: https://github.com/Nikolay-Shirokov/cc-1c-skills
 param(
 	[string]$JsonPath,
@@ -3609,15 +3609,14 @@ function Emit-Label {
 	X "$indent<LabelDecoration name=`"$name`" id=`"$id`">"
 	$inner = "$indent`t"
 
-	Emit-DecorationTitle -el $el -name $name -indent $inner -auto
-
+	# Порядок как у платформы: own-content (флаги/hyperlink/layout/оформление) ПЕРЕД Title
+	# (корпус layout-first 16970 vs 44 — заодно убирает шум атрибуции харнесса на многострочном Title).
 	Emit-CommonFlags -el $el -indent $inner
-
 	if ($el.hyperlink -eq $true) { X "$inner<Hyperlink>true</Hyperlink>" }
 	Emit-Layout -el $el -indent $inner
-
-	# Оформление (цвета/шрифт/граница) — перед компаньонами (профиль декорации)
 	Emit-Appearance -el $el -indent $inner -profile 'decoration'
+
+	Emit-DecorationTitle -el $el -name $name -indent $inner -auto
 
 	# Companions
 	Emit-CompanionPanel -tag "ContextMenu" -name "${name}КонтекстноеМеню" -indent $inner -panel $el.contextMenu
@@ -3967,11 +3966,14 @@ function Emit-PictureDecoration {
 	Emit-DecorationTitle -el $el -name $name -indent $inner
 	Emit-CommonFlags -el $el -indent $inner
 
-	if ($el.picture -or $el.src) {
-		$ref = if ($el.src) { "$($el.src)" } else { "$($el.picture)" }
+	# Источник картинки — ТОЛЬКО $el.src (у PictureDecoration ключ 'picture' = тип/имя элемента, не источник).
+	# Префикс "abs:" → встроенная картинка <xr:Abs>; иначе именованная/стилевая <xr:Ref>.
+	if ($el.src) {
+		$srcStr = "$($el.src)"
 		$lt = if ($el.loadTransparent -eq $true) { "true" } else { "false" }
 		X "$inner<Picture>"
-		X "$inner`t<xr:Ref>$ref</xr:Ref>"
+		if ($srcStr -match '^abs:(.*)$') { X "$inner`t<xr:Abs>$(Esc-Xml $matches[1])</xr:Abs>" }
+		else { X "$inner`t<xr:Ref>$(Esc-Xml $srcStr)</xr:Ref>" }
 		X "$inner`t<xr:LoadTransparent>$lt</xr:LoadTransparent>"
 		X "$inner</Picture>"
 	}

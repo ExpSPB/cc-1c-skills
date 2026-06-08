@@ -636,7 +636,7 @@ Pages поддерживает `pagesRepresentation`: `None`, `TabsOnTop`, `Tabs
 
 | Свойство | Тип | Описание |
 |----------|-----|----------|
-| `src` или `picture` (как свойство) | string | Ссылка на картинку |
+| `src` (у `picture`-декорации — только `src`, не имя) | string | Ссылка на картинку: `StdPicture.X`/`CommonPicture.X`/`style:X` → `<xr:Ref>`. Префикс `abs:` (напр. `"abs:Picture.png"`) → встроенная картинка `<xr:Abs>` |
 | `loadTransparent` | bool | `true` → загружать прозрачной. По умолчанию `false` |
 | `hyperlink` | bool | Режим гиперссылки |
 | `width` | int | Ширина |

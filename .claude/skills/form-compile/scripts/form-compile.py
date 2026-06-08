@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-# form-compile v1.82 — Compile 1C managed form from JSON or object metadata
+# form-compile v1.83 — Compile 1C managed form from JSON or object metadata
 # Source: https://github.com/Nikolay-Shirokov/cc-1c-skills
 import argparse
 import copy
@@ -3314,16 +3314,15 @@ def emit_label(lines, el, name, eid, indent):
     lines.append(f'{indent}<LabelDecoration name="{name}" id="{eid}">')
     inner = f'{indent}\t'
 
-    emit_decoration_title(lines, el, name, inner, auto=True)
-
+    # Порядок как у платформы: own-content (флаги/hyperlink/layout/оформление) ПЕРЕД Title
+    # (корпус layout-first 16970 vs 44 — заодно убирает шум атрибуции харнесса на многострочном Title).
     emit_common_flags(lines, el, inner)
-
     if el.get('hyperlink') is True:
         lines.append(f'{inner}<Hyperlink>true</Hyperlink>')
     emit_layout(lines, el, inner)
-
-    # Оформление (цвета/шрифт/граница) — перед компаньонами (профиль декорации)
     emit_appearance(lines, el, inner, 'decoration')
+
+    emit_decoration_title(lines, el, name, inner, auto=True)
 
     # Companions
     emit_companion_panel(lines, 'ContextMenu', f'{name}\u041a\u043e\u043d\u0442\u0435\u043a\u0441\u0442\u043d\u043e\u0435\u041c\u0435\u043d\u044e', inner, el.get('contextMenu'))
@@ -3663,11 +3662,16 @@ def emit_picture_decoration(lines, el, name, eid, indent):
     emit_decoration_title(lines, el, name, inner)
     emit_common_flags(lines, el, inner)
 
-    if el.get('picture') or el.get('src'):
-        ref = str(el.get('src') or el.get('picture'))
+    # Источник картинки — ТОЛЬКО src (ключ 'picture' = тип/имя элемента, не источник).
+    # Префикс "abs:" → встроенная картинка <xr:Abs>; иначе именованная/стилевая <xr:Ref>.
+    if el.get('src'):
+        src_str = str(el['src'])
         lt = 'true' if el.get('loadTransparent') is True else 'false'
         lines.append(f'{inner}<Picture>')
-        lines.append(f'{inner}\t<xr:Ref>{ref}</xr:Ref>')
+        if src_str.startswith('abs:'):
+            lines.append(f'{inner}\t<xr:Abs>{esc_xml(src_str[4:])}</xr:Abs>')
+        else:
+            lines.append(f'{inner}\t<xr:Ref>{esc_xml(src_str)}</xr:Ref>')
         lines.append(f'{inner}\t<xr:LoadTransparent>{lt}</xr:LoadTransparent>')
         lines.append(f'{inner}</Picture>')
 
