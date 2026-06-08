@@ -16,7 +16,7 @@
   "input": {
     "title": "Форма с командами",
     "elements": [
-      { "cmdBar": "Панель", "children": [
+      { "cmdBar": "Панель", "horizontalLocation": "right", "children": [
         { "button": "Выполнить", "command": "Выполнить", "defaultButton": true },
         { "button": "Закрыть", "stdCommand": "Close" }
       ]},

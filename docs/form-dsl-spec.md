@@ -667,8 +667,10 @@ Pages поддерживает `pagesRepresentation`: `None`, `TabsOnTop`, `Tabs
 #### cmdBar — CommandBar
 
 ```json
-{ "cmdBar": "КоманднаяПанель", "children": [ ... ] }
+{ "cmdBar": "КоманднаяПанель", "horizontalLocation": "right", "children": [ ... ] }
 ```
+
+Свойства: `commandSource`, `autofill`, `horizontalLocation` (`<HorizontalLocation>`: `auto` дефолт / `left` / `right` / `center`, + рус. синонимы), `title`, `children` + общие флаги/layout.
 
 #### popup — Popup
 

@@ -1,4 +1,4 @@
-﻿# form-compile v1.74 — Compile 1C managed form from JSON or object metadata
+﻿# form-compile v1.75 — Compile 1C managed form from JSON or object metadata
 # Source: https://github.com/Nikolay-Shirokov/cc-1c-skills
 param(
 	[string]$JsonPath,
@@ -2351,6 +2351,7 @@ function Get-HLocation {
 		'^(auto|авто)$'          { return $null }    # дефолт — не эмитим
 		'^(left|слева|лево)$'    { return 'Left' }
 		'^(right|справа|право)$'  { return 'Right' }
+		'^(center|центр|по центру)$' { return 'Center' }
 		default                  { return "$v" }
 	}
 }
@@ -3997,6 +3998,7 @@ function Emit-CommandBar {
 
 	if ($el.autofill -eq $true) { X "$inner<Autofill>true</Autofill>" }
 
+	$hl = Get-HLocation $el; if ($hl) { X "$inner<HorizontalLocation>$hl</HorizontalLocation>" }
 	Emit-CommonFlags -el $el -indent $inner
 	Emit-Layout -el $el -indent $inner
 	Emit-Companion -tag "ExtendedTooltip" -name "${name}РасширеннаяПодсказка" -indent $inner -content $el.extendedTooltip

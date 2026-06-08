@@ -12,6 +12,7 @@
 	</AutoCommandBar>
 	<ChildItems>
 		<CommandBar name="Панель" id="1">
+			<HorizontalLocation>Right</HorizontalLocation>
 			<ExtendedTooltip name="ПанельРасширеннаяПодсказка" id="2"/>
 			<ChildItems>
 				<Button name="Выполнить" id="3">

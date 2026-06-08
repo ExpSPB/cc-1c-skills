@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-# form-compile v1.74 — Compile 1C managed form from JSON or object metadata
+# form-compile v1.75 — Compile 1C managed form from JSON or object metadata
 # Source: https://github.com/Nikolay-Shirokov/cc-1c-skills
 import argparse
 import copy
@@ -2369,6 +2369,8 @@ def get_hlocation(el):
         return 'Left'
     if s in ('right', 'справа', 'право'):
         return 'Right'
+    if s in ('center', 'центр', 'по центру'):
+        return 'Center'
     return str(v)
 
 
@@ -3699,6 +3701,10 @@ def emit_command_bar(lines, el, name, eid, indent):
 
     if el.get('autofill') is True:
         lines.append(f'{inner}<Autofill>true</Autofill>')
+
+    _hl = get_hlocation(el)
+    if _hl:
+        lines.append(f'{inner}<HorizontalLocation>{_hl}</HorizontalLocation>')
 
     emit_common_flags(lines, el, inner)
     emit_layout(lines, el, inner)
