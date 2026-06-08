@@ -23,7 +23,7 @@
     ],
     "attributes": [
       { "name": "Объект", "type": "DataProcessorObject.Типы", "main": true },
-      { "name": "Строка", "type": "string(200)", "view": false, "save": true },
+      { "name": "Строка", "type": "string(200)", "view": false, "save": true, "fillCheck": true },
       { "name": "Число", "type": "decimal(10,0,nonneg)", "edit": false },
       { "name": "Дата", "type": "dateTime", "title": "" },
       { "name": "Булево", "type": "boolean" },

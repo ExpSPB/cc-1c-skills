@@ -1,4 +1,4 @@
-﻿# form-compile v1.79 — Compile 1C managed form from JSON or object metadata
+﻿# form-compile v1.80 — Compile 1C managed form from JSON or object metadata
 # Source: https://github.com/Nikolay-Shirokov/cc-1c-skills
 param(
 	[string]$JsonPath,
@@ -2576,6 +2576,10 @@ function Emit-Element {
 		"autoCmdBar"=1
 		# дополнения командной панели таблицы (тип-ключи + свойства)
 		"searchString"=1;"viewStatus"=1;"searchControl"=1;"source"=1;"horizontalLocation"=1;"additions"=1
+		# generic-скаляры (pass-through) + точечные
+		"verticalAlign"=1;"throughAlign"=1;"enableContentChange"=1;"pictureSize"=1;"titleHeight"=1
+		"childItemsWidth"=1;"showLeftMargin"=1;"cellHyperlink"=1;"viewMode"=1;"verticalScrollBar"=1
+		"rowInputMode"=1;"mask"=1;"createButton"=1
 	}
 	# Оформление (цвета/шрифты/граница) — авто-регистрация из самих структур, чтобы allowlist
 	# не дрейфовал при добавлении новых ключей/синонимов. Канонические + forgiving-синонимы.
@@ -2748,6 +2752,39 @@ $script:appOrderField      = @('titleTextColor','titleBackColor','titleFont','fo
 $script:appOrderDecoration = @('textColor','font','backColor','borderColor','border')
 $script:appOrderButton     = @('textColor','backColor','borderColor','font')
 
+# Простые скаляры элемента (pass-through: captured/emitted «как есть»). Только НЕ-перекрывающиеся
+# теги (не обрабатываемые специфично где-то ещё). kind: bool → true/false; value → строка verbatim.
+$script:genericScalars = @(
+	@{ Tag='VerticalAlign';       Key='verticalAlign';       Kind='value' }
+	@{ Tag='ThroughAlign';        Key='throughAlign';        Kind='value' }
+	@{ Tag='EnableContentChange'; Key='enableContentChange'; Kind='bool'  }
+	@{ Tag='PictureSize';         Key='pictureSize';         Kind='value' }
+	@{ Tag='TitleHeight';         Key='titleHeight';         Kind='value' }
+	@{ Tag='ChildItemsWidth';     Key='childItemsWidth';     Kind='value' }
+	@{ Tag='ShowLeftMargin';      Key='showLeftMargin';      Kind='bool'  }
+	@{ Tag='CellHyperlink';       Key='cellHyperlink';       Kind='bool'  }
+	@{ Tag='ViewMode';            Key='viewMode';            Kind='value' }
+	@{ Tag='VerticalScrollBar';   Key='verticalScrollBar';   Kind='value' }
+	@{ Tag='RowInputMode';        Key='rowInputMode';        Kind='value' }
+	@{ Tag='Mask';                Key='mask';                Kind='value' }
+	@{ Tag='CreateButton';        Key='createButton';        Kind='bool'  }
+)
+
+function Emit-GenericScalars {
+	param($el, [string]$indent)
+	if ($null -eq $el) { return }
+	foreach ($s in $script:genericScalars) {
+		$p = $el.PSObject.Properties[$s.Key]
+		if (-not $p -or $null -eq $p.Value) { continue }
+		if ($s.Kind -eq 'bool') {
+			X "$indent<$($s.Tag)>$(if ($p.Value){'true'}else{'false'})</$($s.Tag)>"
+		} else {
+			$v = "$($p.Value)"; if ($v -eq '') { continue }
+			X "$indent<$($s.Tag)>$(Esc-Xml $v)</$($s.Tag)>"
+		}
+	}
+}
+
 function Get-AppearanceValue {
 	param($el, [string]$canonical)
 	if ($null -eq $el) { return $null }
@@ -2833,6 +2870,7 @@ function Emit-Layout {
 	if ($el.groupHorizontalAlign) { X "$indent<GroupHorizontalAlign>$($el.groupHorizontalAlign)</GroupHorizontalAlign>" }
 	if ($el.groupVerticalAlign) { X "$indent<GroupVerticalAlign>$($el.groupVerticalAlign)</GroupVerticalAlign>" }
 	if ($el.horizontalAlign) { X "$indent<HorizontalAlign>$($el.horizontalAlign)</HorizontalAlign>" }
+	Emit-GenericScalars -el $el -indent $indent
 }
 
 function Title-FromName {
@@ -3772,6 +3810,7 @@ function Emit-Page {
 		}
 		if ($orientation) { X "$inner<Group>$orientation</Group>" }
 	}
+	if ($el.showTitle -eq $false) { X "$inner<ShowTitle>false</ShowTitle>" }
 	Emit-Layout -el $el -indent $inner
 
 	# Companion
@@ -4441,8 +4480,12 @@ function Emit-Attributes {
 				X "$inner</Save>"
 			}
 		}
-		if ($attr.fillChecking) {
-			X "$inner<FillChecking>$($attr.fillChecking)</FillChecking>"
+		# Проверка заполнения реквизита → <FillCheck> (реальный тег; <FillChecking> в схеме нет).
+		# bool true → ShowError (единственное значение в корпусе); строка → verbatim. Синоним fillChecking.
+		$fcRaw = if ($null -ne $attr.PSObject.Properties['fillCheck']) { $attr.fillCheck } elseif ($null -ne $attr.PSObject.Properties['fillChecking']) { $attr.fillChecking } else { $null }
+		if ($fcRaw) {
+			$fcv = if ($fcRaw -is [bool]) { 'ShowError' } else { "$fcRaw" }
+			X "$inner<FillCheck>$fcv</FillCheck>"
 		}
 
 		# UseAlways: поля, всегда читаемые (дин-список/таблица). Две формы DSL сливаются:
@@ -4606,6 +4649,8 @@ function Emit-Commands {
 		if ($cmd.action) {
 			X "$inner<Action>$($cmd.action)</Action>"
 		}
+
+		if ($cmd.modifiesSavedData -eq $true) { X "$inner<ModifiesSavedData>true</ModifiesSavedData>" }
 
 		Emit-FunctionalOptions -fo $cmd.functionalOptions -indent $inner
 

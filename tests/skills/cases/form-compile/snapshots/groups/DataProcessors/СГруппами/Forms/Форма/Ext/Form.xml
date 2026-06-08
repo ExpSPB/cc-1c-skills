@@ -26,6 +26,9 @@
 			<Behavior>Usual</Behavior>
 			<HorizontalStretch>true</HorizontalStretch>
 			<GroupHorizontalAlign>Right</GroupHorizontalAlign>
+			<VerticalAlign>Top</VerticalAlign>
+			<ThroughAlign>Use</ThroughAlign>
+			<ChildItemsWidth>Equal</ChildItemsWidth>
 			<ExtendedTooltip name="ГруппаШапкаРасширеннаяПодсказка" id="4"/>
 			<ChildItems>
 				<InputField name="Поле1" id="5">
@@ -38,6 +41,7 @@
 					</Title>
 					<SkipOnInput>true</SkipOnInput>
 					<Width>20</Width>
+					<Mask>999-999</Mask>
 					<ContextMenu name="Поле1КонтекстноеМеню" id="6"/>
 					<ExtendedTooltip name="Поле1РасширеннаяПодсказка" id="7"/>
 				</InputField>
@@ -74,6 +78,8 @@
 			<Group>Vertical</Group>
 			<Behavior>Collapsible</Behavior>
 			<Collapsed>true</Collapsed>
+			<EnableContentChange>false</EnableContentChange>
+			<ShowLeftMargin>false</ShowLeftMargin>
 			<ExtendedTooltip name="ГруппаПодвалРасширеннаяПодсказка" id="15"/>
 			<ChildItems>
 				<InputField name="Поле3" id="16">

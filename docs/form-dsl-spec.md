@@ -253,7 +253,19 @@ companion-панели с собственным контентом. Оба не
 | `headerHorizontalAlign` | `<HeaderHorizontalAlign>` | `Left`/`Right`/`Center`/`Auto` |
 | `headerPicture` | `<HeaderPicture>` | Картинка в шапке колонки. Формат — см. «Картинка-ссылка» ниже |
 | `footerPicture` | `<FooterPicture>` | Картинка в подвале колонки. Формат — см. «Картинка-ссылка» ниже |
+| `verticalAlign` | `<VerticalAlign>` | `Top`/`Center`/`Bottom` |
+| `throughAlign` | `<ThroughAlign>` | `Use`/`DontUse` (сквозное выравнивание группы) |
+| `enableContentChange` | `<EnableContentChange>` | bool (группа/страницы) |
+| `pictureSize` | `<PictureSize>` | `AutoSize`/`Proportionally`/`ByFontSize`/… (декорация-картинка) |
+| `titleHeight` | `<TitleHeight>` | число |
+| `childItemsWidth` | `<ChildItemsWidth>` | `Equal`/`LeftWide`/… (ширины дочерних в группе) |
+| `showLeftMargin` | `<ShowLeftMargin>` | bool (группа) |
+| `cellHyperlink` | `<CellHyperlink>` | bool |
+| `mask` | `<Mask>` | строка маски ввода (input) |
+| `createButton` | `<CreateButton>` | bool (input) |
+| `viewMode` / `verticalScrollBar` / `rowInputMode` | `<ViewMode>`/… | свойства таблицы (pass-through) |
 
+> Эти простые скаляры — pass-through (captured/emitted «как есть»), применимы там, где платформа их пишет.
 > `defaultItem`/`enableStartDrag`/`fileDragMode`/`skipOnInput` + cell-свойства (`showInHeader`/`showInFooter`/`autoCellHeight`/`footerHorizontalAlign`/`headerHorizontalAlign`/`headerPicture`/`footerPicture`) — общие для любого поля-колонки (input, label, picField, check).
 
 #### Картинка-ссылка (`headerPicture`/`footerPicture`/`valuesPicture`)
@@ -743,7 +755,7 @@ Pages поддерживает `pagesRepresentation`: `None`, `TabsOnTop`, `Tabs
 | `valueType` | string | Тип значений у реквизита типа `ValueList` (`<Settings xsi:type="v8:TypeDescription">`). Грамматика — как у `type`, включая составной `A \| B`. **Три состояния**: нет ключа → нет `<Settings>`; `""` → пустой `<Settings…/>` (список без ограничения типа); тип → с типом. Forgiving-синонимы: `typeDescription` (≈1С «ОписаниеТипов» / XML), `описаниеТипов`, `типЗначений`. Пример: `"valueType": "CatalogRef.Контрагенты"` |
 | `savedData` | bool | Сохраняемые данные (`<SavedData>`) |
 | `save` | bool/string/array | Сохранение значения в пользовательских настройках (`<Save><Field>…`). `true` → `<Field>имя</Field>`; строка/массив строк → под-поля с авто-префиксом `имя.` (путь с точкой / UUID `1/0:…` / совпадающее с именем — берётся как есть). Нет ключа или `false` → не эмитится. Пример периода: `["Период","EndDate","StartDate","Variant"]` |
-| `fillChecking` | string | `Show`, `DontShow` |
+| `fillCheck` | bool/string | Проверка заполнения реквизита (`<FillCheck>`). `true` → `ShowError` (единственное значение в схеме); строка → verbatim. Синоним `fillChecking`. (`<FillChecking>` в схеме нет — был багом) |
 | `columns` | array | Колонки для ValueTable/ValueTree (`{ name, type, title?, functionalOptions?, useAlways? }`) |
 | `additionalColumns` | array | Доп. колонки табличных частей объекта: `[{ table: "Объект.ТабЧасть", columns: [<col>] }]`. У главного реквизита-объекта; `<col>` — та же грамматика, что у `columns`. Эмитятся в `<Columns>` после прямых колонок |
 | `settings` | object | Настройки динамического списка (только `type: "DynamicList"`) |
@@ -861,6 +873,7 @@ Pages поддерживает `pagesRepresentation`: `None`, `TabsOnTop`, `Tabs
 | `use` | bool/object | Доступность команды по ролям (`<Use>`). См. §4.1c |
 | `functionalOptions` | array | Функциональные опции команды (см. §5) |
 | `currentRowUse` | string | Использование текущей строки: `Auto`, `DontUse`, `Use` |
+| `modifiesSavedData` | bool | Команда изменяет сохраняемые данные (`<ModifiesSavedData>`); эмитится только `true` |
 | `shortcut` | string | Клавиатурное сочетание |
 | `picture` | string | Ссылка на картинку |
 | `representation` | string | `Auto`, `Picture`, `Text`, `PictureAndText` |

@@ -1,4 +1,4 @@
-﻿# form-decompile v0.55 — Decompile 1C managed Form.xml to JSON DSL (draft)
+﻿# form-decompile v0.56 — Decompile 1C managed Form.xml to JSON DSL (draft)
 # Source: https://github.com/Nikolay-Shirokov/cc-1c-skills
 # ВНИМАНИЕ: раундтрип не гарантируется. Навык исключён из авто-использования моделью.
 param(
@@ -1120,6 +1120,34 @@ $ELEMENT_KEY = @{
 	'SearchStringAddition'='searchString'; 'ViewStatusAddition'='viewStatus'; 'SearchControlAddition'='searchControl'
 }
 
+# Простые скаляры элемента (pass-through, зеркало $script:genericScalars компилятора). kind bool/value.
+$GENERIC_SCALARS = @(
+	@{ Tag='VerticalAlign'; Key='verticalAlign'; Kind='value' }
+	@{ Tag='ThroughAlign'; Key='throughAlign'; Kind='value' }
+	@{ Tag='EnableContentChange'; Key='enableContentChange'; Kind='bool' }
+	@{ Tag='PictureSize'; Key='pictureSize'; Kind='value' }
+	@{ Tag='TitleHeight'; Key='titleHeight'; Kind='value' }
+	@{ Tag='ChildItemsWidth'; Key='childItemsWidth'; Kind='value' }
+	@{ Tag='ShowLeftMargin'; Key='showLeftMargin'; Kind='bool' }
+	@{ Tag='CellHyperlink'; Key='cellHyperlink'; Kind='bool' }
+	@{ Tag='ViewMode'; Key='viewMode'; Kind='value' }
+	@{ Tag='VerticalScrollBar'; Key='verticalScrollBar'; Kind='value' }
+	@{ Tag='RowInputMode'; Key='rowInputMode'; Kind='value' }
+	@{ Tag='Mask'; Key='mask'; Kind='value' }
+	@{ Tag='CreateButton'; Key='createButton'; Kind='bool' }
+)
+
+# Захват generic-скаляров. Специфичная обработка (если ключ уже задан) — побеждает.
+function Add-GenericScalars {
+	param($obj, $node)
+	foreach ($s in $GENERIC_SCALARS) {
+		if ($obj.Contains($s.Key)) { continue }
+		$v = Get-Child $node $s.Tag
+		if ($null -eq $v) { continue }
+		if ($s.Kind -eq 'bool') { $obj[$s.Key] = ($v -eq 'true') } else { $obj[$s.Key] = $v }
+	}
+}
+
 function Decompile-Children {
 	param($parentNode, [string]$childContainer = 'ChildItems')
 	$container = $parentNode.SelectSingleNode("lf:$childContainer", $ns)
@@ -1355,6 +1383,7 @@ function Decompile-Element {
 				$v = Get-Child $node $p; if ($null -ne $v) { $obj[($p.Substring(0,1).ToLower()+$p.Substring(1))] = (To-Bool $v) }
 			}
 			$cbr = Get-Child $node 'ChoiceButtonRepresentation'; if ($cbr) { $obj['choiceButtonRepresentation'] = $cbr }
+			if ((Get-Child $node 'TextEdit') -eq 'false') { $obj['textEdit'] = $false }
 			$cl = Decompile-ChoiceList $node; if ($cl) { $obj['choiceList'] = $cl }
 			Add-FormatProps $obj $node
 			# Параметры выбора / Связи параметров выбора / Связь по типу
@@ -1504,6 +1533,7 @@ function Decompile-Element {
 			$g = Get-Child $node 'Group'
 			$gmap = @{ 'Horizontal'='horizontal'; 'Vertical'='vertical'; 'AlwaysHorizontal'='alwaysHorizontal'; 'AlwaysVertical'='alwaysVertical' }
 			if ($g -and $gmap.ContainsKey($g)) { $obj['group'] = $gmap[$g] }
+			if ((Get-Child $node 'ShowTitle') -eq 'false') { $obj['showTitle'] = $false }
 			$kids = Decompile-Children $node
 			if ($kids) { $obj['children'] = $kids }
 		}
@@ -1568,6 +1598,7 @@ function Decompile-Element {
 		if ($autoTitle) { $obj['title'] = '' }
 	}
 	Add-Layout $obj $node
+	Add-GenericScalars $obj $node
 	# extendedTooltip: контент companion <ExtendedTooltip><Title> (любой элемент)
 	$etTitle = $node.SelectSingleNode("lf:ExtendedTooltip/lf:Title", $ns)
 	if ($etTitle) { $et = Get-MLFormattedValue $etTitle; if ($null -ne $et) { $obj['extendedTooltip'] = $et } }
@@ -1711,7 +1742,7 @@ if ($attrsNode) {
 				if ($stripped.Count -eq 1) { $ao['save'] = $stripped[0] } else { $ao['save'] = $stripped }
 			}
 		}
-		$fc = Get-Child $a 'FillChecking'; if ($fc) { $ao['fillChecking'] = $fc }
+		$fc = Get-Child $a 'FillCheck'; if ($fc) { $ao['fillCheck'] = $fc }
 		$afo = Decompile-FunctionalOptions $a; if ($afo) { $ao['functionalOptions'] = $afo }
 		$colsNode = $a.SelectSingleNode("lf:Columns", $ns)
 		if ($colsNode) {
@@ -1839,6 +1870,7 @@ if ($cmdsNode) {
 	foreach ($c in @($cmdsNode.SelectNodes("lf:Command", $ns))) {
 		$co = [ordered]@{}; $co['name'] = $c.GetAttribute("name")
 		$act = Get-Child $c 'Action'; if ($act) { $co['action'] = $act }
+		if ((Get-Child $c 'ModifiesSavedData') -eq 'true') { $co['modifiesSavedData'] = $true }
 		$tNode = $c.SelectSingleNode("lf:Title", $ns); if ($tNode) { $t = Get-LangText $tNode; if ($null -ne $t) { $co['title'] = $t } }
 		$ttNode = $c.SelectSingleNode("lf:ToolTip", $ns); if ($ttNode) { $t = Get-LangText $ttNode; if ($null -ne $t) { $co['tooltip'] = $t } }
 		$us = Decompile-XrFlag $c 'Use'; if ($null -ne $us) { $co['use'] = $us }

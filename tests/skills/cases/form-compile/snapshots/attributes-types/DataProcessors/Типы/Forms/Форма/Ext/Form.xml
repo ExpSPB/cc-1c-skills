@@ -60,6 +60,7 @@
 			<Save>
 				<Field>Строка</Field>
 			</Save>
+			<FillCheck>ShowError</FillCheck>
 		</Attribute>
 		<Attribute name="Число" id="15">
 			<Title>

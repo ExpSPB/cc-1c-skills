@@ -73,6 +73,7 @@
 				<xr:Common>false</xr:Common>
 			</Use>
 			<Action>ВыполнитьОбработка</Action>
+			<ModifiesSavedData>true</ModifiesSavedData>
 			<Shortcut>Ctrl+Enter</Shortcut>
 		</Command>
 	</Commands>

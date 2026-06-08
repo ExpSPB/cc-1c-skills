@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-# form-compile v1.79 — Compile 1C managed form from JSON or object metadata
+# form-compile v1.80 — Compile 1C managed form from JSON or object metadata
 # Source: https://github.com/Nikolay-Shirokov/cc-1c-skills
 import argparse
 import copy
@@ -1813,6 +1813,10 @@ KNOWN_KEYS = {
     "autoCmdBar",
     # дополнения командной панели таблицы (тип-ключи + свойства)
     "searchString", "viewStatus", "searchControl", "source", "horizontalLocation", "additions",
+    # generic-скаляры (pass-through)
+    "verticalAlign", "throughAlign", "enableContentChange", "pictureSize", "titleHeight",
+    "childItemsWidth", "showLeftMargin", "cellHyperlink", "viewMode", "verticalScrollBar",
+    "rowInputMode", "mask", "createButton",
 }
 
 # picture/picField — НИЗКИЙ приоритет: 'picture' это и тип (PictureDecoration), и свойство-иконка
@@ -2624,6 +2628,37 @@ def emit_appearance(lines, el, indent, profile='field'):
             emit_border_tag(lines, val, indent)
 
 
+# Простые скаляры элемента (pass-through, зеркало $script:genericScalars). kind bool/value.
+GENERIC_SCALARS = [
+    ('VerticalAlign', 'verticalAlign', 'value'),
+    ('ThroughAlign', 'throughAlign', 'value'),
+    ('EnableContentChange', 'enableContentChange', 'bool'),
+    ('PictureSize', 'pictureSize', 'value'),
+    ('TitleHeight', 'titleHeight', 'value'),
+    ('ChildItemsWidth', 'childItemsWidth', 'value'),
+    ('ShowLeftMargin', 'showLeftMargin', 'bool'),
+    ('CellHyperlink', 'cellHyperlink', 'bool'),
+    ('ViewMode', 'viewMode', 'value'),
+    ('VerticalScrollBar', 'verticalScrollBar', 'value'),
+    ('RowInputMode', 'rowInputMode', 'value'),
+    ('Mask', 'mask', 'value'),
+    ('CreateButton', 'createButton', 'bool'),
+]
+
+
+def emit_generic_scalars(lines, el, indent):
+    for tag, key, kind in GENERIC_SCALARS:
+        if key not in el or el[key] is None:
+            continue
+        if kind == 'bool':
+            lines.append(f'{indent}<{tag}>{"true" if el[key] else "false"}</{tag}>')
+        else:
+            v = str(el[key])
+            if v == '':
+                continue
+            lines.append(f'{indent}<{tag}>{esc_xml(v)}</{tag}>')
+
+
 def emit_layout(lines, el, indent, skip_height=False, multi_line_default=False):
     # Общие layout-свойства — применимы ко всем элементам. Порядок согласован
     # с историческим выводом input/label, чтобы не сдвигать существующие снапшоты.
@@ -2655,6 +2690,7 @@ def emit_layout(lines, el, indent, skip_height=False, multi_line_default=False):
         lines.append(f"{indent}<GroupVerticalAlign>{el['groupVerticalAlign']}</GroupVerticalAlign>")
     if el.get('horizontalAlign'):
         lines.append(f"{indent}<HorizontalAlign>{el['horizontalAlign']}</HorizontalAlign>")
+    emit_generic_scalars(lines, el, indent)
 
 
 def title_from_name(name):
@@ -3495,6 +3531,8 @@ def emit_page(lines, el, name, eid, indent):
         orientation = orientation_map.get(str(el['group']))
         if orientation:
             lines.append(f'{inner}<Group>{orientation}</Group>')
+    if el.get('showTitle') is False:
+        lines.append(f'{inner}<ShowTitle>false</ShowTitle>')
     emit_layout(lines, el, inner)
 
     # Companion
@@ -4169,8 +4207,12 @@ def emit_attributes(lines, attrs, indent):
                 for f in save_fields:
                     lines.append(f'{inner}\t<Field>{esc_xml(f)}</Field>')
                 lines.append(f'{inner}</Save>')
-        if attr.get('fillChecking'):
-            lines.append(f'{inner}<FillChecking>{attr["fillChecking"]}</FillChecking>')
+        # Проверка заполнения → <FillCheck> (реальный тег; <FillChecking> в схеме нет).
+        # bool true → ShowError; строка → verbatim. Синоним fillChecking.
+        fc_raw = attr['fillCheck'] if 'fillCheck' in attr else attr.get('fillChecking')
+        if fc_raw:
+            fcv = 'ShowError' if isinstance(fc_raw, bool) else str(fc_raw)
+            lines.append(f'{inner}<FillCheck>{fcv}</FillCheck>')
 
         # UseAlways: поля, всегда читаемые. Две формы DSL сливаются:
         #  attr.useAlways[] (короткие имена) + columns с useAlways:true → <Field>ИмяРеквизита.Поле</Field>.
@@ -4311,6 +4353,9 @@ def emit_commands(lines, cmds, indent):
 
         if cmd.get('action'):
             lines.append(f'{inner}<Action>{cmd["action"]}</Action>')
+
+        if cmd.get('modifiesSavedData') is True:
+            lines.append(f'{inner}<ModifiesSavedData>true</ModifiesSavedData>')
 
         emit_functional_options(lines, cmd.get('functionalOptions'), inner)
 

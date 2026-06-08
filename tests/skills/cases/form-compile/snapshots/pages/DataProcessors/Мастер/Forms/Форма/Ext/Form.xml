@@ -20,6 +20,7 @@
 			<ExtendedTooltip name="СтраницыМастераРасширеннаяПодсказка" id="2"/>
 			<ChildItems>
 				<Page name="Шаг1" id="3">
+					<ShowTitle>false</ShowTitle>
 					<ExtendedTooltip name="Шаг1РасширеннаяПодсказка" id="4"/>
 					<ChildItems>
 						<InputField name="Параметр1" id="5">

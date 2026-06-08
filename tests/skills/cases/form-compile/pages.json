@@ -18,7 +18,7 @@
     "properties": { "autoTitle": false },
     "elements": [
       { "pages": "СтраницыМастера", "pagesRepresentation": "None", "tooltip": "Страницы мастера настройки", "children": [
-        { "page": "Шаг1", "title": "", "children": [
+        { "page": "Шаг1", "title": "", "showTitle": false, "children": [
           { "input": "Параметр1", "path": "Параметр1" }
         ]},
         { "page": "Шаг2", "title": "Результат", "tooltip": "Шаг \"Результат\"", "group": "horizontal", "children": [
