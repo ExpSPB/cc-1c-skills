@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-# form-compile v1.91 — Compile 1C managed form from JSON or object metadata
+# form-compile v1.92 — Compile 1C managed form from JSON or object metadata
 # Source: https://github.com/Nikolay-Shirokov/cc-1c-skills
 import argparse
 import copy
@@ -1258,6 +1258,13 @@ def esc_xml(s):
     return s.replace('&', '&amp;').replace('<', '&lt;').replace('>', '&gt;')
 
 
+def di_attr(el):
+    # DisplayImportance — атрибут открывающего тега элемента (адаптивная важность). "" если нет.
+    if isinstance(el, dict) and el.get('displayImportance'):
+        return f' DisplayImportance="{esc_xml(str(el["displayImportance"]))}"'
+    return ''
+
+
 # Базовая директория для @file-ссылок в query динсписка (устанавливается в main)
 QUERY_BASE_DIR = None
 
@@ -1796,7 +1803,7 @@ KNOWN_KEYS = {
     "commandBarLocation", "searchStringLocation", "viewStatusLocation", "searchControlLocation",
     "excludedCommands",
     "pagesRepresentation",
-    "type", "command", "commandName", "stdCommand", "defaultButton", "locationInCommandBar",
+    "type", "command", "commandName", "stdCommand", "defaultButton", "locationInCommandBar", "displayImportance",
     "commandBar", "contextMenu", "commandSource",
     "src", "valuesPicture", "loadTransparent", "headerPicture", "footerPicture",
     "autofill",
@@ -1816,10 +1823,10 @@ KNOWN_KEYS = {
     # generic-скаляры (pass-through)
     "verticalAlign", "throughAlign", "enableContentChange", "pictureSize", "titleHeight",
     "childItemsWidth", "showLeftMargin", "cellHyperlink", "viewMode", "verticalScrollBar",
-    "rowInputMode", "mask", "createButton", "fixingInTable",
+    "rowInputMode", "mask", "createButton", "fixingInTable", "verticalSpacing",
     # InputField choice-скаляры
     "choiceListButton", "quickChoice", "autoChoiceIncomplete",
-    "choiceForm", "choiceHistoryOnInput", "footerDataPath",
+    "choiceForm", "choiceHistoryOnInput", "footerDataPath", "minValue", "maxValue",
     # Button — пометка toggle-кнопки
     "checked",
 }
@@ -2436,7 +2443,7 @@ def emit_addition(lines, el, name, eid, type_key, indent):
     # Кастомное дополнение (тип-элемент в commandBar): source дефолтит в текущую таблицу.
     m = ADDITION_TYPE_MAP[type_key]
     source = el.get('source') or _current_table_name['name'] or ''
-    lines.append(f'{indent}<{m["tag"]} name="{name}" id="{eid}">')
+    lines.append(f'{indent}<{m["tag"]} name="{name}" id="{eid}"{di_attr(el)}>')
     emit_addition_body(lines, el, source, m['type'], name, indent)
     lines.append(f'{indent}</{m["tag"]}>')
 
@@ -2689,6 +2696,7 @@ GENERIC_SCALARS = [
     ('Mask', 'mask', 'value'),
     ('CreateButton', 'createButton', 'bool'),
     ('FixingInTable', 'fixingInTable', 'value'),
+    ('VerticalSpacing', 'verticalSpacing', 'value'),
 ]
 
 
@@ -3071,7 +3079,7 @@ def emit_element(lines, el, indent, in_cmd_bar=False):
 
 
 def emit_group(lines, el, name, eid, indent):
-    lines.append(f'{indent}<UsualGroup name="{name}" id="{eid}">')
+    lines.append(f'{indent}<UsualGroup name="{name}" id="{eid}"{di_attr(el)}>')
     inner = f'{indent}\t'
 
     emit_title(lines, el, name, inner)
@@ -3141,7 +3149,7 @@ def emit_group(lines, el, name, eid, indent):
 
 
 def emit_column_group(lines, el, name, eid, indent):
-    lines.append(f'{indent}<ColumnGroup name="{name}" id="{eid}">')
+    lines.append(f'{indent}<ColumnGroup name="{name}" id="{eid}"{di_attr(el)}>')
     inner = f'{indent}\t'
 
     emit_title(lines, el, name, inner)
@@ -3178,7 +3186,7 @@ def emit_column_group(lines, el, name, eid, indent):
 
 
 def emit_input(lines, el, name, eid, indent):
-    lines.append(f'{indent}<InputField name="{name}" id="{eid}">')
+    lines.append(f'{indent}<InputField name="{name}" id="{eid}"{di_attr(el)}>')
     inner = f'{indent}\t'
 
     if el.get('path'):
@@ -3227,6 +3235,11 @@ def emit_input(lines, el, name, eid, indent):
                      ('choiceFoldersAndItems', 'ChoiceFoldersAndItems'), ('footerDataPath', 'FooterDataPath')):
         if el.get(key):
             lines.append(f'{inner}<{tag}>{esc_xml(str(el[key]))}</{tag}>')
+    # MinValue/MaxValue — типизированное. JSON-число → xs:decimal, строка → xs:string (тип сохранён декомпилятором).
+    for key, tag in (('minValue', 'MinValue'), ('maxValue', 'MaxValue')):
+        if el.get(key) is not None:
+            mvt = 'xs:string' if isinstance(el[key], str) else 'xs:decimal'
+            lines.append(f'{inner}<{tag} xsi:type="{mvt}">{esc_xml(str(el[key]))}</{tag}>')
     if el.get('choiceButtonRepresentation'):
         lines.append(f'{inner}<ChoiceButtonRepresentation>{el["choiceButtonRepresentation"]}</ChoiceButtonRepresentation>')
     emit_layout(lines, el, inner, multi_line_default=(el.get('multiLine') is True))
@@ -3260,7 +3273,7 @@ def emit_input(lines, el, name, eid, indent):
 
 
 def emit_check(lines, el, name, eid, indent):
-    lines.append(f'{indent}<CheckBoxField name="{name}" id="{eid}">')
+    lines.append(f'{indent}<CheckBoxField name="{name}" id="{eid}"{di_attr(el)}>')
     inner = f'{indent}\t'
 
     if el.get('path'):
@@ -3303,7 +3316,7 @@ def emit_check(lines, el, name, eid, indent):
 
 
 def emit_radio_button_field(lines, el, name, eid, indent):
-    lines.append(f'{indent}<RadioButtonField name="{name}" id="{eid}">')
+    lines.append(f'{indent}<RadioButtonField name="{name}" id="{eid}"{di_attr(el)}>')
     inner = f'{indent}\t'
 
     if el.get('path'):
@@ -3354,7 +3367,7 @@ def emit_decoration_title(lines, el, name, indent, auto=False):
 
 
 def emit_label(lines, el, name, eid, indent):
-    lines.append(f'{indent}<LabelDecoration name="{name}" id="{eid}">')
+    lines.append(f'{indent}<LabelDecoration name="{name}" id="{eid}"{di_attr(el)}>')
     inner = f'{indent}\t'
 
     # Порядок как у платформы: own-content (флаги/hyperlink/layout/оформление) ПЕРЕД Title
@@ -3377,7 +3390,7 @@ def emit_label(lines, el, name, eid, indent):
 
 
 def emit_label_field(lines, el, name, eid, indent):
-    lines.append(f'{indent}<LabelField name="{name}" id="{eid}">')
+    lines.append(f'{indent}<LabelField name="{name}" id="{eid}"{di_attr(el)}>')
     inner = f'{indent}\t'
 
     if el.get('path'):
@@ -3446,7 +3459,7 @@ def emit_dynlist_table_block(lines, el, indent):
 
 def emit_table(lines, el, name, eid, indent):
     _current_table_name['name'] = name   # дефолт source для кастомных дополнений в commandBar
-    lines.append(f'{indent}<Table name="{name}" id="{eid}">')
+    lines.append(f'{indent}<Table name="{name}" id="{eid}"{di_attr(el)}>')
     inner = f'{indent}\t'
 
     if el.get('path'):
@@ -3511,9 +3524,13 @@ def emit_table(lines, el, name, eid, indent):
     if el.get('rowPictureDataPath'):
         lines.append(f'{inner}<RowPictureDataPath>{el["rowPictureDataPath"]}</RowPictureDataPath>')
     if el.get('rowsPicture'):
+        # Строка = Ref (LoadTransparent дефолт false); объект {src, loadTransparent} → факт. значение
+        rp = el['rowsPicture']
+        rp_src = rp if isinstance(rp, str) else rp.get('src')
+        rp_lt = 'true' if (not isinstance(rp, str) and rp.get('loadTransparent') is True) else 'false'
         lines.append(f'{inner}<RowsPicture>')
-        lines.append(f'{inner}\t<xr:Ref>{el["rowsPicture"]}</xr:Ref>')
-        lines.append(f'{inner}\t<xr:LoadTransparent>false</xr:LoadTransparent>')
+        lines.append(f'{inner}\t<xr:Ref>{rp_src}</xr:Ref>')
+        lines.append(f'{inner}\t<xr:LoadTransparent>{rp_lt}</xr:LoadTransparent>')
         lines.append(f'{inner}</RowsPicture>')
     # Блок свойств дин-список-таблицы (помечена эвристикой)
     if el.get('_dynList'):
@@ -3566,7 +3583,7 @@ def emit_table(lines, el, name, eid, indent):
 
 
 def emit_pages(lines, el, name, eid, indent):
-    lines.append(f'{indent}<Pages name="{name}" id="{eid}">')
+    lines.append(f'{indent}<Pages name="{name}" id="{eid}"{di_attr(el)}>')
     inner = f'{indent}\t'
 
     emit_title(lines, el, name, inner)
@@ -3593,7 +3610,7 @@ def emit_pages(lines, el, name, eid, indent):
 
 
 def emit_page(lines, el, name, eid, indent):
-    lines.append(f'{indent}<Page name="{name}" id="{eid}">')
+    lines.append(f'{indent}<Page name="{name}" id="{eid}"{di_attr(el)}>')
     inner = f'{indent}\t'
 
     emit_title(lines, el, name, inner, auto=True)
@@ -3627,7 +3644,7 @@ def emit_page(lines, el, name, eid, indent):
 
 
 def emit_button(lines, el, name, eid, indent, in_cmd_bar=False):
-    lines.append(f'{indent}<Button name="{name}" id="{eid}">')
+    lines.append(f'{indent}<Button name="{name}" id="{eid}"{di_attr(el)}>')
     inner = f'{indent}\t'
     # (общие свойства — через emit_layout ниже; отдельный вызов был бы двойной эмиссией)
 
@@ -3714,7 +3731,7 @@ def emit_button(lines, el, name, eid, indent, in_cmd_bar=False):
 
 
 def emit_picture_decoration(lines, el, name, eid, indent):
-    lines.append(f'{indent}<PictureDecoration name="{name}" id="{eid}">')
+    lines.append(f'{indent}<PictureDecoration name="{name}" id="{eid}"{di_attr(el)}>')
     inner = f'{indent}\t'
 
     emit_decoration_title(lines, el, name, inner)
@@ -3750,7 +3767,7 @@ def emit_picture_decoration(lines, el, name, eid, indent):
 
 
 def emit_picture_field(lines, el, name, eid, indent):
-    lines.append(f'{indent}<PictureField name="{name}" id="{eid}">')
+    lines.append(f'{indent}<PictureField name="{name}" id="{eid}"{di_attr(el)}>')
     inner = f'{indent}\t'
 
     if el.get('path'):
@@ -3789,7 +3806,7 @@ def emit_picture_field(lines, el, name, eid, indent):
 
 
 def emit_calendar(lines, el, name, eid, indent):
-    lines.append(f'{indent}<CalendarField name="{name}" id="{eid}">')
+    lines.append(f'{indent}<CalendarField name="{name}" id="{eid}"{di_attr(el)}>')
     inner = f'{indent}\t'
 
     if el.get('path'):
@@ -3830,7 +3847,7 @@ def emit_calendar(lines, el, name, eid, indent):
 
 
 def emit_command_bar(lines, el, name, eid, indent):
-    lines.append(f'{indent}<CommandBar name="{name}" id="{eid}">')
+    lines.append(f'{indent}<CommandBar name="{name}" id="{eid}"{di_attr(el)}>')
     inner = f'{indent}\t'
 
     emit_title(lines, el, name, inner)
@@ -3860,7 +3877,7 @@ def emit_command_bar(lines, el, name, eid, indent):
 
 
 def emit_popup(lines, el, name, eid, indent):
-    lines.append(f'{indent}<Popup name="{name}" id="{eid}">')
+    lines.append(f'{indent}<Popup name="{name}" id="{eid}"{di_attr(el)}>')
     inner = f'{indent}\t'
 
     emit_title(lines, el, name, inner, auto=True)
@@ -3884,7 +3901,7 @@ def emit_popup(lines, el, name, eid, indent):
 
 
 def emit_button_group(lines, el, name, eid, indent):
-    lines.append(f'{indent}<ButtonGroup name="{name}" id="{eid}">')
+    lines.append(f'{indent}<ButtonGroup name="{name}" id="{eid}"{di_attr(el)}>')
     inner = f'{indent}\t'
 
     emit_title(lines, el, name, inner)
@@ -4845,9 +4862,10 @@ def main():
                 el['tableAutofill'] = False
             if 'commandBarLocation' not in el:
                 el['commandBarLocation'] = 'None'
-            # RowPictureDataPath: умный дефолт <Список>.DefaultPicture, если ключ ОТСУТСТВУЕТ
-            # и есть основная таблица. Пустая строка (suppress-маркер) НЕ перезатирается.
-            if has_main_table and 'rowPictureDataPath' not in el:
+            # RowPictureDataPath: умный дефолт <Список>.DefaultPicture, если ключ ОТСУТСТВУЕТ.
+            # Декомпилятор опускает при rpdp == smart-default; реальное отсутствие → ""-маркер (не
+            # перезатирается). Гейт has_main_table снят: дин-список без mainTable тоже несёт RowPictureDataPath.
+            if 'rowPictureDataPath' not in el:
                 el['rowPictureDataPath'] = f'{list_name}.DefaultPicture'
         if isinstance(el.get('children'), list):
             for child in el['children']:

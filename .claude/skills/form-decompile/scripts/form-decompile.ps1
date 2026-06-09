@@ -1,4 +1,4 @@
-﻿# form-decompile v0.68 — Decompile 1C managed Form.xml to JSON DSL (draft)
+﻿# form-decompile v0.69 — Decompile 1C managed Form.xml to JSON DSL (draft)
 # Source: https://github.com/Nikolay-Shirokov/cc-1c-skills
 # ВНИМАНИЕ: раундтрип не гарантируется. Навык исключён из авто-использования моделью.
 param(
@@ -765,7 +765,12 @@ function Add-Layout {
 	$soi = Get-Child $node 'SkipOnInput'; if ($null -ne $soi) { $obj['skipOnInput'] = ($soi -eq 'true') }
 	if ((Get-Child $node 'EnableStartDrag') -eq 'true') { $obj['enableStartDrag'] = $true }
 	$fdm = Get-Child $node 'FileDragMode'; if ($fdm) { $obj['fileDragMode'] = $fdm }
-	if ((Get-Child $node 'AutoMaxWidth') -eq 'false') { $obj['autoMaxWidth'] = $false }
+	# AutoMaxWidth: компилятор додумывает false для multiLine-input без явного ключа (multiLineDefault).
+	# Захват факт. значения; multiLine-input без тега → autoMaxWidth:true (суппресс эвристики).
+	$amwNode = Get-Child $node 'AutoMaxWidth'
+	if ($amwNode -eq 'false') { $obj['autoMaxWidth'] = $false }
+	elseif ($amwNode -eq 'true') { $obj['autoMaxWidth'] = $true }
+	elseif ((Get-Child $node 'MultiLine') -eq 'true') { $obj['autoMaxWidth'] = $true }
 	$mw = Get-Child $node 'MaxWidth'; if ($mw) { $obj['maxWidth'] = [int]$mw }
 	if ((Get-Child $node 'AutoMaxHeight') -eq 'false') { $obj['autoMaxHeight'] = $false }
 	$mh = Get-Child $node 'MaxHeight'; if ($mh) { $obj['maxHeight'] = [int]$mh }
@@ -1136,6 +1141,7 @@ $GENERIC_SCALARS = @(
 	@{ Tag='Mask'; Key='mask'; Kind='value' }
 	@{ Tag='CreateButton'; Key='createButton'; Kind='bool' }
 	@{ Tag='FixingInTable'; Key='fixingInTable'; Kind='value' }
+	@{ Tag='VerticalSpacing'; Key='verticalSpacing'; Kind='value' }
 )
 
 # Захват generic-скаляров. Специфичная обработка (если ключ уже задан) — побеждает.
@@ -1388,6 +1394,18 @@ function Decompile-Element {
 			foreach ($p in @('ChoiceForm','ChoiceHistoryOnInput','ChoiceFoldersAndItems','FooterDataPath')) {
 				$v = Get-Child $node $p; if ($null -ne $v) { $obj[($p.Substring(0,1).ToLower()+$p.Substring(1))] = $v }
 			}
+			# MinValue/MaxValue — типизированное (<MinValue xsi:type="xs:decimal">N). Тип кодируем в JSON-тип:
+			# xs:decimal/int → число (компилятор → xs:decimal), иначе → строка (компилятор → xs:string).
+			foreach ($p in @('MinValue','MaxValue')) {
+				$mn = $node.SelectSingleNode("lf:$p", $ns)
+				if ($mn) {
+					$xt = $mn.GetAttribute("type", $NS_XSI); $txt = $mn.InnerText
+					$key = $p.Substring(0,1).ToLower() + $p.Substring(1)
+					if ($xt -match 'decimal|int') {
+						if ($txt -match '^-?\d+$') { $obj[$key] = [int]$txt } elseif ($txt -match '^-?\d+\.\d+$') { $obj[$key] = [decimal]$txt } else { $obj[$key] = $txt }
+					} else { $obj[$key] = $txt }
+				}
+			}
 			$cbr = Get-Child $node 'ChoiceButtonRepresentation'; if ($cbr) { $obj['choiceButtonRepresentation'] = $cbr }
 			if ((Get-Child $node 'TextEdit') -eq 'false') { $obj['textEdit'] = $false }
 			$cl = Decompile-ChoiceList $node; if ($cl) { $obj['choiceList'] = $cl }
@@ -1507,7 +1525,13 @@ function Decompile-Element {
 			$soin = Get-Child $node 'SearchOnInput'; if ($soin) { $obj['searchOnInput'] = $soin }
 			if ((Get-Child $node 'AutoMarkIncomplete') -eq 'true') { $obj['markIncomplete'] = $true }
 			$itv = Get-Child $node 'InitialTreeView'; if ($itv) { $obj['initialTreeView'] = $itv }
-			$rpRef = $node.SelectSingleNode("lf:RowsPicture/xr:Ref", $ns); if ($rpRef) { $obj['rowsPicture'] = $rpRef.InnerText }
+			# RowsPicture: src (xr:Ref) + LoadTransparent (дефолт false). При true → объектная форма.
+			$rpRef = $node.SelectSingleNode("lf:RowsPicture/xr:Ref", $ns)
+			if ($rpRef) {
+				$rpLt = $node.SelectSingleNode("lf:RowsPicture/xr:LoadTransparent", $ns)
+				if ($rpLt -and $rpLt.InnerText -eq 'true') { $obj['rowsPicture'] = [ordered]@{ src = $rpRef.InnerText; loadTransparent = $true } }
+				else { $obj['rowsPicture'] = $rpRef.InnerText }
+			}
 			$rpdp = Get-Child $node 'RowPictureDataPath'
 			# --- Блок дин-список-таблицы (признак: дочерний <UpdateOnDataChange>) ---
 			if (Has-Child $node 'UpdateOnDataChange') {
@@ -1605,6 +1629,8 @@ function Decompile-Element {
 		'ViewStatusAddition'    { $obj[$key] = $name; Add-AdditionCore $obj $node $name }
 		'SearchControlAddition' { $obj[$key] = $name; Add-AdditionCore $obj $node $name }
 	}
+	# DisplayImportance — атрибут открывающего тега (адаптивная важность отображения), захват «как есть».
+	$di = $node.GetAttribute("DisplayImportance"); if ($di) { $obj['displayImportance'] = $di }
 	# title: "" — подавление авто-вывода: для типов, где компилятор вывел бы
 	# заголовок из имени, а в оригинале <Title> отсутствует.
 	if (-not $obj.Contains('title')) {

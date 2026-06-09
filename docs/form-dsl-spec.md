@@ -123,6 +123,7 @@
 | `titleLocation` | string | Расположение заголовка: `none`/`left`/`right`/`top`/`bottom`/`auto`. Эмитится при наличии (input, labelField, picField, table, calendar). У `check`/`radio` — особая семантика с умным дефолтом (см. их разделы) |
 | `tooltip` | string/object | Всплывающая подсказка элемента (`<ToolTip>`). Строка → ru, объект `{ "ru": …, "en": … }` → мультиязычный (как `title`). Эмитится сразу после `title` |
 | `tooltipRepresentation` | string | Режим показа подсказки (`<ToolTipRepresentation>`): `None`, `Button`, `ShowBottom`, `ShowTop`, `ShowLeft`, `ShowRight`, `ShowAuto`, `Balloon`. Эмитится при наличии |
+| `displayImportance` | string | Важность отображения (атрибут открывающего тега `DisplayImportance`): `VeryHigh`, `High`, `Usual`, `Low`, `VeryLow`. Адаптивная раскладка (моб./узкие формы). Применимо к любому элементу |
 | `extendedTooltip` | string/object | Расширенная подсказка (companion `<ExtendedTooltip>`, по сути LabelDecoration). **Текст-форма**: строка / ML / `{text, formatted}`. **Own-content форма** (объект с layout/оформлением/флагами): `{ text?, formatted?, width?, autoMaxWidth?, maxWidth?, height?, horizontalStretch?, verticalAlign?, titleHeight?, hyperlink?, visible?, enabled?, textColor?, font?, … }` — own-content эмитится перед `Title`. (События компаньона пока не поддержаны.) Синоним: `extTooltip` |
 
 #### Форма ML-текста и `formatted`
@@ -265,6 +266,7 @@ companion-панели с собственным контентом. Оба не
 | `pictureSize` | `<PictureSize>` | `AutoSize`/`Proportionally`/`ByFontSize`/… (декорация-картинка) |
 | `titleHeight` | `<TitleHeight>` | число |
 | `childItemsWidth` | `<ChildItemsWidth>` | `Equal`/`LeftWide`/… (ширины дочерних в группе) |
+| `verticalSpacing` | `<VerticalSpacing>` | `None`/… (вертикальный интервал группы) |
 | `showLeftMargin` | `<ShowLeftMargin>` | bool (группа) |
 | `cellHyperlink` | `<CellHyperlink>` | bool |
 | `mask` | `<Mask>` | строка маски ввода (input) |
@@ -387,6 +389,7 @@ companion-панели с собственным контентом. Оба не
 | `fixingInTable` | string | Фиксация колонки в таблице (`<FixingInTable>`): `Left`, `Right`, `None`. Так же у `labelField` и др. полей |
 | `footerDataPath` | string | DataPath подвала колонки таблицы (`<FooterDataPath>`) |
 | `choiceButtonRepresentation` | string | `ShowInInputField`, `ShowInDropList`, `ShowInDropListAndInInputField` |
+| `minValue` / `maxValue` | number/string | Мин./макс. значение (`<MinValue>`/`<MaxValue>` с обязательным `xsi:type`). **JSON-число → `xs:decimal`, строка → `xs:string`** (тип сохраняется декомпилятором через тип JSON-значения) |
 | `width` | int | Ширина |
 | `height` | int | Высота |
 | `horizontalStretch` | bool | Растягивание по горизонтали |
@@ -533,7 +536,7 @@ companion-панели с собственным контентом. Оба не
 | `rowSelectionMode` | string | Режим выделения строки (`Row`, …) |
 | `verticalLines` / `horizontalLines` | bool | Линии сетки (эмитится явное `false`) |
 | `initialTreeView` | string | `ExpandTopLevel`, `ExpandAllLevels`, `NoExpand` |
-| `rowsPicture` | string | Картинка строк (`CommonPicture.X`) |
+| `rowsPicture` | string \| object | Картинка строк (`<RowsPicture>`). Строка = `CommonPicture.X` (LoadTransparent дефолт `false`); объект `{ src, loadTransparent }` — для явной прозрачности (`loadTransparent: true`) |
 | `height` | int | Высота элемента таблицы (`<Height>`, как у прочих элементов) |
 | `heightInTableRows` | int | Высота в строках (`<HeightInTableRows>`) — отдельное свойство от `height`; таблица может нести оба |
 | `header` | bool | Показывать шапку |

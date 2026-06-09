@@ -1,4 +1,4 @@
-﻿# form-compile v1.91 — Compile 1C managed form from JSON or object metadata
+﻿# form-compile v1.92 — Compile 1C managed form from JSON or object metadata
 # Source: https://github.com/Nikolay-Shirokov/cc-1c-skills
 param(
 	[string]$JsonPath,
@@ -2314,6 +2314,14 @@ function Emit-CompanionTitle {
 	X "$indent</Title>"
 }
 
+# DisplayImportance — атрибут открывающего тега элемента (адаптивная важность: VeryHigh/High/Usual/Low/VeryLow).
+# Возвращает ` DisplayImportance="X"` или "" (для companion-эмиттеров без $el → "" молча).
+function DI-Attr {
+	param($el)
+	if ($null -ne $el -and $el.displayImportance) { return " DisplayImportance=`"$(Esc-Xml "$($el.displayImportance)")`"" }
+	return ""
+}
+
 function Emit-Companion {
 	param([string]$tag, [string]$name, [string]$indent, $content = $null)
 	$id = New-Id
@@ -2323,7 +2331,7 @@ function Emit-Companion {
 		return
 	}
 	$inner = "$indent`t"
-	X "$indent<$tag name=`"$name`" id=`"$id`">"
+	X "$indent<$tag name=`"$name`" id=`"$id`"$(DI-Attr $el)>"
 	if (Test-CompanionStructured $content) {
 		# структурированная форма (own-content). Порядок как у платформы: own-content (флаги/hyperlink/
 		# layout/оформление) ПЕРЕД Title (в корпусе layout-first 582 vs 10).
@@ -2362,7 +2370,7 @@ function Emit-CompanionPanel {
 		X "$indent<$tag name=`"$name`" id=`"$id`"/>"
 		return
 	}
-	X "$indent<$tag name=`"$name`" id=`"$id`">"
+	X "$indent<$tag name=`"$name`" id=`"$id`"$(DI-Attr $el)>"
 	if ($halign) { X "$indent`t<HorizontalAlign>$halign</HorizontalAlign>" }
 	if ($emitAfFalse) { X "$indent`t<Autofill>false</Autofill>" }
 	if ($hasChildren) {
@@ -2427,7 +2435,7 @@ function Emit-Addition {
 	param($el, [string]$name, [int]$id, [string]$typeKey, [string]$indent)
 	$map = $script:additionTypeMap[$typeKey]
 	$source = if ($el.source) { "$($el.source)" } elseif ($script:currentTableName) { $script:currentTableName } else { '' }
-	X "$indent<$($map.Tag) name=`"$name`" id=`"$id`">"
+	X "$indent<$($map.Tag) name=`"$name`" id=`"$id`"$(DI-Attr $el)>"
 	Emit-AdditionBody -props $el -source $source -srcType $map.Type -addName $name -indent $indent
 	X "$indent</$($map.Tag)>"
 }
@@ -2616,7 +2624,7 @@ function Emit-Element {
 		# pages-specific
 		"pagesRepresentation"=1
 		# button-specific
-		"type"=1;"command"=1;"commandName"=1;"stdCommand"=1;"defaultButton"=1;"locationInCommandBar"=1
+		"type"=1;"command"=1;"commandName"=1;"stdCommand"=1;"defaultButton"=1;"locationInCommandBar"=1;"displayImportance"=1
 		# picture/decoration
 		"src"=1;"valuesPicture"=1;"loadTransparent"=1;"headerPicture"=1;"footerPicture"=1
 		# cmdBar-specific
@@ -2628,10 +2636,10 @@ function Emit-Element {
 		# generic-скаляры (pass-through) + точечные
 		"verticalAlign"=1;"throughAlign"=1;"enableContentChange"=1;"pictureSize"=1;"titleHeight"=1
 		"childItemsWidth"=1;"showLeftMargin"=1;"cellHyperlink"=1;"viewMode"=1;"verticalScrollBar"=1
-		"rowInputMode"=1;"mask"=1;"createButton"=1;"fixingInTable"=1
+		"rowInputMode"=1;"mask"=1;"createButton"=1;"fixingInTable"=1;"verticalSpacing"=1
 		# InputField choice-скаляры
 		"choiceListButton"=1;"quickChoice"=1;"autoChoiceIncomplete"=1
-		"choiceForm"=1;"choiceHistoryOnInput"=1;"footerDataPath"=1
+		"choiceForm"=1;"choiceHistoryOnInput"=1;"footerDataPath"=1;"minValue"=1;"maxValue"=1
 		# Button — пометка toggle-кнопки (ключ 'checked', не 'check' — во избежание конфликта с типом)
 		"checked"=1
 	}
@@ -2840,6 +2848,7 @@ $script:genericScalars = @(
 	@{ Tag='Mask';                Key='mask';                Kind='value' }
 	@{ Tag='CreateButton';        Key='createButton';        Kind='bool'  }
 	@{ Tag='FixingInTable';       Key='fixingInTable';       Kind='value' }
+	@{ Tag='VerticalSpacing';     Key='verticalSpacing';     Kind='value' }
 )
 
 function Emit-GenericScalars {
@@ -3009,7 +3018,7 @@ function Emit-TitleLocation {
 function Emit-Group {
 	param($el, [string]$name, [int]$id, [string]$indent)
 
-	X "$indent<UsualGroup name=`"$name`" id=`"$id`">"
+	X "$indent<UsualGroup name=`"$name`" id=`"$id`"$(DI-Attr $el)>"
 	$inner = "$indent`t"
 
 	Emit-Title -el $el -name $name -indent $inner
@@ -3080,7 +3089,7 @@ function Emit-Group {
 function Emit-ColumnGroup {
 	param($el, [string]$name, [int]$id, [string]$indent)
 
-	X "$indent<ColumnGroup name=`"$name`" id=`"$id`">"
+	X "$indent<ColumnGroup name=`"$name`" id=`"$id`"$(DI-Attr $el)>"
 	$inner = "$indent`t"
 
 	Emit-Title -el $el -name $name -indent $inner
@@ -3122,7 +3131,7 @@ function Emit-ColumnGroup {
 function Emit-Input {
 	param($el, [string]$name, [int]$id, [string]$indent)
 
-	X "$indent<InputField name=`"$name`" id=`"$id`">"
+	X "$indent<InputField name=`"$name`" id=`"$id`"$(DI-Attr $el)>"
 	$inner = "$indent`t"
 
 	if ($el.path) { X "$inner<DataPath>$($el.path)</DataPath>" }
@@ -3171,6 +3180,13 @@ function Emit-Input {
 	)) {
 		if ($el.($p[0])) { X "$inner<$($p[1])>$(Esc-Xml "$($el.($p[0]))")</$($p[1])>" }
 	}
+	# MinValue/MaxValue — типизированное. JSON-число → xs:decimal, строка → xs:string (тип сохранён декомпилятором).
+	foreach ($p in @(@('minValue','MinValue'), @('maxValue','MaxValue'))) {
+		if ($null -ne $el.($p[0])) {
+			$mvt = if ($el.($p[0]) -is [string]) { 'xs:string' } else { 'xs:decimal' }
+			X "$inner<$($p[1]) xsi:type=`"$mvt`">$(Esc-Xml "$($el.($p[0]))")</$($p[1])>"
+		}
+	}
 	if ($el.choiceButtonRepresentation) { X "$inner<ChoiceButtonRepresentation>$($el.choiceButtonRepresentation)</ChoiceButtonRepresentation>" }
 	Emit-Layout -el $el -indent $inner -multiLineDefault ([bool]($el.multiLine -eq $true))
 
@@ -3204,7 +3220,7 @@ function Emit-Input {
 function Emit-Check {
 	param($el, [string]$name, [int]$id, [string]$indent)
 
-	X "$indent<CheckBoxField name=`"$name`" id=`"$id`">"
+	X "$indent<CheckBoxField name=`"$name`" id=`"$id`"$(DI-Attr $el)>"
 	$inner = "$indent`t"
 
 	if ($el.path) { X "$inner<DataPath>$($el.path)</DataPath>" }
@@ -3595,7 +3611,7 @@ function Emit-TypeLink {
 function Emit-Radio {
 	param($el, [string]$name, [int]$id, [string]$indent)
 
-	X "$indent<RadioButtonField name=`"$name`" id=`"$id`">"
+	X "$indent<RadioButtonField name=`"$name`" id=`"$id`"$(DI-Attr $el)>"
 	$inner = "$indent`t"
 
 	if ($el.path) { X "$inner<DataPath>$($el.path)</DataPath>" }
@@ -3656,7 +3672,7 @@ function Emit-DecorationTitle {
 function Emit-Label {
 	param($el, [string]$name, [int]$id, [string]$indent)
 
-	X "$indent<LabelDecoration name=`"$name`" id=`"$id`">"
+	X "$indent<LabelDecoration name=`"$name`" id=`"$id`"$(DI-Attr $el)>"
 	$inner = "$indent`t"
 
 	# Порядок как у платформы: own-content (флаги/hyperlink/layout/оформление) ПЕРЕД Title
@@ -3680,7 +3696,7 @@ function Emit-Label {
 function Emit-LabelField {
 	param($el, [string]$name, [int]$id, [string]$indent)
 
-	X "$indent<LabelField name=`"$name`" id=`"$id`">"
+	X "$indent<LabelField name=`"$name`" id=`"$id`"$(DI-Attr $el)>"
 	$inner = "$indent`t"
 
 	if ($el.path) { X "$inner<DataPath>$($el.path)</DataPath>" }
@@ -3747,7 +3763,7 @@ function Emit-Table {
 	param($el, [string]$name, [int]$id, [string]$indent)
 
 	$script:currentTableName = $name   # дефолт source для кастомных дополнений в commandBar
-	X "$indent<Table name=`"$name`" id=`"$id`">"
+	X "$indent<Table name=`"$name`" id=`"$id`"$(DI-Attr $el)>"
 	$inner = "$indent`t"
 
 	if ($el.path) { X "$inner<DataPath>$($el.path)</DataPath>" }
@@ -3796,9 +3812,12 @@ function Emit-Table {
 	if ($el.enableDrag -eq $true) { X "$inner<EnableDrag>true</EnableDrag>" }
 	if ($el.rowPictureDataPath) { X "$inner<RowPictureDataPath>$($el.rowPictureDataPath)</RowPictureDataPath>" }
 	if ($el.rowsPicture) {
+		# Строка = Ref (LoadTransparent дефолт false); объект {src, loadTransparent} → факт. значение
+		$rpSrc = if ($el.rowsPicture -is [string]) { $el.rowsPicture } else { $el.rowsPicture.src }
+		$rpLt = if ($el.rowsPicture -isnot [string] -and $el.rowsPicture.loadTransparent -eq $true) { 'true' } else { 'false' }
 		X "$inner<RowsPicture>"
-		X "$inner`t<xr:Ref>$($el.rowsPicture)</xr:Ref>"
-		X "$inner`t<xr:LoadTransparent>false</xr:LoadTransparent>"
+		X "$inner`t<xr:Ref>$rpSrc</xr:Ref>"
+		X "$inner`t<xr:LoadTransparent>$rpLt</xr:LoadTransparent>"
 		X "$inner</RowsPicture>"
 	}
 	# Блок свойств дин-список-таблицы (помечена эвристикой 11b.4)
@@ -3853,7 +3872,7 @@ function Emit-Table {
 function Emit-Pages {
 	param($el, [string]$name, [int]$id, [string]$indent)
 
-	X "$indent<Pages name=`"$name`" id=`"$id`">"
+	X "$indent<Pages name=`"$name`" id=`"$id`"$(DI-Attr $el)>"
 	$inner = "$indent`t"
 
 	Emit-Title -el $el -name $name -indent $inner
@@ -3885,7 +3904,7 @@ function Emit-Pages {
 function Emit-Page {
 	param($el, [string]$name, [int]$id, [string]$indent)
 
-	X "$indent<Page name=`"$name`" id=`"$id`">"
+	X "$indent<Page name=`"$name`" id=`"$id`"$(DI-Attr $el)>"
 	$inner = "$indent`t"
 
 	Emit-Title -el $el -name $name -indent $inner -auto
@@ -3922,7 +3941,7 @@ function Emit-Page {
 function Emit-Button {
 	param($el, [string]$name, [int]$id, [string]$indent, [bool]$inCmdBar = $false)
 
-	X "$indent<Button name=`"$name`" id=`"$id`">"
+	X "$indent<Button name=`"$name`" id=`"$id`"$(DI-Attr $el)>"
 	$inner = "$indent`t"
 	# (общие свойства — через Emit-Layout ниже; отдельный вызов был бы двойной эмиссией)
 
@@ -4020,7 +4039,7 @@ function Emit-Button {
 function Emit-PictureDecoration {
 	param($el, [string]$name, [int]$id, [string]$indent)
 
-	X "$indent<PictureDecoration name=`"$name`" id=`"$id`">"
+	X "$indent<PictureDecoration name=`"$name`" id=`"$id`"$(DI-Attr $el)>"
 	$inner = "$indent`t"
 
 	Emit-DecorationTitle -el $el -name $name -indent $inner
@@ -4056,7 +4075,7 @@ function Emit-PictureDecoration {
 function Emit-PictureField {
 	param($el, [string]$name, [int]$id, [string]$indent)
 
-	X "$indent<PictureField name=`"$name`" id=`"$id`">"
+	X "$indent<PictureField name=`"$name`" id=`"$id`"$(DI-Attr $el)>"
 	$inner = "$indent`t"
 
 	if ($el.path) { X "$inner<DataPath>$($el.path)</DataPath>" }
@@ -4092,7 +4111,7 @@ function Emit-PictureField {
 function Emit-Calendar {
 	param($el, [string]$name, [int]$id, [string]$indent)
 
-	X "$indent<CalendarField name=`"$name`" id=`"$id`">"
+	X "$indent<CalendarField name=`"$name`" id=`"$id`"$(DI-Attr $el)>"
 	$inner = "$indent`t"
 
 	if ($el.path) { X "$inner<DataPath>$($el.path)</DataPath>" }
@@ -4137,7 +4156,7 @@ function Emit-Calendar {
 function Emit-CommandBar {
 	param($el, [string]$name, [int]$id, [string]$indent)
 
-	X "$indent<CommandBar name=`"$name`" id=`"$id`">"
+	X "$indent<CommandBar name=`"$name`" id=`"$id`"$(DI-Attr $el)>"
 	$inner = "$indent`t"
 
 	Emit-Title -el $el -name $name -indent $inner
@@ -4166,7 +4185,7 @@ function Emit-CommandBar {
 function Emit-ButtonGroup {
 	param($el, [string]$name, [int]$id, [string]$indent)
 
-	X "$indent<ButtonGroup name=`"$name`" id=`"$id`">"
+	X "$indent<ButtonGroup name=`"$name`" id=`"$id`"$(DI-Attr $el)>"
 	$inner = "$indent`t"
 
 	Emit-Title -el $el -name $name -indent $inner
@@ -4198,7 +4217,7 @@ function Emit-ButtonGroup {
 function Emit-Popup {
 	param($el, [string]$name, [int]$id, [string]$indent)
 
-	X "$indent<Popup name=`"$name`" id=`"$id`">"
+	X "$indent<Popup name=`"$name`" id=`"$id`"$(DI-Attr $el)>"
 	$inner = "$indent`t"
 
 	Emit-Title -el $el -name $name -indent $inner -auto
@@ -4931,9 +4950,11 @@ function ApplyDynamicListTableHeuristic {
 		if ($null -eq $el.PSObject.Properties["commandBarLocation"]) {
 			$el | Add-Member -NotePropertyName "commandBarLocation" -NotePropertyValue "None" -Force
 		}
-		# RowPictureDataPath: умный дефолт <Список>.DefaultPicture, если ключ ОТСУТСТВУЕТ
-		# и есть основная таблица. Пустая строка (suppress-маркер) НЕ перезатирается.
-		if ($hasMainTable -and ($null -eq $el.PSObject.Properties["rowPictureDataPath"])) {
+		# RowPictureDataPath: умный дефолт <Список>.DefaultPicture, если ключ ОТСУТСТВУЕТ.
+		# Декомпилятор опускает ключ при rpdp == smart-default (ждёт реинъекции); реальное отсутствие
+		# фиксирует ""-маркером (НЕ перезатирается). Гейт hasMainTable снят: дин-список без mainTable
+		# (напр. query-based) тоже несёт RowPictureDataPath.
+		if ($null -eq $el.PSObject.Properties["rowPictureDataPath"]) {
 			$el | Add-Member -NotePropertyName "rowPictureDataPath" -NotePropertyValue "$listName.DefaultPicture" -Force
 		}
 	}

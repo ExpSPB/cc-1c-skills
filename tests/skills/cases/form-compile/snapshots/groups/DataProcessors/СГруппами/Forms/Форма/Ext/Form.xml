@@ -64,7 +64,7 @@
 				</LabelField>
 			</ChildItems>
 		</UsualGroup>
-		<UsualGroup name="ГруппаПодвал" id="14">
+		<UsualGroup name="ГруппаПодвал" id="14" DisplayImportance="Low">
 			<Title>
 				<v8:item>
 					<v8:lang>ru</v8:lang>
@@ -86,6 +86,7 @@
 			</CollapsedRepresentationTitle>
 			<EnableContentChange>false</EnableContentChange>
 			<ShowLeftMargin>false</ShowLeftMargin>
+			<VerticalSpacing>None</VerticalSpacing>
 			<ExtendedTooltip name="ГруппаПодвалРасширеннаяПодсказка" id="15"/>
 			<ChildItems>
 				<InputField name="Поле3" id="16">
