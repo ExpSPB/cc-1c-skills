@@ -1,4 +1,4 @@
-﻿# form-compile v1.97 — Compile 1C managed form from JSON or object metadata
+﻿# form-compile v1.98 — Compile 1C managed form from JSON or object metadata
 # Source: https://github.com/Nikolay-Shirokov/cc-1c-skills
 param(
 	[string]$JsonPath,
@@ -4962,6 +4962,94 @@ function Emit-Commands {
 	X "$indent</Commands>"
 }
 
+# Резолв ключа-группы древовидной формы → CommandGroup (зависит от панели). Дружелюбные
+# алиасы стандартных form-групп; любой иной ключ (CommandGroup.X / GUID / "") — verbatim.
+function Resolve-CommandGroupKey {
+	param([string]$key, [string]$panelTag)
+	$k = ($key -replace '\s','').ToLower()
+	if ($panelTag -eq 'NavigationPanel') {
+		switch ($k) {
+			'important' { return 'FormNavigationPanelImportant' }
+			'важное'    { return 'FormNavigationPanelImportant' }
+			'goto'      { return 'FormNavigationPanelGoTo' }
+			'перейти'   { return 'FormNavigationPanelGoTo' }
+			'seealso'   { return 'FormNavigationPanelSeeAlso' }
+			'смтакже'   { return 'FormNavigationPanelSeeAlso' }
+		}
+	} else {
+		switch ($k) {
+			'important'          { return 'FormCommandBarImportant' }
+			'важное'             { return 'FormCommandBarImportant' }
+			'createbasedon'      { return 'FormCommandBarCreateBasedOn' }
+			'создатьнаосновании' { return 'FormCommandBarCreateBasedOn' }
+		}
+	}
+	return $key  # verbatim
+}
+
+# Командный интерфейс формы (<CommandInterface>): панели CommandBar + NavigationPanel.
+# Значение панели: МАССИВ (плоская форма; элемент может нести group) ИЛИ ОБЪЕКТ
+# (древовидная форма: {группа: [команды]}, group берётся из ключа, элементы его не дублируют).
+# Элемент: строка (голый command, Type=Auto) или объект. Порядок тегов:
+# Command, Type(деф. Auto), Attribute, CommandGroup, Index, DefaultVisible, Visible(xr-flag).
+function Emit-CommandInterface {
+	param($ci, [string]$indent)
+	if (-not $ci) { return }
+	$inner = "$indent`t"
+	$panels = @(
+		@{ Tag='CommandBar';      Syns=@('commandBar','команднаяПанель','КоманднаяПанель') },
+		@{ Tag='NavigationPanel'; Syns=@('navigationPanel','панельНавигации','ПанельНавигации') }
+	)
+	$present = @()
+	foreach ($p in $panels) {
+		$items = $null
+		foreach ($syn in $p.Syns) { if ($null -ne $ci.PSObject.Properties[$syn]) { $items = $ci.($syn); break } }
+		if ($null -ne $items) { $present += ,@{ Tag=$p.Tag; Items=$items } }
+	}
+	if ($present.Count -eq 0) { return }
+	X "$indent<CommandInterface>"
+	foreach ($p in $present) {
+		X "$inner<$($p.Tag)>"
+		# Нормализация: плоский список пар (элемент, group-из-дерева). Объект → дерево.
+		$flat = New-Object System.Collections.ArrayList
+		if ($p.Items -is [System.Management.Automation.PSCustomObject]) {
+			foreach ($prop in $p.Items.PSObject.Properties) {
+				$grpFromTree = Resolve-CommandGroupKey -key $prop.Name -panelTag $p.Tag
+				foreach ($it in @($prop.Value)) { [void]$flat.Add(@{ item=$it; treeGroup=$grpFromTree }) }
+			}
+		} else {
+			foreach ($it in @($p.Items)) { [void]$flat.Add(@{ item=$it; treeGroup=$null }) }
+		}
+		foreach ($fi in $flat) {
+			$item = $fi.item; $treeGroup = $fi.treeGroup
+			if ($item -is [string]) {
+				$cmd = $item; $type = 'Auto'; $attr = $null; $grp = $null; $idx = $null; $dv = $null; $vis = $null
+			} else {
+				$cmd  = Get-ElProp $item @('command','команда')
+				$type = Get-ElProp $item @('type','тип'); if (-not $type) { $type = 'Auto' }
+				$attr = Get-ElProp $item @('attribute','реквизит')
+				$grp  = Get-ElProp $item @('group','группа','группаКоманд')
+				$idx  = Get-ElProp $item @('index','индекс')
+				$dv   = Get-ElProp $item @('defaultVisible','видимость','видимостьПоУмолчанию')
+				$vis  = Get-ElProp $item @('visible','видимостьПоРолям','настройкаВидимости')
+			}
+			# group из дерева побеждает (если задан и непустой); явный group элемента — фолбэк
+			if ($treeGroup) { $grp = $treeGroup }
+			X "$inner`t<Item>"
+			X "$inner`t`t<Command>$(Esc-Xml "$cmd")</Command>"
+			X "$inner`t`t<Type>$type</Type>"
+			if ($attr) { X "$inner`t`t<Attribute>$(Esc-Xml "$attr")</Attribute>" }
+			if ($grp)  { X "$inner`t`t<CommandGroup>$(Esc-Xml "$grp")</CommandGroup>" }
+			if ($null -ne $idx) { X "$inner`t`t<Index>$idx</Index>" }
+			if ($null -ne $dv)  { X "$inner`t`t<DefaultVisible>$(if ($dv){'true'}else{'false'})</DefaultVisible>" }
+			if ($null -ne $vis) { Emit-XrFlag -tag 'Visible' -val $vis -indent "$inner`t`t" }
+			X "$inner`t</Item>"
+		}
+		X "$inner</$($p.Tag)>"
+	}
+	X "$indent</CommandInterface>"
+}
+
 # --- 11. Properties emitter ---
 
 function Emit-Properties {
@@ -5365,6 +5453,9 @@ Emit-Parameters -params $def.parameters -indent "`t"
 
 # 12i. Commands
 Emit-Commands -cmds $def.commands -indent "`t"
+
+# 12i2. CommandInterface (командный интерфейс формы — последний дочерний Form)
+Emit-CommandInterface -ci $def.commandInterface -indent "`t"
 
 # 12j. Close
 X '</Form>'

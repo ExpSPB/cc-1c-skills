@@ -1,4 +1,4 @@
-﻿# form-decompile v0.73 — Decompile 1C managed Form.xml to JSON DSL (draft)
+﻿# form-decompile v0.74 — Decompile 1C managed Form.xml to JSON DSL (draft)
 # Source: https://github.com/Nikolay-Shirokov/cc-1c-skills
 # ВНИМАНИЕ: раундтрип не гарантируется. Навык исключён из авто-использования моделью.
 param(
@@ -145,7 +145,6 @@ function Fail-Ring3 {
 	[Console]::Error.WriteLine("Для точечной работы с этой формой используй /form-edit.")
 	exit 3
 }
-foreach ($el in $xmlDoc.SelectNodes("//*[local-name()='CommandInterface']")) { Fail-Ring3 -kind "CommandInterface" -loc "form/CommandInterface" }
 foreach ($el in $xmlDoc.SelectNodes("//*[local-name()='ConditionalAppearance']")) { Fail-Ring3 -kind "ConditionalAppearance" -loc "form/ConditionalAppearance" }
 
 # --- 1c. Compact JSON serializer (созвучно skd-decompile: 2-проб. indent, inline в пределах lineLimit) ---
@@ -862,6 +861,38 @@ function Decompile-XrFlag {
 	$o['common'] = $common
 	$o['roles'] = $roles
 	return $o
+}
+
+# Командный интерфейс формы (<CommandInterface>): панели CommandBar + NavigationPanel,
+# каждая — список переопределений команд (платформа эмитит ТОЛЬКО отклонения от авто-расстановки).
+# Элемент: command (verbatim, "0"=пустой) + type (Auto опускаем) + attribute/group(CommandGroup)/index +
+# defaultVisible(bool) + visible(xr-flag bool/{common,roles} — тот же механизм, что userVisible).
+# Голый элемент (только команда, Type=Auto) → строковый shorthand.
+function Decompile-CommandInterface {
+	$ciNode = $root.SelectSingleNode("lf:CommandInterface", $ns)
+	if (-not $ciNode) { return $null }
+	$ci = [ordered]@{}
+	foreach ($panel in @(@('CommandBar','commandBar'), @('NavigationPanel','navigationPanel'))) {
+		$pn = $ciNode.SelectSingleNode("lf:$($panel[0])", $ns)
+		if (-not $pn) { continue }
+		$items = New-Object System.Collections.ArrayList
+		foreach ($it in @($pn.SelectNodes("lf:Item", $ns))) {
+			$o = [ordered]@{}
+			$cmd = Get-Child $it 'Command'
+			$o['command'] = "$cmd"
+			$ty = Get-Child $it 'Type'; if ($ty -and $ty -ne 'Auto') { $o['type'] = $ty }
+			$at = Get-Child $it 'Attribute'; if ($at) { $o['attribute'] = $at }
+			$cg = Get-Child $it 'CommandGroup'; if ($cg) { $o['group'] = $cg }
+			$idx = Get-Child $it 'Index'; if ($null -ne $idx) { $o['index'] = [int]$idx }
+			$dv = Get-Child $it 'DefaultVisible'; if ($null -ne $dv) { $o['defaultVisible'] = ($dv -eq 'true') }
+			$vis = Decompile-XrFlag $it 'Visible'; if ($null -ne $vis) { $o['visible'] = $vis }
+			# Голый элемент (только command) → строка-shorthand; иначе объект
+			if ($o.Count -eq 1) { [void]$items.Add("$cmd") } else { [void]$items.Add($o) }
+		}
+		if ($items.Count -gt 0) { $ci[$panel[1]] = @($items) }
+	}
+	if ($ci.Count -gt 0) { return $ci }
+	return $null
 }
 
 # <FunctionalOptions><Item>FunctionalOption.X</Item>…> → массив строк (префикс FunctionalOption. снят; GUID — как есть).
@@ -2091,6 +2122,10 @@ if ($cmdsNode) {
 	}
 	if ($cmds.Count -gt 0) { $dsl['commands'] = @($cmds) }
 }
+
+# commandInterface (форменный <CommandInterface> — последний дочерний Form)
+$ci = Decompile-CommandInterface
+if ($null -ne $ci) { $dsl['commandInterface'] = $ci }
 
 # --- 6. Output ---
 $json = ConvertTo-CompactJson -obj $dsl

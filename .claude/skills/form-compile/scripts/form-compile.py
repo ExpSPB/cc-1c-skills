@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-# form-compile v1.97 — Compile 1C managed form from JSON or object metadata
+# form-compile v1.98 — Compile 1C managed form from JSON or object metadata
 # Source: https://github.com/Nikolay-Shirokov/cc-1c-skills
 import argparse
 import copy
@@ -4655,6 +4655,86 @@ def emit_commands(lines, cmds, indent):
     lines.append(f'{indent}</Commands>')
 
 
+# Командный интерфейс формы (<CommandInterface>): панели CommandBar + NavigationPanel.
+# Элемент: строка (голый command, Type=Auto) или dict. Порядок тегов:
+# Command, Type(деф. Auto), Attribute, CommandGroup, Index, DefaultVisible, Visible(xr-flag).
+def _resolve_command_group_key(key, panel_tag):
+    """Ключ-группа древовидной формы → CommandGroup (зависит от панели); иначе verbatim."""
+    k = re.sub(r'\s', '', str(key)).lower()
+    if panel_tag == 'NavigationPanel':
+        m = {'important': 'FormNavigationPanelImportant', 'важное': 'FormNavigationPanelImportant',
+             'goto': 'FormNavigationPanelGoTo', 'перейти': 'FormNavigationPanelGoTo',
+             'seealso': 'FormNavigationPanelSeeAlso', 'смтакже': 'FormNavigationPanelSeeAlso'}
+    else:
+        m = {'important': 'FormCommandBarImportant', 'важное': 'FormCommandBarImportant',
+             'createbasedon': 'FormCommandBarCreateBasedOn', 'создатьнаосновании': 'FormCommandBarCreateBasedOn'}
+    return m.get(k, key)
+
+
+def emit_command_interface(lines, ci, indent):
+    if not ci:
+        return
+    inner = f'{indent}\t'
+    panels = [
+        ('CommandBar', ('commandBar', 'команднаяПанель', 'КоманднаяПанель')),
+        ('NavigationPanel', ('navigationPanel', 'панельНавигации', 'ПанельНавигации')),
+    ]
+    present = []
+    for tag, syns in panels:
+        items = None
+        for syn in syns:
+            if isinstance(ci, dict) and syn in ci:
+                items = ci[syn]
+                break
+        if items is not None:
+            present.append((tag, items))
+    if not present:
+        return
+    lines.append(f'{indent}<CommandInterface>')
+    for tag, items in present:
+        lines.append(f'{inner}<{tag}>')
+        # Нормализация: плоский список пар (элемент, group-из-дерева). dict → древовидная форма.
+        flat = []
+        if isinstance(items, dict):
+            for gkey, gitems in items.items():
+                grp_tree = _resolve_command_group_key(gkey, tag)
+                for it in gitems:
+                    flat.append((it, grp_tree))
+        else:
+            for it in items:
+                flat.append((it, None))
+        for item, tree_group in flat:
+            if isinstance(item, str):
+                cmd, typ, attr, grp, idx, dv, vis = item, 'Auto', None, None, None, None, None
+            else:
+                cmd = get_el_prop(item, ('command', 'команда'))
+                typ = get_el_prop(item, ('type', 'тип')) or 'Auto'
+                attr = get_el_prop(item, ('attribute', 'реквизит'))
+                grp = get_el_prop(item, ('group', 'группа', 'группаКоманд'))
+                idx = get_el_prop(item, ('index', 'индекс'))
+                dv = get_el_prop(item, ('defaultVisible', 'видимость', 'видимостьПоУмолчанию'))
+                vis = get_el_prop(item, ('visible', 'видимостьПоРолям', 'настройкаВидимости'))
+            # group из дерева побеждает (если задан и непустой); явный group элемента — фолбэк
+            if tree_group:
+                grp = tree_group
+            lines.append(f'{inner}\t<Item>')
+            lines.append(f'{inner}\t\t<Command>{esc_xml(str(cmd))}</Command>')
+            lines.append(f'{inner}\t\t<Type>{typ}</Type>')
+            if attr:
+                lines.append(f'{inner}\t\t<Attribute>{esc_xml(str(attr))}</Attribute>')
+            if grp:
+                lines.append(f'{inner}\t\t<CommandGroup>{esc_xml(str(grp))}</CommandGroup>')
+            if idx is not None:
+                lines.append(f'{inner}\t\t<Index>{idx}</Index>')
+            if dv is not None:
+                lines.append(f'{inner}\t\t<DefaultVisible>{"true" if dv else "false"}</DefaultVisible>')
+            if vis is not None:
+                emit_xr_flag(lines, 'Visible', vis, f'{inner}\t\t')
+            lines.append(f'{inner}\t</Item>')
+        lines.append(f'{inner}</{tag}>')
+    lines.append(f'{indent}</CommandInterface>')
+
+
 # --- Properties emitter ---
 
 PROP_MAP = {
@@ -5203,6 +5283,9 @@ def main():
 
     # Commands
     emit_commands(lines, defn.get('commands'), '\t')
+
+    # CommandInterface (командный интерфейс формы — последний дочерний Form)
+    emit_command_interface(lines, defn.get('commandInterface'), '\t')
 
     # Close
     lines.append('</Form>')

@@ -940,6 +940,46 @@ Forgiving-синонимы типа: XML-имя (`SpreadSheetDocumentField`) и 
 
 ---
 
+## 7b. CommandInterface — командный интерфейс формы
+
+Форменный ключ `commandInterface` (XML `<CommandInterface>`, последний дочерний `<Form>`). Две панели:
+`commandBar` (командная панель) и `navigationPanel` (панель навигации). Платформа эмитит **только
+переопределения** авто-расстановки (видимость/положение), поэтому в списке лишь изменённые команды.
+
+```json
+"commandInterface": {
+  "commandBar": [
+    { "command": "Form.Command.Печать", "defaultVisible": false, "group": "FormCommandBarImportant",
+      "visible": { "common": false, "roles": { "Бухгалтер": true } } },
+    "CommonCommand.История"
+  ],
+  "navigationPanel": {
+    "important": [ { "command": "CommonCommand.СвязанныеДокументы", "defaultVisible": false, "visible": false } ],
+    "seeAlso":   [ { "command": "CommonCommand.Заметки", "defaultVisible": false, "visible": false } ]
+  }
+}
+```
+
+**Элемент** (объект или строка-shorthand = голый `command` со всеми умолчаниями):
+
+| Свойство | Тип | Описание |
+|----------|-----|----------|
+| `command` | string | Ссылка на команду verbatim: `CommonCommand.X`, `Document.X.StandardCommand.Y`, `Form.Command.X`, `Form.StandardCommand.OK`, `"0"` (пустой/разделитель) |
+| `type` | string | `Auto` (дефолт, опускаем) / `Added` |
+| `defaultVisible` | bool | Видимость по умолчанию (`<DefaultVisible>`; на практике всегда `false` — скрыть видимую команду) |
+| `visible` | bool/object | Видимость с исключениями по ролям — **тот же xr-flag, что `userVisible`/`use`** (§4.1c): `bool` или `{common, roles:{Имя:bool}}` |
+| `group` | string | `<CommandGroup>` verbatim: `FormCommandBarImportant`/`FormNavigationPanelGoTo`/…, `CommandGroup.X` (именованная), GUID (расширение) |
+| `index` | int | Порядок в группе (`<Index>`) |
+| `attribute` | string | Путь реквизита для элемента панели навигации (`<Attribute>`) |
+
+**Две формы записи панели:**
+- **Плоский массив** — каждый элемент опц. несёт `group` (полная общность; декомпилятор эмитит ЭТУ форму).
+- **Дерево** (входной сахар) — объект `{группа: [команды]}`; `group` берётся из ключа, элементы его не дублируют. Дружелюбные алиасы (зависят от панели): navigation — `important`/`goTo`/`seeAlso` (рус. `важное`/`перейти`/`смТакже`), commandBar — `important`/`createBasedOn`; иной ключ (`CommandGroup.X`/GUID) — verbatim.
+
+Синонимы ключей: `команда`/`тип`/`видимость`/`видимостьПоРолям`/`группа`/`индекс`/`реквизит`.
+
+---
+
 ## 8. Система типов (shorthand)
 
 ### Примитивные типы

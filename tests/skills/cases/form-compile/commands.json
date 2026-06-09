@@ -29,6 +29,13 @@
     ],
     "commands": [
       { "name": "Выполнить", "action": "ВыполнитьОбработка", "shortcut": "Ctrl+Enter", "use": false, "modifiesSavedData": true }
-    ]
+    ],
+    "commandInterface": {
+      "commandBar": {
+        "important": [
+          { "command": "Form.Command.Выполнить", "defaultVisible": false, "index": 0, "visible": false }
+        ]
+      }
+    }
   }
 }
