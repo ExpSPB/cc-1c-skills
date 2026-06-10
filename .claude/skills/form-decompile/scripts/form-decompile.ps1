@@ -1,4 +1,4 @@
-﻿# form-decompile v0.84 — Decompile 1C managed Form.xml to JSON DSL (draft)
+﻿# form-decompile v0.85 — Decompile 1C managed Form.xml to JSON DSL (draft)
 # Source: https://github.com/Nikolay-Shirokov/cc-1c-skills
 # ВНИМАНИЕ: раундтрип не гарантируется. Навык исключён из авто-использования моделью.
 param(
@@ -1027,6 +1027,14 @@ function Add-CommonProps {
 	$fp = Get-PictureRef $node 'FooterPicture'; if ($null -ne $fp) { $obj['footerPicture'] = $fp }
 	$ev = Get-Events $node $elName
 	if ($ev) { $obj['events'] = $ev }
+	# CommandSet — общий для полей (input/label/check/spreadsheet/html/formatted/picture):
+	# список отключённых команд редактора. Только <ExcludedCommand>, пустого не бывает.
+	$csNode = $node.SelectSingleNode("lf:CommandSet", $ns)
+	if ($csNode) {
+		$exc = New-Object System.Collections.ArrayList
+		foreach ($ec in @($csNode.SelectNodes("lf:ExcludedCommand", $ns))) { [void]$exc.Add($ec.InnerText) }
+		if ($exc.Count -gt 0) { $obj['excludedCommands'] = @($exc) }
+	}
 }
 
 # --- 3. Type decompile (inverse of Emit-Type) ---

@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-# form-compile v1.108 — Compile 1C managed form from JSON or object metadata
+# form-compile v1.109 — Compile 1C managed form from JSON or object metadata
 # Source: https://github.com/Nikolay-Shirokov/cc-1c-skills
 import argparse
 import copy
@@ -3100,6 +3100,12 @@ def emit_layout(lines, el, indent, skip_height=False, multi_line_default=False):
     # с историческим выводом input/label, чтобы не сдвигать существующие снапшоты.
     # skip_height: подавить <Height> (зарезервирован; Table теперь эмитит <Height> generic-ом + свой <HeightInTableRows>).
     # multi_line_default: input без явного autoMaxWidth при multiLine → AutoMaxWidth=false.
+    # CommandSet (отключённые команды редактора) — общее свойство поля; в схеме рано (после TitleLocation).
+    if el.get('excludedCommands') and len(el['excludedCommands']) > 0:
+        lines.append(f'{indent}<CommandSet>')
+        for cmd in el['excludedCommands']:
+            lines.append(f'{indent}\t<ExcludedCommand>{cmd}</ExcludedCommand>')
+        lines.append(f'{indent}</CommandSet>')
     emit_common_element_props(lines, el, indent)
     if 'autoMaxWidth' in el:
         if el.get('autoMaxWidth') is False:
@@ -3965,11 +3971,7 @@ def emit_table(lines, el, name, eid, indent):
         lines.append(f'{inner}<SearchControlLocation>{el["searchControlLocation"]}</SearchControlLocation>')
     emit_layout(lines, el, inner)
 
-    if el.get('excludedCommands'):
-        lines.append(f'{inner}<CommandSet>')
-        for cmd in el['excludedCommands']:
-            lines.append(f'{inner}\t<ExcludedCommand>{cmd}</ExcludedCommand>')
-        lines.append(f'{inner}</CommandSet>')
+    # CommandSet таблицы эмитится через emit_layout (общий механизм поля)
 
     # Оформление (цвета/граница таблицы) — перед компаньонами
     emit_appearance(lines, el, inner, 'field')

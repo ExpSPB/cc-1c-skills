@@ -20,17 +20,17 @@
 			<AutoMarkIncomplete>true</AutoMarkIncomplete>
 			<ViewStatusLocation>None</ViewStatusLocation>
 			<SearchControlLocation>None</SearchControlLocation>
-			<Height>80</Height>
-			<SettingsNamedItemDetailedRepresentation>false</SettingsNamedItemDetailedRepresentation>
-			<MaxRowsCount>5</MaxRowsCount>
-			<AutoMaxRowsCount>false</AutoMaxRowsCount>
-			<HeightControlVariant>UseHeightInTableRows</HeightControlVariant>
 			<CommandSet>
 				<ExcludedCommand>Add</ExcludedCommand>
 				<ExcludedCommand>Delete</ExcludedCommand>
 				<ExcludedCommand>MoveUp</ExcludedCommand>
 				<ExcludedCommand>MoveDown</ExcludedCommand>
 			</CommandSet>
+			<Height>80</Height>
+			<SettingsNamedItemDetailedRepresentation>false</SettingsNamedItemDetailedRepresentation>
+			<MaxRowsCount>5</MaxRowsCount>
+			<AutoMaxRowsCount>false</AutoMaxRowsCount>
+			<HeightControlVariant>UseHeightInTableRows</HeightControlVariant>
 			<ContextMenu name="ДанныеКонтекстноеМеню" id="2">
 				<ChildItems>
 					<ButtonGroup name="МенюГруппа" id="3">

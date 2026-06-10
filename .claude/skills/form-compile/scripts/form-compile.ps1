@@ -1,4 +1,4 @@
-﻿# form-compile v1.108 — Compile 1C managed form from JSON or object metadata
+﻿# form-compile v1.109 — Compile 1C managed form from JSON or object metadata
 # Source: https://github.com/Nikolay-Shirokov/cc-1c-skills
 param(
 	[string]$JsonPath,
@@ -3326,6 +3326,13 @@ function Emit-Appearance {
 
 function Emit-Layout {
 	param($el, [string]$indent, [switch]$skipHeight, [bool]$multiLineDefault = $false)
+	# CommandSet (отключённые команды редактора) — общее свойство поля (input/label/check/
+	# spreadsheet/html/formatted/picture); в схеме рано (после TitleLocation, перед скалярами).
+	if ($el.excludedCommands -and @($el.excludedCommands).Count -gt 0) {
+		X "$indent<CommandSet>"
+		foreach ($cmd in $el.excludedCommands) { X "$indent`t<ExcludedCommand>$cmd</ExcludedCommand>" }
+		X "$indent</CommandSet>"
+	}
 	Emit-CommonElementProps -el $el -indent $indent
 	$amwExplicit = ($el.PSObject.Properties.Name -contains 'autoMaxWidth')
 	if ($amwExplicit) {
@@ -4235,11 +4242,7 @@ function Emit-Table {
 	if ($el.searchControlLocation) { X "$inner<SearchControlLocation>$($el.searchControlLocation)</SearchControlLocation>" }
 	Emit-Layout -el $el -indent $inner
 
-	if ($el.excludedCommands -and $el.excludedCommands.Count -gt 0) {
-		X "$inner<CommandSet>"
-		foreach ($cmd in $el.excludedCommands) { X "$inner`t<ExcludedCommand>$cmd</ExcludedCommand>" }
-		X "$inner</CommandSet>"
-	}
+	# CommandSet таблицы эмитится через Emit-Layout (общий механизм поля)
 
 	# Оформление (цвета/граница таблицы) — перед компаньонами
 	Emit-Appearance -el $el -indent $inner -profile 'field'
