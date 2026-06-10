@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-# form-compile v1.103 — Compile 1C managed form from JSON or object metadata
+# form-compile v1.104 — Compile 1C managed form from JSON or object metadata
 # Source: https://github.com/Nikolay-Shirokov/cc-1c-skills
 import argparse
 import copy
@@ -2714,6 +2714,181 @@ def emit_border_tag(lines, val, indent):
     lines.append(f'{indent}</Border>')
 
 
+# ─────────────────────────────────────────────────────────────────────────────
+# Planner design-time <Settings xsi:type="pl:Planner"> — зеркало Emit-PlannerSettings (ps1).
+PLANNER_NS = 'http://v8.1c.ru/8.3/data/planner'
+CHART_NS = 'http://v8.1c.ru/8.2/data/chart'
+
+
+def _pl_get(o, k, default=None):
+    if isinstance(o, dict) and o.get(k) is not None:
+        return o[k]
+    return default
+
+
+def _pl_bool(v):
+    if isinstance(v, bool):
+        return 'true' if v else 'false'
+    if str(v) == 'True':
+        return 'true'
+    if str(v) == 'False':
+        return 'false'
+    return str(v)
+
+
+def emit_planner_color(lines, tag, o, key, ind):
+    lines.append(f'{ind}<pl:{tag}>{esc_xml(str(_pl_get(o, key, "auto")))}</pl:{tag}>')
+
+
+def emit_planner_font(lines, o, ind):
+    f = _pl_get(o, 'font')
+    if f is None:
+        lines.append(f'{ind}<pl:font kind="AutoFont"/>')
+        return
+    emit_font_tag(lines, 'pl:font', f, ind)
+
+
+def emit_planner_border(lines, o, ind, key='border'):
+    b = _pl_get(o, key)
+    bw = _pl_get(b, 'width', 1) if b else 1
+    bs = _pl_get(b, 'style', 'Single') if b else 'Single'
+    lines.append(f'{ind}<pl:border width="{bw}">')
+    lines.append(f'{ind}\t<v8ui:style xsi:type="v8ui:ControlBorderType">{esc_xml(str(bs))}</v8ui:style>')
+    lines.append(f'{ind}</pl:border>')
+
+
+def emit_planner_level(lines, lv, cns, ind):
+    li = f'{ind}\t'
+    lines.append(f'{ind}<level xmlns="{cns}">')
+    lines.append(f'{li}<measure>{esc_xml(str(_pl_get(lv, "measure", "Hour")))}</measure>')
+    lines.append(f'{li}<interval>{_pl_get(lv, "interval", 1)}</interval>')
+    lines.append(f'{li}<show>{_pl_bool(_pl_get(lv, "show", True))}</show>')
+    line = _pl_get(lv, 'line')
+    lw = _pl_get(line, 'width', 1) if line else 1
+    lg = _pl_get(line, 'gap', False) if line else False
+    lst = _pl_get(line, 'style', 'Solid') if line else 'Solid'
+    lines.append(f'{li}<line width="{lw}" gap="{_pl_bool(lg)}">')
+    lines.append(f'{li}\t<v8ui:style xsi:type="v8ui:ChartLineType">{esc_xml(str(lst))}</v8ui:style>')
+    lines.append(f'{li}</line>')
+    lines.append(f'{li}<scaleColor>{esc_xml(str(_pl_get(lv, "scaleColor", "auto")))}</scaleColor>')
+    lines.append(f'{li}<dayFormatRule>{esc_xml(str(_pl_get(lv, "dayFormatRule", "MonthDayWeekDay")))}</dayFormatRule>')
+    fmt = _pl_get(lv, 'format')
+    if fmt is None:
+        fmt = {'#': 'DF="HH:mm"', 'ru': 'DF="HH:mm"'}
+    lines.append(f'{li}<format>')
+    emit_ml_items(lines, f'{li}\t', fmt)
+    lines.append(f'{li}</format>')
+    labels = _pl_get(lv, 'labels')
+    ticks = _pl_get(labels, 'ticks', 0) if labels else 0
+    lines.append(f'{li}<labels>')
+    lines.append(f'{li}\t<ticks>{ticks}</ticks>')
+    lines.append(f'{li}</labels>')
+    lines.append(f'{li}<backColor>{esc_xml(str(_pl_get(lv, "backColor", "auto")))}</backColor>')
+    lines.append(f'{li}<textColor>{esc_xml(str(_pl_get(lv, "textColor", "auto")))}</textColor>')
+    lines.append(f'{li}<showPereodicalLabels>{_pl_bool(_pl_get(lv, "showPereodicalLabels", True))}</showPereodicalLabels>')
+    lines.append(f'{ind}</level>')
+
+
+def emit_planner_timescale(lines, ts, ind):
+    cns = CHART_NS
+    ci = f'{ind}\t'
+    lines.append(f'{ind}<pl:timeScale>')
+    placement = _pl_get(ts, 'placement', 'Left') if ts else 'Left'
+    lines.append(f'{ci}<placement xmlns="{cns}">{esc_xml(str(placement))}</placement>')
+    levels = _pl_get(ts, 'levels', []) if ts else []
+    if not levels:
+        levels = [None]
+    for lv in levels:
+        emit_planner_level(lines, lv, cns, ci)
+    transp = _pl_get(ts, 'transparent', False) if ts else False
+    lines.append(f'{ci}<transparent xmlns="{cns}">{_pl_bool(transp)}</transparent>')
+    tbc = _pl_get(ts, 'backColor', 'auto') if ts else 'auto'
+    ttc = _pl_get(ts, 'textColor', 'auto') if ts else 'auto'
+    tcl = _pl_get(ts, 'currentLevel', 0) if ts else 0
+    lines.append(f'{ci}<backColor xmlns="{cns}">{esc_xml(str(tbc))}</backColor>')
+    lines.append(f'{ci}<textColor xmlns="{cns}">{esc_xml(str(ttc))}</textColor>')
+    lines.append(f'{ci}<currentLevel xmlns="{cns}">{tcl}</currentLevel>')
+    lines.append(f'{ind}</pl:timeScale>')
+
+
+def emit_planner_item(lines, it, ind):
+    lines.append(f'{ind}<pl:item>')
+    ii = f'{ind}\t'
+    val = _pl_get(it, 'value')
+    if val is None:
+        lines.append(f'{ii}<pl:value xsi:nil="true"/>')
+    else:
+        lines.append(f'{ii}<pl:value xsi:type="xs:string">{esc_xml(str(val))}</pl:value>')
+    lines.append(f'{ii}<pl:text>{esc_xml(str(_pl_get(it, "text", "")))}</pl:text>')
+    tt = _pl_get(it, 'tooltip', '')
+    if str(tt) == '':
+        lines.append(f'{ii}<pl:tooltip/>')
+    else:
+        lines.append(f'{ii}<pl:tooltip>{esc_xml(str(tt))}</pl:tooltip>')
+    lines.append(f'{ii}<pl:begin>{_pl_get(it, "begin", "0001-01-01T00:00:00")}</pl:begin>')
+    lines.append(f'{ii}<pl:end>{_pl_get(it, "end", "0001-01-01T00:00:00")}</pl:end>')
+    emit_planner_color(lines, 'borderColor', it, 'borderColor', ii)
+    emit_planner_color(lines, 'backColor', it, 'backColor', ii)
+    emit_planner_color(lines, 'textColor', it, 'textColor', ii)
+    emit_planner_font(lines, it, ii)
+    lines.append(f'{ii}<pl:dimensionValues/>')
+    lines.append(f'{ii}<pl:replacementDate>{_pl_get(it, "replacementDate", "0001-01-01T00:00:00")}</pl:replacementDate>')
+    lines.append(f'{ii}<pl:deleted>{_pl_bool(_pl_get(it, "deleted", False))}</pl:deleted>')
+    iid = _pl_get(it, 'id')
+    if iid is None:
+        import uuid
+        iid = str(uuid.uuid4())
+    lines.append(f'{ii}<pl:id>{iid}</pl:id>')
+    lines.append(f'{ii}<pl:textFormatted>{_pl_bool(_pl_get(it, "textFormatted", False))}</pl:textFormatted>')
+    emit_planner_border(lines, it, ii, 'border')
+    lines.append(f'{ii}<pl:editMode>{esc_xml(str(_pl_get(it, "editMode", "EnableEdit")))}</pl:editMode>')
+    lines.append(f'{ind}</pl:item>')
+
+
+def emit_planner_settings(lines, pl, ind):
+    lines.append(f'{ind}<Settings xmlns:pl="{PLANNER_NS}" xsi:type="pl:Planner">')
+    si = f'{ind}\t'
+    for it in _pl_get(pl, 'items', []):
+        emit_planner_item(lines, it, si)
+    emit_planner_color(lines, 'borderColor', pl, 'borderColor', si)
+    emit_planner_color(lines, 'backColor', pl, 'backColor', si)
+    emit_planner_color(lines, 'textColor', pl, 'textColor', si)
+    emit_planner_color(lines, 'lineColor', pl, 'lineColor', si)
+    emit_planner_font(lines, pl, si)
+    lines.append(f'{si}<pl:beginOfRepresentationPeriod>{_pl_get(pl, "beginOfRepresentationPeriod", "0001-01-01T00:00:00")}</pl:beginOfRepresentationPeriod>')
+    lines.append(f'{si}<pl:endOfRepresentationPeriod>{_pl_get(pl, "endOfRepresentationPeriod", "0001-01-01T00:00:00")}</pl:endOfRepresentationPeriod>')
+    lines.append(f'{si}<pl:alignElementsOfTimeScale>{_pl_bool(_pl_get(pl, "alignElementsOfTimeScale", True))}</pl:alignElementsOfTimeScale>')
+    lines.append(f'{si}<pl:displayTimeScaleWrapHeaders>{_pl_bool(_pl_get(pl, "displayTimeScaleWrapHeaders", True))}</pl:displayTimeScaleWrapHeaders>')
+    lines.append(f'{si}<pl:displayWrapHeaders>{_pl_bool(_pl_get(pl, "displayWrapHeaders", True))}</pl:displayWrapHeaders>')
+    wfmt = _pl_get(pl, 'timeScaleWrapHeadersFormat')
+    if wfmt is None:
+        wfmt = {'#': 'DLF="DD"', 'ru': 'DLF="DD"'}
+    emit_mltext(lines, si, 'pl:timeScaleWrapHeadersFormat', wfmt)
+    lines.append(f'{si}<pl:periodicVariantUnit>{esc_xml(str(_pl_get(pl, "periodicVariantUnit", "Day")))}</pl:periodicVariantUnit>')
+    lines.append(f'{si}<pl:periodicVariantRepetition>{_pl_get(pl, "periodicVariantRepetition", 1)}</pl:periodicVariantRepetition>')
+    lines.append(f'{si}<pl:timeScaleWrapBeginIndent>{_pl_get(pl, "timeScaleWrapBeginIndent", 0)}</pl:timeScaleWrapBeginIndent>')
+    lines.append(f'{si}<pl:timeScaleWrapEndIndent>{_pl_get(pl, "timeScaleWrapEndIndent", 0)}</pl:timeScaleWrapEndIndent>')
+    emit_planner_timescale(lines, _pl_get(pl, 'timeScale'), si)
+    period = _pl_get(pl, 'period')
+    if period:
+        lines.append(f'{si}<pl:period>')
+        lines.append(f'{si}\t<pl:begin>{_pl_get(period, "begin", "0001-01-01T00:00:00")}</pl:begin>')
+        lines.append(f'{si}\t<pl:end>{_pl_get(period, "end", "0001-01-01T00:00:00")}</pl:end>')
+        lines.append(f'{si}</pl:period>')
+    lines.append(f'{si}<pl:displayCurrentDate>{_pl_bool(_pl_get(pl, "displayCurrentDate", True))}</pl:displayCurrentDate>')
+    lines.append(f'{si}<pl:itemsTimeRepresentation>{esc_xml(str(_pl_get(pl, "itemsTimeRepresentation", "BeginTime")))}</pl:itemsTimeRepresentation>')
+    lines.append(f'{si}<pl:itemsBehaviorWhenSpaceInsufficient>{esc_xml(str(_pl_get(pl, "itemsBehaviorWhenSpaceInsufficient", "CollapseItems")))}</pl:itemsBehaviorWhenSpaceInsufficient>')
+    lines.append(f'{si}<pl:autoMinColumnWidth>{_pl_bool(_pl_get(pl, "autoMinColumnWidth", True))}</pl:autoMinColumnWidth>')
+    lines.append(f'{si}<pl:autoMinRowHeight>{_pl_bool(_pl_get(pl, "autoMinRowHeight", True))}</pl:autoMinRowHeight>')
+    lines.append(f'{si}<pl:minColumnWidth>{_pl_get(pl, "minColumnWidth", 0)}</pl:minColumnWidth>')
+    lines.append(f'{si}<pl:minRowHeight>{_pl_get(pl, "minRowHeight", 0)}</pl:minRowHeight>')
+    lines.append(f'{si}<pl:fixDimensionsHeader>{esc_xml(str(_pl_get(pl, "fixDimensionsHeader", "auto")))}</pl:fixDimensionsHeader>')
+    lines.append(f'{si}<pl:fixTimeScaleHeader>{esc_xml(str(_pl_get(pl, "fixTimeScaleHeader", "auto")))}</pl:fixTimeScaleHeader>')
+    emit_planner_border(lines, pl, si, 'border')
+    lines.append(f'{si}<pl:newItemsTextType>{esc_xml(str(_pl_get(pl, "newItemsTextType", "String")))}</pl:newItemsTextType>')
+    lines.append(f'{ind}</Settings>')
+
+
 def emit_appearance(lines, el, indent, profile='field'):
     if not isinstance(el, dict):
         return
@@ -3063,6 +3238,7 @@ def emit_single_type(lines, type_str, indent):
         "d5p1:TextDocument": "http://v8.1c.ru/8.1/data/txtedt",
         "d5p1:Chart": "http://v8.1c.ru/8.2/data/chart",
         "d5p1:GanttChart": "http://v8.1c.ru/8.2/data/chart",
+        "d5p1:Dendrogram": "http://v8.1c.ru/8.2/data/chart",
         "d5p1:FlowchartContextType": "http://v8.1c.ru/8.2/data/graphscheme",
         "d5p1:DataAnalysisTimeIntervalUnitType": "http://v8.1c.ru/8.2/data/data-analysis",
         "d5p1:GeographicalSchema": "http://v8.1c.ru/8.2/data/geo",
@@ -4480,6 +4656,9 @@ def emit_attributes(lines, attrs, indent, conditional_appearance=None):
                 break
         if has_vt:
             emit_type(lines, '' if vt_spec is None else str(vt_spec), inner, tag="Settings", tag_attrs=' xsi:type="v8:TypeDescription"')
+        # Planner design-time <Settings xsi:type="pl:Planner"> (встроенный конфиг планировщика).
+        if attr.get('planner') is not None:
+            emit_planner_settings(lines, attr['planner'], inner)
 
         if attr.get('main') is True:
             lines.append(f'{inner}<MainAttribute>true</MainAttribute>')

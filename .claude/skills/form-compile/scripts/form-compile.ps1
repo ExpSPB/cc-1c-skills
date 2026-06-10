@@ -1,4 +1,4 @@
-﻿# form-compile v1.103 — Compile 1C managed form from JSON or object metadata
+﻿# form-compile v1.104 — Compile 1C managed form from JSON or object metadata
 # Source: https://github.com/Nikolay-Shirokov/cc-1c-skills
 param(
 	[string]$JsonPath,
@@ -2168,6 +2168,7 @@ function Emit-SingleType {
 		"d5p1:TextDocument"                     = "http://v8.1c.ru/8.1/data/txtedt"
 		"d5p1:Chart"                            = "http://v8.1c.ru/8.2/data/chart"
 		"d5p1:GanttChart"                       = "http://v8.1c.ru/8.2/data/chart"
+		"d5p1:Dendrogram"                       = "http://v8.1c.ru/8.2/data/chart"
 		"d5p1:FlowchartContextType"             = "http://v8.1c.ru/8.2/data/graphscheme"
 		"d5p1:DataAnalysisTimeIntervalUnitType" = "http://v8.1c.ru/8.2/data/data-analysis"
 		"d5p1:GeographicalSchema"               = "http://v8.1c.ru/8.2/data/geo"
@@ -3020,6 +3021,164 @@ function Emit-BorderTag {
 	X "$indent<Border width=`"$width`">"
 	if ($style) { X "$indent`t<v8ui:style xsi:type=`"v8ui:ControlBorderType`">$(Esc-Xml $style)</v8ui:style>" }
 	X "$indent</Border>"
+}
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Planner design-time <Settings xsi:type="pl:Planner"> — встроенный конфиг планировщика
+# на реквизите planner-типа. Структурный DSL: items[] + appearance/поведение-скаляры +
+# timeScale (уровни шкалы времени) + period. Каждое присутствующее поле → каноничный
+# порядок; пропущенное → дефолт (планировщик всегда несёт полный блок). Декомпилятор
+# делает полный захват → раундтрип бит-в-бит; ручной авторинг может быть кратким.
+$script:PLANNER_NS = 'http://v8.1c.ru/8.3/data/planner'
+$script:CHART_NS   = 'http://v8.1c.ru/8.2/data/chart'
+
+function PL-Get {
+	param($o, [string]$k, $def = $null)
+	if ($null -ne $o -and $o.PSObject.Properties[$k] -and $null -ne $o.$k) { return $o.$k }
+	return $def
+}
+function PL-Bool {
+	param($v)
+	if ($v -is [bool]) { if ($v) { 'true' } else { 'false' } }
+	elseif ("$v" -eq 'True') { 'true' }
+	elseif ("$v" -eq 'False') { 'false' }
+	else { "$v" }
+}
+function Emit-PlannerColor {
+	param([string]$tag, $o, [string]$key, [string]$ind)
+	X "$ind<pl:$tag>$(Esc-Xml "$(PL-Get $o $key 'auto')")</pl:$tag>"
+}
+function Emit-PlannerFont {
+	param($o, [string]$ind)
+	$f = PL-Get $o 'font' $null
+	if ($null -eq $f) { X "$ind<pl:font kind=`"AutoFont`"/>"; return }
+	Emit-FontTag -tag 'pl:font' -val $f -indent $ind
+}
+function Emit-PlannerBorder {
+	param($o, [string]$ind, [string]$key = 'border')
+	$b = PL-Get $o $key $null
+	$bw = if ($b) { PL-Get $b 'width' 1 } else { 1 }
+	$bs = if ($b) { PL-Get $b 'style' 'Single' } else { 'Single' }
+	X "$ind<pl:border width=`"$bw`">"
+	X "$ind`t<v8ui:style xsi:type=`"v8ui:ControlBorderType`">$(Esc-Xml "$bs")</v8ui:style>"
+	X "$ind</pl:border>"
+}
+function Emit-PlannerLevel {
+	param($lv, [string]$cns, [string]$ind)
+	$li = "$ind`t"
+	X "$ind<level xmlns=`"$cns`">"
+	X "$li<measure>$(Esc-Xml "$(PL-Get $lv 'measure' 'Hour')")</measure>"
+	X "$li<interval>$(PL-Get $lv 'interval' 1)</interval>"
+	X "$li<show>$(PL-Bool (PL-Get $lv 'show' $true))</show>"
+	$line = PL-Get $lv 'line' $null
+	$lw  = if ($line) { PL-Get $line 'width' 1 } else { 1 }
+	$lg  = if ($line) { PL-Get $line 'gap' $false } else { $false }
+	$lst = if ($line) { PL-Get $line 'style' 'Solid' } else { 'Solid' }
+	X "$li<line width=`"$lw`" gap=`"$(PL-Bool $lg)`">"
+	X "$li`t<v8ui:style xsi:type=`"v8ui:ChartLineType`">$(Esc-Xml "$lst")</v8ui:style>"
+	X "$li</line>"
+	X "$li<scaleColor>$(Esc-Xml "$(PL-Get $lv 'scaleColor' 'auto')")</scaleColor>"
+	X "$li<dayFormatRule>$(Esc-Xml "$(PL-Get $lv 'dayFormatRule' 'MonthDayWeekDay')")</dayFormatRule>"
+	$fmt = PL-Get $lv 'format' $null
+	if ($null -eq $fmt) { $fmt = [ordered]@{ '#' = 'DF="HH:mm"'; 'ru' = 'DF="HH:mm"' } }
+	X "$li<format>"
+	Emit-MLItems -val $fmt -indent "$li`t"
+	X "$li</format>"
+	$labels = PL-Get $lv 'labels' $null
+	$ticks  = if ($labels) { PL-Get $labels 'ticks' 0 } else { 0 }
+	X "$li<labels>"
+	X "$li`t<ticks>$ticks</ticks>"
+	X "$li</labels>"
+	X "$li<backColor>$(Esc-Xml "$(PL-Get $lv 'backColor' 'auto')")</backColor>"
+	X "$li<textColor>$(Esc-Xml "$(PL-Get $lv 'textColor' 'auto')")</textColor>"
+	X "$li<showPereodicalLabels>$(PL-Bool (PL-Get $lv 'showPereodicalLabels' $true))</showPereodicalLabels>"
+	X "$ind</level>"
+}
+function Emit-PlannerTimeScale {
+	param($ts, [string]$ind)
+	$cns = $script:CHART_NS
+	$ci = "$ind`t"
+	X "$ind<pl:timeScale>"
+	X "$ci<placement xmlns=`"$cns`">$(Esc-Xml "$(if ($ts) { PL-Get $ts 'placement' 'Left' } else { 'Left' })")</placement>"
+	$levels = if ($ts) { @(PL-Get $ts 'levels' @()) } else { @() }
+	if (@($levels).Count -eq 0) { $levels = @($null) }   # один уровень-дефолт
+	foreach ($lv in $levels) { Emit-PlannerLevel $lv $cns $ci }
+	$transp = if ($ts) { PL-Get $ts 'transparent' $false } else { $false }
+	X "$ci<transparent xmlns=`"$cns`">$(PL-Bool $transp)</transparent>"
+	X "$ci<backColor xmlns=`"$cns`">$(Esc-Xml "$(if ($ts) { PL-Get $ts 'backColor' 'auto' } else { 'auto' })")</backColor>"
+	X "$ci<textColor xmlns=`"$cns`">$(Esc-Xml "$(if ($ts) { PL-Get $ts 'textColor' 'auto' } else { 'auto' })")</textColor>"
+	X "$ci<currentLevel xmlns=`"$cns`">$(if ($ts) { PL-Get $ts 'currentLevel' 0 } else { 0 })</currentLevel>"
+	X "$ind</pl:timeScale>"
+}
+function Emit-PlannerItem {
+	param($it, [string]$ind)
+	X "$ind<pl:item>"
+	$ii = "$ind`t"
+	$val = PL-Get $it 'value' $null
+	if ($null -eq $val) { X "$ii<pl:value xsi:nil=`"true`"/>" }
+	else { X "$ii<pl:value xsi:type=`"xs:string`">$(Esc-Xml "$val")</pl:value>" }
+	X "$ii<pl:text>$(Esc-Xml "$(PL-Get $it 'text' '')")</pl:text>"
+	$tt = PL-Get $it 'tooltip' ''
+	if ("$tt" -eq '') { X "$ii<pl:tooltip/>" } else { X "$ii<pl:tooltip>$(Esc-Xml "$tt")</pl:tooltip>" }
+	X "$ii<pl:begin>$(PL-Get $it 'begin' '0001-01-01T00:00:00')</pl:begin>"
+	X "$ii<pl:end>$(PL-Get $it 'end' '0001-01-01T00:00:00')</pl:end>"
+	Emit-PlannerColor 'borderColor' $it 'borderColor' $ii
+	Emit-PlannerColor 'backColor'   $it 'backColor'   $ii
+	Emit-PlannerColor 'textColor'   $it 'textColor'   $ii
+	Emit-PlannerFont $it $ii
+	X "$ii<pl:dimensionValues/>"
+	X "$ii<pl:replacementDate>$(PL-Get $it 'replacementDate' '0001-01-01T00:00:00')</pl:replacementDate>"
+	X "$ii<pl:deleted>$(PL-Bool (PL-Get $it 'deleted' $false))</pl:deleted>"
+	$id = PL-Get $it 'id' $null
+	if ($null -eq $id) { $id = [guid]::NewGuid().ToString() }
+	X "$ii<pl:id>$id</pl:id>"
+	X "$ii<pl:textFormatted>$(PL-Bool (PL-Get $it 'textFormatted' $false))</pl:textFormatted>"
+	Emit-PlannerBorder $it $ii 'border'
+	X "$ii<pl:editMode>$(Esc-Xml "$(PL-Get $it 'editMode' 'EnableEdit')")</pl:editMode>"
+	X "$ind</pl:item>"
+}
+function Emit-PlannerSettings {
+	param($pl, [string]$ind)
+	X "$ind<Settings xmlns:pl=`"$($script:PLANNER_NS)`" xsi:type=`"pl:Planner`">"
+	$si = "$ind`t"
+	foreach ($it in @(PL-Get $pl 'items' @())) { Emit-PlannerItem $it $si }
+	Emit-PlannerColor 'borderColor' $pl 'borderColor' $si
+	Emit-PlannerColor 'backColor'   $pl 'backColor'   $si
+	Emit-PlannerColor 'textColor'   $pl 'textColor'   $si
+	Emit-PlannerColor 'lineColor'   $pl 'lineColor'   $si
+	Emit-PlannerFont $pl $si
+	X "$si<pl:beginOfRepresentationPeriod>$(PL-Get $pl 'beginOfRepresentationPeriod' '0001-01-01T00:00:00')</pl:beginOfRepresentationPeriod>"
+	X "$si<pl:endOfRepresentationPeriod>$(PL-Get $pl 'endOfRepresentationPeriod' '0001-01-01T00:00:00')</pl:endOfRepresentationPeriod>"
+	X "$si<pl:alignElementsOfTimeScale>$(PL-Bool (PL-Get $pl 'alignElementsOfTimeScale' $true))</pl:alignElementsOfTimeScale>"
+	X "$si<pl:displayTimeScaleWrapHeaders>$(PL-Bool (PL-Get $pl 'displayTimeScaleWrapHeaders' $true))</pl:displayTimeScaleWrapHeaders>"
+	X "$si<pl:displayWrapHeaders>$(PL-Bool (PL-Get $pl 'displayWrapHeaders' $true))</pl:displayWrapHeaders>"
+	$wfmt = PL-Get $pl 'timeScaleWrapHeadersFormat' $null
+	if ($null -eq $wfmt) { $wfmt = [ordered]@{ '#' = 'DLF="DD"'; 'ru' = 'DLF="DD"' } }
+	Emit-MLText -tag 'pl:timeScaleWrapHeadersFormat' -text $wfmt -indent $si
+	X "$si<pl:periodicVariantUnit>$(Esc-Xml "$(PL-Get $pl 'periodicVariantUnit' 'Day')")</pl:periodicVariantUnit>"
+	X "$si<pl:periodicVariantRepetition>$(PL-Get $pl 'periodicVariantRepetition' 1)</pl:periodicVariantRepetition>"
+	X "$si<pl:timeScaleWrapBeginIndent>$(PL-Get $pl 'timeScaleWrapBeginIndent' 0)</pl:timeScaleWrapBeginIndent>"
+	X "$si<pl:timeScaleWrapEndIndent>$(PL-Get $pl 'timeScaleWrapEndIndent' 0)</pl:timeScaleWrapEndIndent>"
+	Emit-PlannerTimeScale (PL-Get $pl 'timeScale' $null) $si
+	$period = PL-Get $pl 'period' $null
+	if ($period) {
+		X "$si<pl:period>"
+		X "$si`t<pl:begin>$(PL-Get $period 'begin' '0001-01-01T00:00:00')</pl:begin>"
+		X "$si`t<pl:end>$(PL-Get $period 'end' '0001-01-01T00:00:00')</pl:end>"
+		X "$si</pl:period>"
+	}
+	X "$si<pl:displayCurrentDate>$(PL-Bool (PL-Get $pl 'displayCurrentDate' $true))</pl:displayCurrentDate>"
+	X "$si<pl:itemsTimeRepresentation>$(Esc-Xml "$(PL-Get $pl 'itemsTimeRepresentation' 'BeginTime')")</pl:itemsTimeRepresentation>"
+	X "$si<pl:itemsBehaviorWhenSpaceInsufficient>$(Esc-Xml "$(PL-Get $pl 'itemsBehaviorWhenSpaceInsufficient' 'CollapseItems')")</pl:itemsBehaviorWhenSpaceInsufficient>"
+	X "$si<pl:autoMinColumnWidth>$(PL-Bool (PL-Get $pl 'autoMinColumnWidth' $true))</pl:autoMinColumnWidth>"
+	X "$si<pl:autoMinRowHeight>$(PL-Bool (PL-Get $pl 'autoMinRowHeight' $true))</pl:autoMinRowHeight>"
+	X "$si<pl:minColumnWidth>$(PL-Get $pl 'minColumnWidth' 0)</pl:minColumnWidth>"
+	X "$si<pl:minRowHeight>$(PL-Get $pl 'minRowHeight' 0)</pl:minRowHeight>"
+	X "$si<pl:fixDimensionsHeader>$(Esc-Xml "$(PL-Get $pl 'fixDimensionsHeader' 'auto')")</pl:fixDimensionsHeader>"
+	X "$si<pl:fixTimeScaleHeader>$(Esc-Xml "$(PL-Get $pl 'fixTimeScaleHeader' 'auto')")</pl:fixTimeScaleHeader>"
+	Emit-PlannerBorder $pl $si 'border'
+	X "$si<pl:newItemsTextType>$(Esc-Xml "$(PL-Get $pl 'newItemsTextType' 'String')")</pl:newItemsTextType>"
+	X "$ind</Settings>"
 }
 
 function Emit-Appearance {
@@ -4765,6 +4924,11 @@ function Emit-Attributes {
 		}
 		if ($hasVt) {
 			Emit-Type -typeStr "$vtSpec" -indent $inner -tag "Settings" -tagAttrs ' xsi:type="v8:TypeDescription"'
+		}
+		# Planner design-time <Settings xsi:type="pl:Planner"> (встроенный конфиг планировщика).
+		# Идёт сразу после <Type> (как valueType/DynamicList Settings — взаимоисключающи).
+		if ($attr.PSObject.Properties['planner'] -and $null -ne $attr.planner) {
+			Emit-PlannerSettings -pl $attr.planner -ind $inner
 		}
 
 		if ($attr.main -eq $true) {

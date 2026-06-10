@@ -1,4 +1,4 @@
-﻿# form-decompile v0.79 — Decompile 1C managed Form.xml to JSON DSL (draft)
+﻿# form-decompile v0.80 — Decompile 1C managed Form.xml to JSON DSL (draft)
 # Source: https://github.com/Nikolay-Shirokov/cc-1c-skills
 # ВНИМАНИЕ: раундтрип не гарантируется. Навык исключён из авто-использования моделью.
 param(
@@ -152,7 +152,7 @@ foreach ($el in $xmlDoc.SelectNodes("//*[local-name()='ConditionalAppearance']/*
 # (встроенная конфигурация диаграммы) пока НЕ воспроизводим → честный скип, чтобы не потерять молча.
 foreach ($s in $xmlDoc.SelectNodes("//*[local-name()='Attribute']/*[local-name()='Settings']")) {
 	$st = $s.GetAttribute("type", $NS_XSI)
-	if ($st -and $st -notmatch 'TypeDescription$' -and $st -notmatch 'DynamicList$') {
+	if ($st -and $st -notmatch 'TypeDescription$' -and $st -notmatch 'DynamicList$' -and $st -notmatch 'Planner$') {
 		Fail-Ring3 -kind "Attribute>Settings типа '$st' (design-time конфигурация, напр. диаграмма)" -loc "Attribute/Settings"
 	}
 }
@@ -1833,6 +1833,131 @@ function Decompile-Element {
 	return $obj
 }
 
+# ─────────────────────────────────────────────────────────────────────────────
+# Planner design-time <Settings xsi:type="pl:Planner"> → объект planner на реквизите.
+# Полный захват каждого поля (раундтрип бит-в-бит); зеркало Emit-PlannerSettings.
+function PLD-Bool { param($v) if ($null -eq $v) { return $null } return ($v -eq 'true') }
+function PLD-Int  { param($v) if ($null -eq $v) { return $null } return [int]$v }
+function Build-PlannerFont {
+	param($node)
+	if (-not $node) { return $null }
+	$o = [ordered]@{}
+	foreach ($a in @('ref','faceName','height','bold','italic','underline','strikeout','kind','scale')) {
+		$av = $node.GetAttribute($a); if ($av -ne '') { $o[$a] = $av }
+	}
+	if ($o.Count -eq 0) { return $null }
+	return $o
+}
+function Build-PlannerBorder {
+	param($node)
+	if (-not $node) { return $null }
+	$o = [ordered]@{}
+	$w = $node.GetAttribute('width'); if ($w -ne '') { $o['width'] = [int]$w }
+	$st = $node.SelectSingleNode("*[local-name()='style']"); if ($st) { $o['style'] = $st.InnerText }
+	return $o
+}
+function Build-PlannerItem {
+	param($itn)
+	$o = [ordered]@{}
+	$valNode = $itn.SelectSingleNode("*[local-name()='value']")
+	if ($valNode -and $valNode.GetAttribute('nil', $NS_XSI) -ne 'true' -and $valNode.InnerText) { $o['value'] = $valNode.InnerText }
+	$o['text'] = (Get-Child $itn 'text')
+	$tt = Get-Child $itn 'tooltip'; if ($tt) { $o['tooltip'] = $tt }
+	$o['begin'] = (Get-Child $itn 'begin')
+	$o['end'] = (Get-Child $itn 'end')
+	$o['borderColor'] = (Get-Child $itn 'borderColor')
+	$o['backColor'] = (Get-Child $itn 'backColor')
+	$o['textColor'] = (Get-Child $itn 'textColor')
+	$fnt = Build-PlannerFont ($itn.SelectSingleNode("*[local-name()='font']")); if ($fnt) { $o['font'] = $fnt }
+	$o['replacementDate'] = (Get-Child $itn 'replacementDate')
+	$o['deleted'] = (PLD-Bool (Get-Child $itn 'deleted'))
+	$o['id'] = (Get-Child $itn 'id')
+	$o['textFormatted'] = (PLD-Bool (Get-Child $itn 'textFormatted'))
+	$brd = Build-PlannerBorder ($itn.SelectSingleNode("*[local-name()='border']")); if ($brd) { $o['border'] = $brd }
+	$o['editMode'] = (Get-Child $itn 'editMode')
+	return $o
+}
+function Build-PlannerLevel {
+	param($lvn)
+	$o = [ordered]@{}
+	$o['measure'] = (Get-Child $lvn 'measure')
+	$o['interval'] = (PLD-Int (Get-Child $lvn 'interval'))
+	$o['show'] = (PLD-Bool (Get-Child $lvn 'show'))
+	$lineNode = $lvn.SelectSingleNode("*[local-name()='line']")
+	if ($lineNode) {
+		$ln = [ordered]@{}
+		$w = $lineNode.GetAttribute('width'); if ($w -ne '') { $ln['width'] = [int]$w }
+		$g = $lineNode.GetAttribute('gap'); if ($g -ne '') { $ln['gap'] = ($g -eq 'true') }
+		$st = $lineNode.SelectSingleNode("*[local-name()='style']"); if ($st) { $ln['style'] = $st.InnerText }
+		$o['line'] = $ln
+	}
+	$o['scaleColor'] = (Get-Child $lvn 'scaleColor')
+	$o['dayFormatRule'] = (Get-Child $lvn 'dayFormatRule')
+	$fmtNode = $lvn.SelectSingleNode("*[local-name()='format']")
+	if ($fmtNode) { $f = Get-LangText $fmtNode; if ($null -ne $f) { $o['format'] = $f } }
+	$labelsNode = $lvn.SelectSingleNode("*[local-name()='labels']")
+	if ($labelsNode) { $o['labels'] = [ordered]@{ ticks = (PLD-Int (Get-Child $labelsNode 'ticks')) } }
+	$o['backColor'] = (Get-Child $lvn 'backColor')
+	$o['textColor'] = (Get-Child $lvn 'textColor')
+	$o['showPereodicalLabels'] = (PLD-Bool (Get-Child $lvn 'showPereodicalLabels'))
+	return $o
+}
+function Build-PlannerTimeScale {
+	param($tsn)
+	$o = [ordered]@{}
+	$o['placement'] = (Get-Child $tsn 'placement')
+	$levels = New-Object System.Collections.ArrayList
+	foreach ($lvn in @($tsn.SelectNodes("*[local-name()='level']"))) { [void]$levels.Add((Build-PlannerLevel $lvn)) }
+	$o['levels'] = @($levels)
+	$o['transparent'] = (PLD-Bool (Get-Child $tsn 'transparent'))
+	$o['backColor'] = (Get-Child $tsn 'backColor')
+	$o['textColor'] = (Get-Child $tsn 'textColor')
+	$o['currentLevel'] = (PLD-Int (Get-Child $tsn 'currentLevel'))
+	return $o
+}
+function Build-PlannerSettings {
+	param($setNode)
+	$pl = [ordered]@{}
+	$itemNodes = @($setNode.SelectNodes("*[local-name()='item']"))
+	if ($itemNodes.Count -gt 0) {
+		$items = New-Object System.Collections.ArrayList
+		foreach ($itn in $itemNodes) { [void]$items.Add((Build-PlannerItem $itn)) }
+		$pl['items'] = @($items)
+	}
+	$pl['borderColor'] = (Get-Child $setNode 'borderColor')
+	$pl['backColor'] = (Get-Child $setNode 'backColor')
+	$pl['textColor'] = (Get-Child $setNode 'textColor')
+	$pl['lineColor'] = (Get-Child $setNode 'lineColor')
+	$fnt = Build-PlannerFont ($setNode.SelectSingleNode("*[local-name()='font']")); if ($fnt) { $pl['font'] = $fnt }
+	$pl['beginOfRepresentationPeriod'] = (Get-Child $setNode 'beginOfRepresentationPeriod')
+	$pl['endOfRepresentationPeriod'] = (Get-Child $setNode 'endOfRepresentationPeriod')
+	$pl['alignElementsOfTimeScale'] = (PLD-Bool (Get-Child $setNode 'alignElementsOfTimeScale'))
+	$pl['displayTimeScaleWrapHeaders'] = (PLD-Bool (Get-Child $setNode 'displayTimeScaleWrapHeaders'))
+	$pl['displayWrapHeaders'] = (PLD-Bool (Get-Child $setNode 'displayWrapHeaders'))
+	$wfNode = $setNode.SelectSingleNode("*[local-name()='timeScaleWrapHeadersFormat']")
+	if ($wfNode) { $wf = Get-LangText $wfNode; if ($null -ne $wf) { $pl['timeScaleWrapHeadersFormat'] = $wf } }
+	$pl['periodicVariantUnit'] = (Get-Child $setNode 'periodicVariantUnit')
+	$pl['periodicVariantRepetition'] = (PLD-Int (Get-Child $setNode 'periodicVariantRepetition'))
+	$pl['timeScaleWrapBeginIndent'] = (PLD-Int (Get-Child $setNode 'timeScaleWrapBeginIndent'))
+	$pl['timeScaleWrapEndIndent'] = (PLD-Int (Get-Child $setNode 'timeScaleWrapEndIndent'))
+	$tsNode = $setNode.SelectSingleNode("*[local-name()='timeScale']")
+	if ($tsNode) { $pl['timeScale'] = (Build-PlannerTimeScale $tsNode) }
+	$perNode = $setNode.SelectSingleNode("*[local-name()='period']")
+	if ($perNode) { $pl['period'] = [ordered]@{ begin = (Get-Child $perNode 'begin'); end = (Get-Child $perNode 'end') } }
+	$pl['displayCurrentDate'] = (PLD-Bool (Get-Child $setNode 'displayCurrentDate'))
+	$pl['itemsTimeRepresentation'] = (Get-Child $setNode 'itemsTimeRepresentation')
+	$pl['itemsBehaviorWhenSpaceInsufficient'] = (Get-Child $setNode 'itemsBehaviorWhenSpaceInsufficient')
+	$pl['autoMinColumnWidth'] = (PLD-Bool (Get-Child $setNode 'autoMinColumnWidth'))
+	$pl['autoMinRowHeight'] = (PLD-Bool (Get-Child $setNode 'autoMinRowHeight'))
+	$pl['minColumnWidth'] = (PLD-Int (Get-Child $setNode 'minColumnWidth'))
+	$pl['minRowHeight'] = (PLD-Int (Get-Child $setNode 'minRowHeight'))
+	$pl['fixDimensionsHeader'] = (Get-Child $setNode 'fixDimensionsHeader')
+	$pl['fixTimeScaleHeader'] = (Get-Child $setNode 'fixTimeScaleHeader')
+	$brd = Build-PlannerBorder ($setNode.SelectSingleNode("*[local-name()='border']")); if ($brd) { $pl['border'] = $brd }
+	$pl['newItemsTextType'] = (Get-Child $setNode 'newItemsTextType')
+	return $pl
+}
+
 # --- 5. Form-level assembly ---
 $dsl = [ordered]@{}
 
@@ -1964,6 +2089,10 @@ if ($attrsNode) {
 			$vt = Decompile-Type $setNode
 			$ao['valueType'] = if ($vt) { $vt } else { '' }   # пустой Settings → маркер ""
 		}
+		# Planner design-time <Settings xsi:type="pl:Planner"> → объект planner (полный захват).
+		elseif ($setNode -and $setNode.GetAttribute("type", $NS_XSI) -match 'Planner$') {
+			$ao['planner'] = Build-PlannerSettings $setNode
+		}
 		if ((Get-Child $a 'MainAttribute') -eq 'true') { $ao['main'] = $true }
 		elseif ($suppressMainName -and $ao['name'] -eq $suppressMainName) { $ao['main'] = $false }
 		$vw = Decompile-XrFlag $a 'View'; if ($null -ne $vw) { $ao['view'] = $vw }
@@ -2053,9 +2182,9 @@ if ($attrsNode) {
 				$ao['useAlways'] = @($shorts)
 			}
 		}
-		# Settings динамического списка
+		# Settings динамического списка (только xsi:type=DynamicList; Planner/TypeDescription — выше)
 		$setNode = $a.SelectSingleNode("lf:Settings", $ns)
-		if ($setNode) {
+		if ($setNode -and $setNode.GetAttribute("type", $NS_XSI) -match 'DynamicList$') {
 			$so = [ordered]@{}
 			# AutoFillAvailableFields — дефолт true, платформа эмитит только отклонение (false). Захват «как есть».
 			$afaf = Get-Child $setNode 'AutoFillAvailableFields'; if ($null -ne $afaf) { $so['autoFillAvailableFields'] = ($afaf -eq 'true') }

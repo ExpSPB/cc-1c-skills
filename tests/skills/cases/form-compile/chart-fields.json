@@ -1,5 +1,5 @@
 {
-  "name": "Форма с полями диаграмм (без design-time Settings)",
+  "name": "Форма с полями диаграмм + design-time Settings планировщика",
   "preRun": [
     {
       "script": "meta-compile/scripts/meta-compile",
@@ -20,14 +20,23 @@
       { "graphicalSchema": "Схема", "path": "Схема", "titleLocation": "none", "edit": false },
       { "periodField": "Период", "path": "Период", "titleLocation": "none" },
       { "ganttChart": "Ганта", "path": "Ганта", "titleLocation": "none",
-        "ganttTable": { "table": "ТаблицаГанта", "path": "Ганта", "height": 3 } }
+        "ganttTable": { "table": "ТаблицаГанта", "path": "Ганта", "height": 3 } },
+      { "dendrogram": "Дендро", "path": "Дендро", "titleLocation": "none" },
+      { "planner": "Планировщик", "path": "Планировщик", "titleLocation": "none" }
     ],
     "attributes": [
       { "name": "Объект", "type": "DataProcessorObject.Диаграммы", "main": true },
       { "name": "Диаграмма", "type": "d5p1:Chart" },
       { "name": "Схема", "type": "d5p1:FlowchartContextType" },
       { "name": "Период", "type": "v8:StandardPeriod" },
-      { "name": "Ганта", "type": "d5p1:GanttChart" }
+      { "name": "Ганта", "type": "d5p1:GanttChart" },
+      { "name": "Дендро", "type": "d5p1:Dendrogram" },
+      { "name": "Планировщик", "type": "pl:Planner", "planner": {
+        "items": [
+          { "text": "Встреча", "begin": "2026-06-09T01:00:00", "end": "2026-06-09T04:00:00" }
+        ],
+        "period": { "begin": "2026-06-09T00:00:00", "end": "2026-06-09T23:59:59" }
+      } }
     ]
   }
 }
