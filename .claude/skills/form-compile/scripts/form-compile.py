@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-# form-compile v1.107 — Compile 1C managed form from JSON or object metadata
+# form-compile v1.108 — Compile 1C managed form from JSON or object metadata
 # Source: https://github.com/Nikolay-Shirokov/cc-1c-skills
 import argparse
 import copy
@@ -3069,6 +3069,16 @@ GENERIC_SCALARS = [
     ('AutoMaxRowsCount', 'autoMaxRowsCount', 'bool'),
     ('HeightControlVariant', 'heightControlVariant', 'value'),
     ('EditTextUpdate', 'editTextUpdate', 'value'),
+    # Корпусный хвост: свёртка группы / форма попапа / авто-добавление / выделение отрицательных /
+    # нач. позиция списка / высота списка выбора / три состояния / прокрутка страницы при сжатии
+    ('ControlRepresentation', 'controlRepresentation', 'value'),
+    ('ShapeRepresentation', 'shapeRepresentation', 'value'),
+    ('AutoAddIncomplete', 'autoAddIncomplete', 'bool'),
+    ('MarkNegatives', 'markNegatives', 'bool'),
+    ('InitialListView', 'initialListView', 'value'),
+    ('ChoiceListHeight', 'choiceListHeight', 'value'),
+    ('ThreeState', 'threeState', 'bool'),
+    ('ScrollOnCompress', 'scrollOnCompress', 'bool'),
 ]
 
 
@@ -3608,8 +3618,8 @@ def emit_input(lines, el, name, eid, indent):
 
     if el.get('multiLine') is True:
         lines.append(f'{inner}<MultiLine>true</MultiLine>')
-    if el.get('passwordMode') is True:
-        lines.append(f'{inner}<PasswordMode>true</PasswordMode>')
+    if el.get('passwordMode') is not None:
+        lines.append(f'{inner}<PasswordMode>{"true" if el["passwordMode"] else "false"}</PasswordMode>')
     # ChoiceButton — захват «как есть» (платформа эмитит явное значение; ref-поля выводят сама,
     # декомпилятор фиксирует факт. значение). Нет ключа → не эмитим (не додумываем по событию).
     if el.get('choiceButton') is not None:

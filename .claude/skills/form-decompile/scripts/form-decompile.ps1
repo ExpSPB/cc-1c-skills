@@ -1,4 +1,4 @@
-﻿# form-decompile v0.83 — Decompile 1C managed Form.xml to JSON DSL (draft)
+﻿# form-decompile v0.84 — Decompile 1C managed Form.xml to JSON DSL (draft)
 # Source: https://github.com/Nikolay-Shirokov/cc-1c-skills
 # ВНИМАНИЕ: раундтрип не гарантируется. Навык исключён из авто-использования моделью.
 param(
@@ -1255,6 +1255,16 @@ $GENERIC_SCALARS = @(
 	@{ Tag='AutoMaxRowsCount'; Key='autoMaxRowsCount'; Kind='bool' }
 	@{ Tag='HeightControlVariant'; Key='heightControlVariant'; Kind='value' }
 	@{ Tag='EditTextUpdate'; Key='editTextUpdate'; Kind='value' }
+	# Корпусный хвост (zеркало компилятора): свёртка группы / форма попапа / авто-добавление /
+	# выделение отрицательных / нач. позиция списка / высота списка выбора / три состояния / прокрутка
+	@{ Tag='ControlRepresentation'; Key='controlRepresentation'; Kind='value' }
+	@{ Tag='ShapeRepresentation'; Key='shapeRepresentation'; Kind='value' }
+	@{ Tag='AutoAddIncomplete'; Key='autoAddIncomplete'; Kind='bool' }
+	@{ Tag='MarkNegatives'; Key='markNegatives'; Kind='bool' }
+	@{ Tag='InitialListView'; Key='initialListView'; Kind='value' }
+	@{ Tag='ChoiceListHeight'; Key='choiceListHeight'; Kind='value' }
+	@{ Tag='ThreeState'; Key='threeState'; Kind='bool' }
+	@{ Tag='ScrollOnCompress'; Key='scrollOnCompress'; Kind='bool' }
 )
 
 # Захват generic-скаляров. Специфичная обработка (если ключ уже задан) — побеждает.
@@ -1513,7 +1523,8 @@ function Decompile-Element {
 			$dp = Get-Child $node 'DataPath'; if ($dp) { $obj['path'] = $dp }
 			Add-CommonProps $obj $node $name
 			if ((Get-Child $node 'MultiLine') -eq 'true') { $obj['multiLine'] = $true }
-			if ((Get-Child $node 'PasswordMode') -eq 'true') { $obj['passwordMode'] = $true }
+			# PasswordMode: факт. значение (платформа эмитит и false — 349/504 в корпусе; ≠ «if true»)
+			$pmIn = Get-Child $node 'PasswordMode'; if ($null -ne $pmIn) { $obj['passwordMode'] = ($pmIn -eq 'true') }
 			$mi = Get-Child $node 'AutoMarkIncomplete'; if ($null -ne $mi) { $obj['markIncomplete'] = ($mi -eq 'true') }
 			$em = Get-Child $node 'EditMode'; if ($em) { $obj['editMode'] = $em }
 			$tl = Get-Child $node 'TitleLocation'; if ($tl) { $obj['titleLocation'] = $tl.ToLower() }

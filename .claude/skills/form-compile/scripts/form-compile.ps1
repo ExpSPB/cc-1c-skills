@@ -1,4 +1,4 @@
-﻿# form-compile v1.107 — Compile 1C managed form from JSON or object metadata
+﻿# form-compile v1.108 — Compile 1C managed form from JSON or object metadata
 # Source: https://github.com/Nikolay-Shirokov/cc-1c-skills
 param(
 	[string]$JsonPath,
@@ -2960,6 +2960,17 @@ $script:genericScalars = @(
 	@{ Tag='AutoMaxRowsCount';    Key='autoMaxRowsCount';    Kind='bool'  }
 	@{ Tag='HeightControlVariant'; Key='heightControlVariant'; Kind='value' }
 	@{ Tag='EditTextUpdate';      Key='editTextUpdate';      Kind='value' }
+	# Корпусный хвост: представление управления свёрткой группы / форма кнопки-попапа /
+	# авто-добавление незаполненной строки / выделение отрицательных / нач. позиция списка /
+	# высота списка выбора / три состояния флажка / прокрутка страницы при сжатии
+	@{ Tag='ControlRepresentation'; Key='controlRepresentation'; Kind='value' }
+	@{ Tag='ShapeRepresentation';   Key='shapeRepresentation';   Kind='value' }
+	@{ Tag='AutoAddIncomplete';     Key='autoAddIncomplete';     Kind='bool'  }
+	@{ Tag='MarkNegatives';         Key='markNegatives';         Kind='bool'  }
+	@{ Tag='InitialListView';       Key='initialListView';       Kind='value' }
+	@{ Tag='ChoiceListHeight';      Key='choiceListHeight';      Kind='value' }
+	@{ Tag='ThreeState';            Key='threeState';            Kind='bool'  }
+	@{ Tag='ScrollOnCompress';      Key='scrollOnCompress';      Kind='bool'  }
 )
 
 function Emit-GenericScalars {
@@ -3533,7 +3544,7 @@ function Emit-Input {
 	}
 
 	if ($el.multiLine -eq $true) { X "$inner<MultiLine>true</MultiLine>" }
-	if ($el.passwordMode -eq $true) { X "$inner<PasswordMode>true</PasswordMode>" }
+	if ($null -ne $el.passwordMode) { X "$inner<PasswordMode>$(if ($el.passwordMode){'true'}else{'false'})</PasswordMode>" }
 	# ChoiceButton — захват «как есть» (платформа эмитит явное значение; ref-поля выводят сама,
 	# декомпилятор фиксирует факт. значение). Нет ключа → не эмитим (не додумываем по событию).
 	if ($null -ne $el.choiceButton) { X "$inner<ChoiceButton>$(if ($el.choiceButton){'true'}else{'false'})</ChoiceButton>" }
