@@ -381,7 +381,7 @@ companion-панели с собственным контентом. Оба не
 | `markIncomplete` | bool | Автопометка незаполненных (`<AutoMarkIncomplete>`, факт. значение true/false) |
 | `extendedEdit` | bool | Расширенное редактирование (`<ExtendedEdit>`) |
 | `editTextUpdate` | string | Обновление текста при редактировании: `Always`, `OnValueChange`, `DontUse` |
-| `warningOnEdit` | string/object | Предупреждение при редактировании (`<WarningOnEdit>`, мультиязычный текст) |
+| `warningOnEdit` | string/object | Предупреждение при редактировании (`<WarningOnEdit>`, мультиязычный текст). Доступно также на `check`/`radio`/`labelField` (не только `input`). Парный enum `warningOnEditRepresentation` (`Show`/`DontShow`) — generic-скаляр на любом поле |
 | `footerText` | string/object | Текст подвала поля (`<FooterText>`, мультиязычный) |
 | `editMode` | string | Режим редактирования: `EnterOnInput`, `Directly` |
 | `skipOnInput` | bool | Пропускать при вводе |

@@ -26,6 +26,7 @@
         "radio": "ОтборСтрок",
         "path": "ОтборСтрок",
         "radioButtonType": "Tumbler",
+        "warningOnEdit": "Смена отбора перезагрузит список",
         "choiceList": [
           { "value": "Рекомендуемые" },
           { "value": "Все" }

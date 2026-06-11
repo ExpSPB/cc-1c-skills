@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-# form-compile v1.112 — Compile 1C managed form from JSON or object metadata
+# form-compile v1.113 — Compile 1C managed form from JSON or object metadata
 # Source: https://github.com/Nikolay-Shirokov/cc-1c-skills
 import argparse
 import copy
@@ -3742,6 +3742,9 @@ def emit_check(lines, el, name, eid, indent):
 
     emit_layout(lines, el, inner)
 
+    if el.get('warningOnEdit') is not None:
+        emit_mltext(lines, inner, 'WarningOnEdit', el['warningOnEdit'])
+
     # Формат / формат редактирования (LocalStringType — строка или {ru,en})
     if el.get('format'):
         emit_mltext(lines, inner, 'Format', el['format'])
@@ -3781,6 +3784,9 @@ def emit_radio_button_field(lines, el, name, eid, indent):
     emit_choice_list(lines, el, inner)
 
     emit_layout(lines, el, inner)
+
+    if el.get('warningOnEdit') is not None:
+        emit_mltext(lines, inner, 'WarningOnEdit', el['warningOnEdit'])
 
     # Оформление (цвета/шрифты/граница) — перед компаньонами
     emit_appearance(lines, el, inner, 'field')
@@ -3856,6 +3862,9 @@ def emit_label_field(lines, el, name, eid, indent):
     if el.get('hyperlink') is True:
         lines.append(f'{inner}<Hiperlink>true</Hiperlink>')
     emit_layout(lines, el, inner)
+
+    if el.get('warningOnEdit') is not None:
+        emit_mltext(lines, inner, 'WarningOnEdit', el['warningOnEdit'])
 
     # Формат / формат редактирования (LocalStringType — строка или {ru,en})
     if el.get('format'):

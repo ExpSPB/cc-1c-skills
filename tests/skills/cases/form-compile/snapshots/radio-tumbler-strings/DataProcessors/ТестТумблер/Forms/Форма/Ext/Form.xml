@@ -41,6 +41,12 @@
 					</xr:Value>
 				</xr:Item>
 			</ChoiceList>
+			<WarningOnEdit>
+				<v8:item>
+					<v8:lang>ru</v8:lang>
+					<v8:content>Смена отбора перезагрузит список</v8:content>
+				</v8:item>
+			</WarningOnEdit>
 			<ContextMenu name="ОтборСтрокКонтекстноеМеню" id="2"/>
 			<ExtendedTooltip name="ОтборСтрокРасширеннаяПодсказка" id="3"/>
 		</RadioButtonField>

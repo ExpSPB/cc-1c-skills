@@ -1,4 +1,4 @@
-﻿# form-decompile v0.88 — Decompile 1C managed Form.xml to JSON DSL (draft)
+﻿# form-decompile v0.89 — Decompile 1C managed Form.xml to JSON DSL (draft)
 # Source: https://github.com/Nikolay-Shirokov/cc-1c-skills
 # ВНИМАНИЕ: раундтрип не гарантируется. Навык исключён из авто-использования моделью.
 param(
@@ -1613,6 +1613,7 @@ function Decompile-Element {
 			if ($null -eq $cbt) { $obj['checkBoxType'] = '' }
 			elseif ($cbt -ne 'Auto') { $obj['checkBoxType'] = $cbt.Substring(0,1).ToLower() + $cbt.Substring(1) }
 			Add-TitleLocation $obj $node 'Right'
+			$woe = $node.SelectSingleNode("lf:WarningOnEdit", $ns); if ($woe) { $t = Get-LangText $woe; if ($null -ne $t) { $obj['warningOnEdit'] = $t } }
 			Add-FormatProps $obj $node
 		}
 		'RadioButtonField' {
@@ -1622,6 +1623,7 @@ function Decompile-Element {
 			Add-TitleLocation $obj $node 'None'
 			$rbt = Get-Child $node 'RadioButtonType'; if ($rbt) { $obj['radioButtonType'] = $rbt }
 			$cc = Get-Child $node 'ColumnsCount'; if ($cc) { $obj['columnsCount'] = [int]$cc }
+			$woe = $node.SelectSingleNode("lf:WarningOnEdit", $ns); if ($woe) { $t = Get-LangText $woe; if ($null -ne $t) { $obj['warningOnEdit'] = $t } }
 			$cl = Decompile-ChoiceList $node; if ($cl) { $obj['choiceList'] = $cl }
 		}
 		'LabelDecoration' {
@@ -1642,6 +1644,7 @@ function Decompile-Element {
 			if ((Get-Child $node 'Hiperlink') -eq 'true') { $obj['hyperlink'] = $true }
 			# PasswordMode на LabelField — платформа эмитит явный false (редко); захват факт. значения
 			$pm = Get-Child $node 'PasswordMode'; if ($null -ne $pm) { $obj['passwordMode'] = ($pm -eq 'true') }
+			$woe = $node.SelectSingleNode("lf:WarningOnEdit", $ns); if ($woe) { $t = Get-LangText $woe; if ($null -ne $t) { $obj['warningOnEdit'] = $t } }
 			Add-FormatProps $obj $node
 		}
 		'PictureDecoration' {

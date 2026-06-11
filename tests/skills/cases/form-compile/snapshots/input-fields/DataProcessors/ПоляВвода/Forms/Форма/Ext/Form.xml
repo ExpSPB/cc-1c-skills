@@ -55,6 +55,12 @@
 			<DataPath>ОбычноеПоле</DataPath>
 			<TitleLocation>Left</TitleLocation>
 			<Hiperlink>true</Hiperlink>
+			<WarningOnEdit>
+				<v8:item>
+					<v8:lang>ru</v8:lang>
+					<v8:content>Поле только для чтения</v8:content>
+				</v8:item>
+			</WarningOnEdit>
 			<Format>
 				<v8:item>
 					<v8:lang>ru</v8:lang>
@@ -355,6 +361,16 @@
 			</Title>
 			<CheckBoxType>Auto</CheckBoxType>
 			<TitleLocation>Right</TitleLocation>
+			<WarningOnEdit>
+				<v8:item>
+					<v8:lang>ru</v8:lang>
+					<v8:content>Изменение флага требует подтверждения</v8:content>
+				</v8:item>
+				<v8:item>
+					<v8:lang>en</v8:lang>
+					<v8:content>Confirm flag change</v8:content>
+				</v8:item>
+			</WarningOnEdit>
 			<ContextMenu name="ФлагКонтекстноеМеню" id="32"/>
 			<ExtendedTooltip name="ФлагРасширеннаяПодсказка" id="33">
 				<Width>45</Width>

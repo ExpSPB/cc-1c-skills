@@ -17,7 +17,7 @@
     "title": "Поля ввода",
     "elements": [
       { "input": "ОбычноеПоле", "path": "ОбычноеПоле", "title": "Обычное поле", "tooltip": "Введите значение поля", "tooltipRepresentation": "ShowBottom", "editMode": "EnterOnInput", "horizontalStretch": false, "verticalStretch": false, "format": "ЧДЦ=2", "editFormat": "ЧДЦ=2; ЧН=", "extendedTooltip": { "width": 30, "autoMaxWidth": false, "text": "Расширенная подсказка поля" } },
-      { "labelField": "Ссылка", "path": "ОбычноеПоле", "titleLocation": "left", "hyperlink": true, "format": { "ru": "ДЛФ=D", "en": "DLF=D" } },
+      { "labelField": "Ссылка", "path": "ОбычноеПоле", "titleLocation": "left", "hyperlink": true, "format": { "ru": "ДЛФ=D", "en": "DLF=D" }, "warningOnEdit": "Поле только для чтения" },
       { "input": "МногострочноеПоле", "path": "МногострочноеПоле", "multiLine": true, "height": 5, "title": "Комментарий", "wrap": false, "showInHeader": false, "showInFooter": false, "autoCellHeight": true, "footerHorizontalAlign": "Right", "openButton": false, "chooseType": false },
       { "input": "ПолеПароля", "path": "ПолеПароля", "passwordMode": true, "title": "Пароль" },
       { "input": "ЧисловоеПоле", "path": "ЧисловоеПоле", "title": "Число", "minValue": 1, "maxValue": 100, "displayImportance": "VeryHigh" },
@@ -47,7 +47,7 @@
         "choiceParameterLinks": [ "Отбор.Организация=ОбычноеПоле", "Отбор.Тип=ПолеСписокВыбора:DontChange" ],
         "typeLink": "ПолеПодсказка"
       },
-      { "check": "Флаг", "path": "Флаг", "title": "Включено", "extendedTooltip": { "width": 45 } },
+      { "check": "Флаг", "path": "Флаг", "title": "Включено", "warningOnEdit": { "ru": "Изменение флага требует подтверждения", "en": "Confirm flag change" }, "extendedTooltip": { "width": 45 } },
       { "check": "ФлагПлатформенный", "path": "ФлагПлатформенный", "title": "Слева", "titleLocation": "" },
       { "check": "ФлагЯвный", "path": "ФлагЯвный", "title": "Сверху", "titleLocation": "top" },
       { "check": "ФлагТумблер", "path": "ФлагТумблер", "title": "Тумблер", "checkBoxType": "switcher", "format": "БЛ=Нет; БИ=Да" }
