@@ -1,4 +1,4 @@
-﻿# form-decompile v0.95 — Decompile 1C managed Form.xml to JSON DSL (draft)
+﻿# form-decompile v0.96 — Decompile 1C managed Form.xml to JSON DSL (draft)
 # Source: https://github.com/Nikolay-Shirokov/cc-1c-skills
 # ВНИМАНИЕ: раундтрип не гарантируется. Навык исключён из авто-использования моделью.
 param(
@@ -272,6 +272,16 @@ function Get-LangText {
 	}
 	if ($map.Count -eq 1 -and $map.Contains('ru')) { return $map['ru'] }
 	return $map
+}
+
+# Get-LangText с восстановлением значимого пробела: PreserveWhitespace=false стрипает
+# <v8:content> </v8:content> → "" (неотличимо от суппресса). Платформа НЕ эмитит пустой
+# Title/ToolTip, значит исходно был пробел → возвращаем " " (как Get-MLFormattedValue).
+function Get-LangTextWS {
+	param($node)
+	$t = Get-LangText $node
+	if ($t -is [string] -and $t -eq '' -and $node.SelectSingleNode("v8:item/v8:content", $ns)) { return ' ' }
+	return $t
 }
 
 # Авто-вывод заголовка из имени — ТОЧНОЕ зеркало Title-FromName из form-compile.
@@ -1074,12 +1084,12 @@ function Add-CommonProps {
 	$uv = Decompile-XrFlag $node 'UserVisible'; if ($null -ne $uv) { $obj['userVisible'] = $uv }
 	$titleNode = $node.SelectSingleNode("lf:Title", $ns)
 	if ($titleNode) {
-		$t = Get-LangText $titleNode
+		$t = Get-LangTextWS $titleNode   # восстановление значимого пробела (whitespace-заголовок)
 		if ($null -ne $t) { $obj['title'] = $t }
 		# formatted у LabelDecoration выводится компилятором из hyperlink — отдельный ключ не нужен (#16 хвост)
 	}
 	$ttNode = $node.SelectSingleNode("lf:ToolTip", $ns)
-	if ($ttNode) { $tt = Get-LangText $ttNode; if ($null -ne $tt) { $obj['tooltip'] = $tt } }
+	if ($ttNode) { $tt = Get-LangTextWS $ttNode; if ($null -ne $tt) { $obj['tooltip'] = $tt } }
 	$ttr = Get-Child $node 'ToolTipRepresentation'; if ($ttr) { $obj['tooltipRepresentation'] = $ttr }
 	# Картинки заголовка/подвала колонки (любой field-тип, эмитятся платформой как column header/footer icon)
 	$hp = Get-PictureRef $node 'HeaderPicture'; if ($null -ne $hp) { $obj['headerPicture'] = $hp }

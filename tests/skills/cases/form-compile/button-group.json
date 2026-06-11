@@ -23,7 +23,7 @@
           { "button": "Вниз", "command": "Вниз" }
         ]},
         { "buttonGroup": "ГруппаГлобальныеКоманды", "commandSource": "FormCommandPanelGlobalCommands" },
-        { "popup": "ПодменюПечать", "title": "Печать", "picture": "StdPicture.Print", "loadTransparent": false, "representation": "PictureAndText", "children": [
+        { "popup": "ПодменюПечать", "title": "Печать", "picture": "StdPicture.Print", "loadTransparent": false, "representation": "PictureAndText", "titleTextColor": "style:ButtonTextColor", "titleFont": "style:ВажнаяНадписьШрифт", "children": [
           { "button": "ПечатьСчёта", "command": "Выполнить" }
         ]}
       ]}

@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-# form-compile v1.119 — Compile 1C managed form from JSON or object metadata
+# form-compile v1.120 — Compile 1C managed form from JSON or object metadata
 # Source: https://github.com/Nikolay-Shirokov/cc-1c-skills
 import argparse
 import copy
@@ -3642,6 +3642,9 @@ def emit_column_group(lines, el, name, eid, indent):
     emit_common_flags(lines, el, inner)
     emit_layout(lines, el, inner)
 
+    # Картинка заголовка колонки-группы (после ShowInHeader/Layout, перед оформлением — порядок XSD)
+    emit_column_pics(lines, el, inner)
+
     # Оформление (цвета/шрифты/граница) — перед компаньоном
     emit_appearance(lines, el, inner, 'field')
 
@@ -4112,6 +4115,9 @@ def emit_page(lines, el, name, eid, indent):
         lines.append(f'{inner}<ShowTitle>false</ShowTitle>')
     emit_layout(lines, el, inner)
 
+    # \u041e\u0444\u043e\u0440\u043c\u043b\u0435\u043d\u0438\u0435 \u0441\u0442\u0440\u0430\u043d\u0438\u0446\u044b (BackColor / TitleTextColor / TitleFont) \u2014 \u043f\u043e\u0441\u043b\u0435 ShowTitle, \u043f\u0435\u0440\u0435\u0434 \u043a\u043e\u043c\u043f\u0430\u043d\u044c\u043e\u043d\u043e\u043c
+    emit_appearance(lines, el, inner, 'field')
+
     # Companion
     emit_companion(lines, 'ExtendedTooltip', f'{name}\u0420\u0430\u0441\u0448\u0438\u0440\u0435\u043d\u043d\u0430\u044f\u041f\u043e\u0434\u0441\u043a\u0430\u0437\u043a\u0430', inner, el.get('extendedTooltip'))
 
@@ -4433,6 +4439,10 @@ def emit_popup(lines, el, name, eid, indent):
     if el.get('representation'):
         lines.append(f'{inner}<Representation>{el["representation"]}</Representation>')
     emit_layout(lines, el, inner)
+
+    # Оформление попапа (TitleTextColor / TitleFont) — перед компаньоном
+    emit_appearance(lines, el, inner, 'field')
+
     emit_companion(lines, 'ExtendedTooltip', f'{name}РасширеннаяПодсказка', inner, el.get('extendedTooltip'))
 
     # Children

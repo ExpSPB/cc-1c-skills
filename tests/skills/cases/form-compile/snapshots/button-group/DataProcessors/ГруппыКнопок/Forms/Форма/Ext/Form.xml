@@ -57,6 +57,8 @@
 						<xr:LoadTransparent>false</xr:LoadTransparent>
 					</Picture>
 					<Representation>PictureAndText</Representation>
+					<TitleTextColor>style:ButtonTextColor</TitleTextColor>
+					<TitleFont ref="style:ВажнаяНадписьШрифт" kind="StyleItem"/>
 					<ExtendedTooltip name="ПодменюПечатьРасширеннаяПодсказка" id="14"/>
 					<ChildItems>
 						<Button name="ПечатьСчёта" id="15">

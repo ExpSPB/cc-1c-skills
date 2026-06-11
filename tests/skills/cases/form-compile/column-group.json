@@ -18,7 +18,7 @@
     "elements": [
       { "table": "Список", "path": "Список", "columns": [
         { "input": "Наименование", "path": "Список.Наименование" },
-        { "columnGroup": "horizontal", "name": "ГруппаСрок", "title": "Срок", "children": [
+        { "columnGroup": "horizontal", "name": "ГруппаСрок", "title": "Срок", "headerPicture": "StdPicture.ExecuteTask", "children": [
           { "input": "ДатаНачала", "path": "Список.ДатаНачала" },
           { "input": "ДатаОкончания", "path": "Список.ДатаОкончания" }
         ]},

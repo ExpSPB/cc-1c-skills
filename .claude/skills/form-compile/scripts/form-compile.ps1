@@ -1,4 +1,4 @@
-﻿# form-compile v1.119 — Compile 1C managed form from JSON or object metadata
+﻿# form-compile v1.120 — Compile 1C managed form from JSON or object metadata
 # Source: https://github.com/Nikolay-Shirokov/cc-1c-skills
 param(
 	[string]$JsonPath,
@@ -3555,6 +3555,9 @@ function Emit-ColumnGroup {
 	Emit-CommonFlags -el $el -indent $inner
 	Emit-Layout -el $el -indent $inner
 
+	# Картинка заголовка колонки-группы (после ShowInHeader/Layout, перед оформлением — порядок XSD)
+	Emit-ColumnPics -el $el -indent $inner
+
 	# Оформление (цвета/шрифты/граница) — перед компаньоном
 	Emit-Appearance -el $el -indent $inner -profile 'field'
 
@@ -4387,6 +4390,9 @@ function Emit-Page {
 	if ($el.showTitle -eq $false) { X "$inner<ShowTitle>false</ShowTitle>" }
 	Emit-Layout -el $el -indent $inner
 
+	# Оформление страницы (BackColor / TitleTextColor / TitleFont) — после ShowTitle, перед компаньоном
+	Emit-Appearance -el $el -indent $inner -profile 'field'
+
 	# Companion
 	Emit-Companion -tag "ExtendedTooltip" -name "${name}РасширеннаяПодсказка" -indent $inner -content $el.extendedTooltip
 
@@ -4753,6 +4759,10 @@ function Emit-Popup {
 		X "$inner<Representation>$($el.representation)</Representation>"
 	}
 	Emit-Layout -el $el -indent $inner
+
+	# Оформление попапа (TitleTextColor / TitleFont) — перед компаньоном
+	Emit-Appearance -el $el -indent $inner -profile 'field'
+
 	Emit-Companion -tag "ExtendedTooltip" -name "${name}РасширеннаяПодсказка" -indent $inner -content $el.extendedTooltip
 
 	# Children

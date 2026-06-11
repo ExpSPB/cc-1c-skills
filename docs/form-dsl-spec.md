@@ -212,7 +212,7 @@ companion-панели с собственным контентом. Оба не
 
 ### 4.1e. Оформление элемента (цвета / шрифты / граница)
 
-Прямые свойства оформления элемента. Ключи — англ. camelCase 1:1 с тегами; **принимаются рус. синонимы** (forgiving). Применимо к полям (input/check/radio/labelField/picField/calendar), декорациям (label/picture), кнопкам (button), группам (group/columnGroup) и таблицам (table); порядок тегов в XML — по базовому типу (профиль), компилятор расставляет сам (1С толерантна к порядку оформления внутри элемента).
+Прямые свойства оформления элемента. Ключи — англ. camelCase 1:1 с тегами; **принимаются рус. синонимы** (forgiving). Применимо к полям (input/check/radio/labelField/picField/calendar), декорациям (label/picture), кнопкам (button), группам (group/columnGroup), **страницам (page: `backColor`/`titleTextColor`/`titleFont`)**, **попапам (popup: `titleTextColor`/`titleFont`)** и таблицам (table); порядок тегов в XML — по базовому типу (профиль), компилятор расставляет сам (1С толерантна к порядку оформления внутри элемента).
 
 | Ключ | Тег | Рус. синоним |
 |------|-----|--------------|
@@ -282,7 +282,7 @@ companion-панели с собственным контентом. Оба не
 | `viewMode` / `verticalScrollBar` / `rowInputMode` | `<ViewMode>`/… | свойства таблицы (pass-through) |
 
 > Эти простые скаляры — pass-through (captured/emitted «как есть»), применимы там, где платформа их пишет.
-> `defaultItem`/`enableStartDrag`/`fileDragMode`/`skipOnInput` + cell-свойства (`showInHeader`/`showInFooter`/`autoCellHeight`/`footerHorizontalAlign`/`headerHorizontalAlign`/`headerPicture`/`footerPicture`) — общие для любого поля-колонки (input, label, picField, check).
+> `defaultItem`/`enableStartDrag`/`fileDragMode`/`skipOnInput` + cell-свойства (`showInHeader`/`showInFooter`/`autoCellHeight`/`footerHorizontalAlign`/`headerHorizontalAlign`/`headerPicture`/`footerPicture`) — общие для любого поля-колонки (input, label, picField, check) и `columnGroup` (картинка заголовка группы колонок).
 
 #### Картинка-ссылка (`headerPicture`/`footerPicture`/`valuesPicture`/`rowsPicture`/Page `picture`)
 

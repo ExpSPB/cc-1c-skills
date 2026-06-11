@@ -52,6 +52,10 @@
 						</v8:item>
 					</Title>
 					<Group>Horizontal</Group>
+					<HeaderPicture>
+						<xr:Ref>StdPicture.ExecuteTask</xr:Ref>
+						<xr:LoadTransparent>false</xr:LoadTransparent>
+					</HeaderPicture>
 					<ExtendedTooltip name="ГруппаСрокРасширеннаяПодсказка" id="18"/>
 					<ChildItems>
 						<InputField name="ДатаНачала" id="19">

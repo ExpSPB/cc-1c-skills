@@ -21,7 +21,7 @@
         { "page": "Шаг1", "title": "", "showTitle": false, "picture": "StdPicture.ExecuteTask", "children": [
           { "input": "Параметр1", "path": "Параметр1" }
         ]},
-        { "page": "Шаг2", "title": "Результат", "titleDataPath": "Итог", "tooltip": "Шаг \"Результат\"", "group": "horizontalIfPossible", "picture": { "src": "StdPicture.FilterCriterion", "loadTransparent": true, "transparentPixel": { "x": 2, "y": 4 } }, "children": [
+        { "page": "Шаг2", "title": "Результат", "titleDataPath": "Итог", "tooltip": "Шаг \"Результат\"", "group": "horizontalIfPossible", "picture": { "src": "StdPicture.FilterCriterion", "loadTransparent": true, "transparentPixel": { "x": 2, "y": 4 } }, "backColor": "style:FormBackColor", "titleTextColor": "style:FormTextColor", "titleFont": "style:TextFont", "children": [
           { "input": "Итог", "path": "Итог", "readOnly": true }
         ]}
       ]},

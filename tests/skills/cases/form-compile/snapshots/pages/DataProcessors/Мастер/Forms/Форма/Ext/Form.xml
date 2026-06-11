@@ -54,6 +54,9 @@
 					</Picture>
 					<Group>HorizontalIfPossible</Group>
 					<TitleDataPath>Итог</TitleDataPath>
+					<TitleTextColor>style:FormTextColor</TitleTextColor>
+					<TitleFont ref="style:TextFont" kind="StyleItem"/>
+					<BackColor>style:FormBackColor</BackColor>
 					<ExtendedTooltip name="Шаг2РасширеннаяПодсказка" id="9"/>
 					<ChildItems>
 						<InputField name="Итог" id="10">
