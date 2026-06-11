@@ -43,6 +43,7 @@
 			</EditFormat>
 			<ContextMenu name="ОбычноеПолеКонтекстноеМеню" id="2"/>
 			<ExtendedTooltip name="ОбычноеПолеРасширеннаяПодсказка" id="3">
+				<Hyperlink>true</Hyperlink>
 				<AutoMaxWidth>false</AutoMaxWidth>
 				<Width>30</Width>
 				<Title formatted="false">
@@ -51,6 +52,9 @@
 						<v8:content>Расширенная подсказка поля</v8:content>
 					</v8:item>
 				</Title>
+				<Events>
+					<Event name="URLProcessing">ОбычноеПолеРасширеннаяПодсказкаОбработкаНавигационнойСсылки</Event>
+				</Events>
 			</ExtendedTooltip>
 		</InputField>
 		<LabelField name="Ссылка" id="4">
