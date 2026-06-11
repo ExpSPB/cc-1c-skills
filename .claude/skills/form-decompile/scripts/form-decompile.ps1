@@ -1,4 +1,4 @@
-﻿# form-decompile v0.93 — Decompile 1C managed Form.xml to JSON DSL (draft)
+﻿# form-decompile v0.94 — Decompile 1C managed Form.xml to JSON DSL (draft)
 # Source: https://github.com/Nikolay-Shirokov/cc-1c-skills
 # ВНИМАНИЕ: раундтрип не гарантируется. Навык исключён из авто-использования моделью.
 param(
@@ -465,14 +465,15 @@ function Get-FilterValueWithType {
 	if ($vType -eq 'LocalStringType') {
 		return @{ value = (Get-MLText $valNode); type = $rawType }
 	}
-	# Стандартная дата начала/окончания — структурное значение {variant, date?}
-	# (Custom несёт <v8:date>; именованные варианты — без даты). Иначе InnerText склеивал variant+date.
+	# Стандартная дата начала/окончания. Custom несёт <v8:date> → объект {variant, date};
+	# именованный вариант (BeginningOfThisDay/…) без даты → строка-вариант (short form).
+	# Иначе InnerText склеивал variant+date.
 	if ($vType -eq 'StandardBeginningDate' -or $vType -eq 'StandardEndDate') {
 		$variantN = $valNode.SelectSingleNode("v8:variant", $ns)
 		$dateN = $valNode.SelectSingleNode("v8:date", $ns)
-		$o = [ordered]@{ variant = if ($variantN) { $variantN.InnerText } else { '' } }
-		if ($dateN) { $o['date'] = $dateN.InnerText }
-		return @{ value = $o; type = $rawType }
+		$variantStr = if ($variantN) { $variantN.InnerText } else { '' }
+		if ($dateN) { return @{ value = [ordered]@{ variant = $variantStr; date = $dateN.InnerText }; type = $rawType } }
+		return @{ value = $variantStr; type = $rawType }
 	}
 	$txt = $valNode.InnerText
 	if (-not $txt) { return @{ value = '_'; type = $rawType } }

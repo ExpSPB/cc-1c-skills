@@ -1,4 +1,4 @@
-﻿# form-compile v1.117 — Compile 1C managed form from JSON or object metadata
+﻿# form-compile v1.118 — Compile 1C managed form from JSON or object metadata
 # Source: https://github.com/Nikolay-Shirokov/cc-1c-skills
 param(
 	[string]$JsonPath,
@@ -1718,19 +1718,22 @@ function Emit-FilterItem {
 				X "$indent`t<dcsset:right xsi:type=`"$vt`">$vStr</dcsset:right>"
 			}
 		}
-	} elseif ($null -ne $item.value -and "$($item.valueType)" -match 'Standard(Beginning|End)Date$' -and (($item.value -is [PSCustomObject]) -or ($item.value -is [System.Collections.IDictionary]))) {
-		# Стандартная дата начала/окончания: структурное значение {variant, date?}.
-		# Custom несёт <v8:date>; именованные варианты (BeginningOfThisDay/…) — без даты.
+	} elseif ($null -ne $item.value -and "$($item.valueType)" -match 'Standard(Beginning|End)Date$') {
+		# Стандартная дата начала/окончания. Две формы значения:
+		#   объект {variant, date?} — полная (Custom несёт <v8:date>);
+		#   строка-вариант "BeginningOfThisDay" — short (именованный вариант без даты).
 		$sdType = "$($item.valueType)" -replace '^v8:',''
 		$sv = $item.value
-		$variant = if ($sv -is [PSCustomObject]) { "$($sv.variant)" } else { "$($sv['variant'])" }
-		$hasDate = if ($sv -is [PSCustomObject]) { [bool]$sv.PSObject.Properties['date'] } else { $sv.Contains('date') }
+		if (($sv -is [PSCustomObject]) -or ($sv -is [System.Collections.IDictionary])) {
+			$variant = if ($sv -is [PSCustomObject]) { "$($sv.variant)" } else { "$($sv['variant'])" }
+			$hasDate = if ($sv -is [PSCustomObject]) { [bool]$sv.PSObject.Properties['date'] } else { $sv.Contains('date') }
+			$dateV = if ($hasDate) { if ($sv -is [PSCustomObject]) { "$($sv.date)" } else { "$($sv['date'])" } } else { $null }
+		} else {
+			$variant = "$sv"; $hasDate = $false; $dateV = $null
+		}
 		X "$indent`t<dcsset:right xsi:type=`"v8:$sdType`">"
 		X "$indent`t`t<v8:variant xsi:type=`"v8:${sdType}Variant`">$(Esc-Xml $variant)</v8:variant>"
-		if ($hasDate) {
-			$dateV = if ($sv -is [PSCustomObject]) { "$($sv.date)" } else { "$($sv['date'])" }
-			X "$indent`t`t<v8:date>$(Esc-Xml $dateV)</v8:date>"
-		}
+		if ($hasDate) { X "$indent`t`t<v8:date>$(Esc-Xml $dateV)</v8:date>" }
 		X "$indent`t</dcsset:right>"
 	} elseif ($null -ne $item.value) {
 		$vt = if ($item.valueType) { "$($item.valueType)" } else { "" }
