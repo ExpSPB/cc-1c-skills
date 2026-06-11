@@ -1,4 +1,4 @@
-﻿# form-compile v1.122 — Compile 1C managed form from JSON or object metadata
+﻿# form-compile v1.123 — Compile 1C managed form from JSON or object metadata
 # Source: https://github.com/Nikolay-Shirokov/cc-1c-skills
 param(
 	[string]$JsonPath,
@@ -2824,9 +2824,10 @@ function Emit-XrFlag {
 	X "$indent`t<xr:Common>$(if ($common){'true'}else{'false'})</xr:Common>"
 	if ($val.roles) {
 		foreach ($r in $val.roles.PSObject.Properties) {
-			# Forgiving: принимаем имя без префикса, с "Role." или кириллическим "Роль." → нормализуем в "Role."
+			# Forgiving: принимаем имя без префикса, с "Role." или кириллическим "Роль." → нормализуем в "Role.".
+			# Роль по GUID (заимствованная/расширение — name="<guid>" без префикса) эмитим как есть.
 			$rname = "$($r.Name)" -replace '^(Role|Роль)\.', ''
-			$rname = "Role.$rname"
+			if ($rname -notmatch '^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$') { $rname = "Role.$rname" }
 			$rval = if ([bool]$r.Value) { 'true' } else { 'false' }
 			X "$indent`t<xr:Value name=`"$rname`">$rval</xr:Value>"
 		}

@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-# form-compile v1.122 — Compile 1C managed form from JSON or object metadata
+# form-compile v1.123 — Compile 1C managed form from JSON or object metadata
 # Source: https://github.com/Nikolay-Shirokov/cc-1c-skills
 import argparse
 import copy
@@ -2572,8 +2572,11 @@ def emit_xr_flag(lines, tag, val, indent):
     roles = val.get('roles')
     if roles:
         for rname, rval in roles.items():
-            # Forgiving: имя без префикса, с "Role." или кириллическим "Роль." → нормализуем в "Role."
-            rn = "Role." + re.sub(r'^(Role|Роль)\.', '', rname)
+            # Forgiving: имя без префикса, с "Role." или кириллическим "Роль." → нормализуем в "Role.".
+            # Роль по GUID (заимствованная/расширение — name="<guid>" без префикса) эмитим как есть.
+            rn = re.sub(r'^(Role|Роль)\.', '', rname)
+            if not re.match(r'^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$', rn):
+                rn = "Role." + rn
             lines.append(f"{indent}\t<xr:Value name=\"{rn}\">{'true' if rval else 'false'}</xr:Value>")
     lines.append(f"{indent}</{tag}>")
 

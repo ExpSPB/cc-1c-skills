@@ -79,6 +79,7 @@
 			</Type>
 			<Edit>
 				<xr:Common>false</xr:Common>
+				<xr:Value name="UUID-001">true</xr:Value>
 			</Edit>
 		</Attribute>
 		<Attribute name="Дата" id="16">

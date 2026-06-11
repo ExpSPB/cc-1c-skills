@@ -24,7 +24,7 @@
     "attributes": [
       { "name": "Объект", "type": "DataProcessorObject.Типы", "main": true },
       { "name": "Строка", "type": "string(200)", "view": false, "save": true, "fillCheck": true },
-      { "name": "Число", "type": "decimal(10,0,nonneg)", "edit": false },
+      { "name": "Число", "type": "decimal(10,0,nonneg)", "edit": { "common": false, "roles": { "a1b2c3d4-1111-2222-3333-444455556666": true } } },
       { "name": "Дата", "type": "dateTime", "title": "" },
       { "name": "Булево", "type": "boolean" },
       { "name": "Период", "type": "СтандартныйПериод", "save": ["Период", "EndDate", "StartDate", "Variant"] },
