@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-# form-compile v1.130 — Compile 1C managed form from JSON or object metadata
+# form-compile v1.131 — Compile 1C managed form from JSON or object metadata
 # Source: https://github.com/Nikolay-Shirokov/cc-1c-skills
 import argparse
 import copy
@@ -4563,6 +4563,11 @@ def emit_attr_column(lines, col, indent):
         emit_mltext(lines, f'{indent}\t', 'Title', col['title'])
     emit_type(lines, str(col.get('type', '')), f'{indent}\t')
     emit_functional_options(lines, col.get('functionalOptions'), f'{indent}\t')
+    # Ролевой доступ колонки (View/Edit) — xr-флаг, как у самого реквизита
+    if col.get('view') is not None:
+        emit_xr_flag(lines, 'View', col['view'], f'{indent}\t')
+    if col.get('edit') is not None:
+        emit_xr_flag(lines, 'Edit', col['edit'], f'{indent}\t')
     lines.append(f'{indent}</Column>')
 
 

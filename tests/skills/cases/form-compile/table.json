@@ -36,8 +36,8 @@
     "attributes": [
       { "name": "Объект", "type": "DataProcessorObject.Таблица", "main": true },
       { "name": "Данные", "type": "ValueTable", "useAlways": ["Сумма"], "columns": [
-        { "name": "Дата", "type": "date", "useAlways": true },
-        { "name": "Сумма", "type": "decimal(15,2)" },
+        { "name": "Дата", "type": "date", "useAlways": true, "view": false },
+        { "name": "Сумма", "type": "decimal(15,2)", "edit": { "common": false, "roles": { "a1b2c3d4-1111-2222-3333-444455556666": true } } },
         { "name": "Комментарий", "type": "string(200)" },
         { "name": "Объект", "type": "AnyRef" },
         { "name": "Источник", "type": "CatalogRef" }

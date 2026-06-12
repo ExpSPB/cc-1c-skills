@@ -1,4 +1,4 @@
-﻿# form-compile v1.130 — Compile 1C managed form from JSON or object metadata
+﻿# form-compile v1.131 — Compile 1C managed form from JSON or object metadata
 # Source: https://github.com/Nikolay-Shirokov/cc-1c-skills
 param(
 	[string]$JsonPath,
@@ -4849,6 +4849,9 @@ function Emit-AttrColumn {
 	if ($col.title) { Emit-MLText -tag "Title" -text $col.title -indent "$indent`t" }
 	Emit-Type -typeStr "$($col.type)" -indent "$indent`t"
 	Emit-FunctionalOptions -fo $col.functionalOptions -indent "$indent`t"
+	# Ролевой доступ колонки (View/Edit) — xr-флаг, как у самого реквизита
+	if ($null -ne $col.view) { Emit-XrFlag -tag 'View' -val $col.view -indent "$indent`t" }
+	if ($null -ne $col.edit) { Emit-XrFlag -tag 'Edit' -val $col.edit -indent "$indent`t" }
 	X "$indent</Column>"
 }
 

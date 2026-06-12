@@ -133,6 +133,9 @@
 							<v8:DateFractions>Date</v8:DateFractions>
 						</v8:DateQualifiers>
 					</Type>
+					<View>
+						<xr:Common>false</xr:Common>
+					</View>
 				</Column>
 				<Column name="Сумма" id="32">
 					<Type>
@@ -143,6 +146,10 @@
 							<v8:AllowedSign>Any</v8:AllowedSign>
 						</v8:NumberQualifiers>
 					</Type>
+					<Edit>
+						<xr:Common>false</xr:Common>
+						<xr:Value name="UUID-001">true</xr:Value>
+					</Edit>
 				</Column>
 				<Column name="Комментарий" id="33">
 					<Type>
