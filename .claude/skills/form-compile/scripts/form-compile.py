@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-# form-compile v1.144 — Compile 1C managed form from JSON or object metadata
+# form-compile v1.145 — Compile 1C managed form from JSON or object metadata
 # Source: https://github.com/Nikolay-Shirokov/cc-1c-skills
 import argparse
 import copy
@@ -5296,7 +5296,7 @@ def emit_attributes(lines, attrs, indent, conditional_appearance=None):
                     fld = str(e)
                     if not fld:
                         continue
-                    if fld != attr_name and '.' not in fld and not re.match(r'^\d+/\d+:', fld):
+                    if fld != attr_name and '.' not in fld and not re.match(r'^\d+/\d+', fld):
                         fld = f'{attr_name}.{fld}'
                     if fld not in save_fields:
                         save_fields.append(fld)

@@ -1,4 +1,4 @@
-﻿# form-compile v1.144 — Compile 1C managed form from JSON or object metadata
+﻿# form-compile v1.145 — Compile 1C managed form from JSON or object metadata
 # Source: https://github.com/Nikolay-Shirokov/cc-1c-skills
 param(
 	[string]$JsonPath,
@@ -5533,7 +5533,7 @@ function Emit-Attributes {
 				foreach ($e in @($attr.save)) {
 					$fld = "$e"
 					if ([string]::IsNullOrEmpty($fld)) { continue }
-					if ($fld -ne $attrName -and $fld -notmatch '\.' -and $fld -notmatch '^\d+/\d+:') { $fld = "$attrName.$fld" }
+					if ($fld -ne $attrName -and $fld -notmatch '\.' -and $fld -notmatch '^\d+/\d+') { $fld = "$attrName.$fld" }
 					if (-not $saveFields.Contains($fld)) { [void]$saveFields.Add($fld) }
 				}
 			}
