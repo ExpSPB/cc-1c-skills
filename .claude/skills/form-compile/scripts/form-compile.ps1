@@ -1,4 +1,4 @@
-﻿# form-compile v1.126 — Compile 1C managed form from JSON or object metadata
+﻿# form-compile v1.127 — Compile 1C managed form from JSON or object metadata
 # Source: https://github.com/Nikolay-Shirokov/cc-1c-skills
 param(
 	[string]$JsonPath,
@@ -5390,9 +5390,13 @@ function Emit-Commands {
 		X "$indent`t<Command name=`"$($cmd.name)`" id=`"$cmdId`">"
 		$inner = "$indent`t`t"
 
-		$cmdTitle = if ($cmd.title) { $cmd.title } else { Title-FromName -name "$($cmd.name)" }
-		if ($cmdTitle) {
-			Emit-MLText -tag "Title" -text $cmdTitle -indent $inner
+		# Заголовок команды (зеркало Emit-Title): ключ есть+непустой → эмитим; ключ есть+"" → суппресс
+		# (в оригинале <Title> нет — не додумывать); ключ отсутствует → авто-вывод из имени (помощь модели).
+		if ($null -ne $cmd.PSObject.Properties['title']) {
+			if ($cmd.title) { Emit-MLText -tag "Title" -text $cmd.title -indent $inner }
+		} else {
+			$cmdTitle = Title-FromName -name "$($cmd.name)"
+			if ($cmdTitle) { Emit-MLText -tag "Title" -text $cmdTitle -indent $inner }
 		}
 
 		if ($cmd.tooltip) {

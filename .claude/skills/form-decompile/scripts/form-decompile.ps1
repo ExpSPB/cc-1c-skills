@@ -1,4 +1,4 @@
-﻿# form-decompile v1.00 — Decompile 1C managed Form.xml to JSON DSL (draft)
+﻿# form-decompile v1.01 — Decompile 1C managed Form.xml to JSON DSL (draft)
 # Source: https://github.com/Nikolay-Shirokov/cc-1c-skills
 # ВНИМАНИЕ: раундтрип не гарантируется. Навык исключён из авто-использования моделью.
 param(
@@ -2517,7 +2517,11 @@ if ($cmdsNode) {
 		$co = [ordered]@{}; $co['name'] = $c.GetAttribute("name")
 		$act = Get-Child $c 'Action'; if ($act) { $co['action'] = $act }
 		if ((Get-Child $c 'ModifiesSavedData') -eq 'true') { $co['modifiesSavedData'] = $true }
-		$tNode = $c.SelectSingleNode("lf:Title", $ns); if ($tNode) { $t = Get-LangText $tNode; if ($null -ne $t) { $co['title'] = $t } }
+		# Заголовок команды: есть <Title> → захват; нет → суппресс-маркер "" (иначе компилятор
+		# додумает из имени — авто-вывод неверен для ~0.13% команд без заголовка в оригинале).
+		$tNode = $c.SelectSingleNode("lf:Title", $ns)
+		if ($tNode) { $t = Get-LangText $tNode; if ($null -ne $t) { $co['title'] = $t } }
+		else { $co['title'] = '' }
 		$ttNode = $c.SelectSingleNode("lf:ToolTip", $ns); if ($ttNode) { $t = Get-LangText $ttNode; if ($null -ne $t) { $co['tooltip'] = $t } }
 		$us = Decompile-XrFlag $c 'Use'; if ($null -ne $us) { $co['use'] = $us }
 		$cfo = Decompile-FunctionalOptions $c; if ($cfo) { $co['functionalOptions'] = $cfo }

@@ -94,6 +94,14 @@
 				<xr:TransparentPixel x="1" y="1"/>
 			</Picture>
 		</Command>
+		<Command name="БезЗаголовка" id="13">
+			<Action>БезЗаголовкаОбработка</Action>
+			<Picture>
+				<xr:Ref>StdPicture.Refresh</xr:Ref>
+				<xr:LoadTransparent>true</xr:LoadTransparent>
+			</Picture>
+			<Representation>Picture</Representation>
+		</Command>
 	</Commands>
 	<CommandInterface>
 		<CommandBar>

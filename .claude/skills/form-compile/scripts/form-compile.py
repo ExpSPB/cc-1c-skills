@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-# form-compile v1.126 — Compile 1C managed form from JSON or object metadata
+# form-compile v1.127 — Compile 1C managed form from JSON or object metadata
 # Source: https://github.com/Nikolay-Shirokov/cc-1c-skills
 import argparse
 import copy
@@ -5111,9 +5111,15 @@ def emit_commands(lines, cmds, indent):
         lines.append(f'{indent}\t<Command name="{cmd["name"]}" id="{cmd_id}">')
         inner = f'{indent}\t\t'
 
-        cmd_title = cmd.get('title') or title_from_name(str(cmd['name']))
-        if cmd_title:
-            emit_mltext(lines, inner, 'Title', cmd_title)
+        # Заголовок команды (зеркало emit_title): ключ есть+непустой → эмитим; ключ есть+"" → суппресс
+        # (в оригинале <Title> нет — не додумывать); ключ отсутствует → авто-вывод из имени.
+        if 'title' in cmd:
+            if cmd['title']:
+                emit_mltext(lines, inner, 'Title', cmd['title'])
+        else:
+            cmd_title = title_from_name(str(cmd['name']))
+            if cmd_title:
+                emit_mltext(lines, inner, 'Title', cmd_title)
 
         if cmd.get('tooltip'):
             emit_mltext(lines, inner, 'ToolTip', cmd['tooltip'])
