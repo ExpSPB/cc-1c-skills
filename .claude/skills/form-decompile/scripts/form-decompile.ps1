@@ -1,4 +1,4 @@
-﻿# form-decompile v0.105 — Decompile 1C managed Form.xml to JSON DSL (draft)
+﻿# form-decompile v0.106 — Decompile 1C managed Form.xml to JSON DSL (draft)
 # Source: https://github.com/Nikolay-Shirokov/cc-1c-skills
 # ВНИМАНИЕ: раундтрип не гарантируется. Навык исключён из авто-использования моделью.
 param(
@@ -1612,6 +1612,8 @@ function Decompile-Element {
 			$crt = $node.SelectSingleNode("lf:CollapsedRepresentationTitle", $ns); if ($crt) { $ct = Get-LangText $crt; if ($null -ne $ct -and $ct -ne '') { $obj['collapsedTitle'] = $ct } }
 			if ((Get-Child $node 'United') -eq 'false') { $obj['united'] = $false }
 			if ((Get-Child $node 'Collapsed') -eq 'true') { $obj['collapsed'] = $true }
+			# Формат значения пути к данным заголовка (<Format>; парный к titleDataPath группы)
+			Add-FormatProps $obj $node
 			$kids = Decompile-Children $node
 			if ($kids) { $obj['children'] = $kids }
 		}
@@ -1855,6 +1857,8 @@ function Decompile-Element {
 			# Картинка страницы (иконка вкладки) — конвенция ValuesPicture (дефолт LoadTransparent=false)
 			$pp = Get-PictureRef $node 'Picture'; if ($null -ne $pp) { $obj['picture'] = $pp }
 			$st = Get-Child $node 'ShowTitle'; if ($null -ne $st) { $obj['showTitle'] = ($st -eq 'true') }  # факт. значение (явный true тоже)
+			# Формат значения пути к данным заголовка (<Format>; парный к titleDataPath страницы)
+			Add-FormatProps $obj $node
 			$kids = Decompile-Children $node
 			if ($kids) { $obj['children'] = $kids }
 		}

@@ -23,7 +23,7 @@
         { "input": "Поле2", "path": "Поле2", "title": "Поле 2" },
         { "labelField": "Метка", "path": "Поле1", "groupVerticalAlign": "Center" }
       ]},
-      { "group": "vertical", "name": "ГруппаПодвал", "behavior": "collapsible", "collapsed": true, "title": { "ru": "Подвал", "en": "Footer" }, "collapsedTitle": "Развернуть подвал", "showLeftMargin": false, "enableContentChange": false, "verticalSpacing": "None", "displayImportance": "Low", "children": [
+      { "group": "vertical", "name": "ГруппаПодвал", "behavior": "collapsible", "collapsed": true, "title": { "ru": "Подвал", "en": "Footer" }, "collapsedTitle": "Развернуть подвал", "titleDataPath": "Изменено", "format": { "ru": "БЛ=; БИ=*", "en": "BF=; BT=*" }, "showLeftMargin": false, "enableContentChange": false, "verticalSpacing": "None", "displayImportance": "Low", "children": [
         { "input": "Поле3", "path": "Поле3", "title": "Поле 3" }
       ]}
     ],
@@ -31,7 +31,8 @@
       { "name": "Объект", "type": "DataProcessorObject.СГруппами", "main": true },
       { "name": "Поле1", "type": "string" },
       { "name": "Поле2", "type": "decimal(15,2)" },
-      { "name": "Поле3", "type": "date" }
+      { "name": "Поле3", "type": "date" },
+      { "name": "Изменено", "type": "boolean" }
     ]
   }
 }

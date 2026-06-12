@@ -1,4 +1,4 @@
-﻿# form-compile v1.131 — Compile 1C managed form from JSON or object metadata
+﻿# form-compile v1.132 — Compile 1C managed form from JSON or object metadata
 # Source: https://github.com/Nikolay-Shirokov/cc-1c-skills
 param(
 	[string]$JsonPath,
@@ -3531,6 +3531,10 @@ function Emit-Group {
 	# United
 	if ($el.united -eq $false) { X "$inner<United>false</United>" }
 
+	# Формат значения пути к данным заголовка (<Format>; парный к titleDataPath группы)
+	if ($el.format)     { Emit-MLText -tag "Format" -text $el.format -indent $inner }
+	if ($el.editFormat) { Emit-MLText -tag "EditFormat" -text $el.editFormat -indent $inner }
+
 	Emit-CommonFlags -el $el -indent $inner
 	Emit-Layout -el $el -indent $inner
 
@@ -4432,6 +4436,9 @@ function Emit-Page {
 		if ($orientation) { X "$inner<Group>$orientation</Group>" }
 	}
 	if ($null -ne $el.showTitle) { X "$inner<ShowTitle>$(if ($el.showTitle){'true'}else{'false'})</ShowTitle>" }
+	# Формат значения пути к данным заголовка (<Format>; парный к titleDataPath страницы)
+	if ($el.format)     { Emit-MLText -tag "Format" -text $el.format -indent $inner }
+	if ($el.editFormat) { Emit-MLText -tag "EditFormat" -text $el.editFormat -indent $inner }
 	Emit-Layout -el $el -indent $inner
 
 	# Оформление страницы (BackColor / TitleTextColor / TitleFont) — после ShowTitle, перед компаньоном

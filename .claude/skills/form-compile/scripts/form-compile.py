@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-# form-compile v1.131 — Compile 1C managed form from JSON or object metadata
+# form-compile v1.132 — Compile 1C managed form from JSON or object metadata
 # Source: https://github.com/Nikolay-Shirokov/cc-1c-skills
 import argparse
 import copy
@@ -3625,6 +3625,12 @@ def emit_group(lines, el, name, eid, indent):
     if el.get('united') is False:
         lines.append(f'{inner}<United>false</United>')
 
+    # Формат значения пути к данным заголовка (<Format>; парный к titleDataPath группы)
+    if el.get('format'):
+        emit_mltext(lines, inner, 'Format', el['format'])
+    if el.get('editFormat'):
+        emit_mltext(lines, inner, 'EditFormat', el['editFormat'])
+
     emit_common_flags(lines, el, inner)
     emit_layout(lines, el, inner)
 
@@ -4162,6 +4168,11 @@ def emit_page(lines, el, name, eid, indent):
             lines.append(f'{inner}<Group>{orientation}</Group>')
     if el.get('showTitle') is not None:
         lines.append(f'{inner}<ShowTitle>{"true" if el["showTitle"] else "false"}</ShowTitle>')
+    # Формат значения пути к данным заголовка (<Format>; парный к titleDataPath страницы)
+    if el.get('format'):
+        emit_mltext(lines, inner, 'Format', el['format'])
+    if el.get('editFormat'):
+        emit_mltext(lines, inner, 'EditFormat', el['editFormat'])
     emit_layout(lines, el, inner)
 
     # \u041e\u0444\u043e\u0440\u043c\u043b\u0435\u043d\u0438\u0435 \u0441\u0442\u0440\u0430\u043d\u0438\u0446\u044b (BackColor / TitleTextColor / TitleFont) \u2014 \u043f\u043e\u0441\u043b\u0435 ShowTitle, \u043f\u0435\u0440\u0435\u0434 \u043a\u043e\u043c\u043f\u0430\u043d\u044c\u043e\u043d\u043e\u043c

@@ -364,6 +364,7 @@ companion-панели с собственным контентом. Оба не
 | `behavior` | string | Поведение (`<Behavior>`): `usual`, `collapsible`, `popup`. **Отсутствие = Авто** (дефолт, не эмитится). Свёртываемая/всплывающая несут доп. свойства |
 | `collapsed` | bool | Свёрнута (у `collapsible`/`popup`) |
 | `collapsedTitle` | string/object | Заголовок свёрнутого представления (`<CollapsedRepresentationTitle>`), мультиязычный текст |
+| `format` | string/object | Формат значения динамического заголовка (`<Format>`, мультиязычный) — парный к `titleDataPath` (доступен и у `page`). Напр. `{ "ru": "БЛ=; БИ=*", "en": "BF=; BT=*" }` для булева пути |
 | `children` | array | Вложенные элементы |
 | `showTitle` | bool | Показывать заголовок группы |
 | `representation` | string | `none`, `normal`, `weak`, `strong` |
