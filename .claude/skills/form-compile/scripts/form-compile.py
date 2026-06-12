@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-# form-compile v1.128 — Compile 1C managed form from JSON or object metadata
+# form-compile v1.129 — Compile 1C managed form from JSON or object metadata
 # Source: https://github.com/Nikolay-Shirokov/cc-1c-skills
 import argparse
 import copy
@@ -3412,9 +3412,10 @@ def emit_single_type(lines, type_str, indent):
             lines.append(f'{indent}<v8:Type>{DCS_MAP[type_str]}</v8:Type>')
             return
 
-    # DynamicList
-    if type_str == 'DynamicList':
-        lines.append(f'{indent}<v8:Type>cfg:DynamicList</v8:Type>')
+    # Голые конфигурационные типы (cfg: без .Имя): дин-список, набор констант, общий объект отчёта.
+    # Корпус (acc+erp 8.3.24): DynamicList 5205, ConstantsSet 103, ReportObject 10.
+    if type_str in ('DynamicList', 'ConstantsSet', 'ReportObject'):
+        lines.append(f'{indent}<v8:Type>cfg:{type_str}</v8:Type>')
         return
 
     # TypeSet (набор типов) → <v8:TypeSet>: определяемый тип / характеристика (именованные)

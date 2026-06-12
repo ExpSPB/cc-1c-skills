@@ -1,4 +1,4 @@
-﻿# form-compile v1.128 — Compile 1C managed form from JSON or object metadata
+﻿# form-compile v1.129 — Compile 1C managed form from JSON or object metadata
 # Source: https://github.com/Nikolay-Shirokov/cc-1c-skills
 param(
 	[string]$JsonPath,
@@ -2176,9 +2176,11 @@ function Emit-SingleType {
 		}
 	}
 
-	# DynamicList
-	if ($typeStr -eq "DynamicList") {
-		X "$indent<v8:Type>cfg:DynamicList</v8:Type>"
+	# Голые конфигурационные типы (cfg: без .Имя): дин-список, набор констант, общий объект отчёта.
+	# Корпус (acc+erp 8.3.24): DynamicList 5205, ConstantsSet 103, ReportObject 10. (Дотированные формы
+	# ConstantsSet.X / ReportObject.X ловит общий cfg:-regex ниже.)
+	if ($typeStr -in @("DynamicList","ConstantsSet","ReportObject")) {
+		X "$indent<v8:Type>cfg:$typeStr</v8:Type>"
 		return
 	}
 

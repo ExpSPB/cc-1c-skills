@@ -1142,6 +1142,8 @@ Forgiving-синонимы типа: XML-имя (`SpreadSheetDocumentField`) и 
 | `"FormattedString"` | `v8ui:FormattedString` |
 | `"Picture"` | `v8ui:Picture` |
 | `"DynamicList"` | `cfg:DynamicList` |
+| `"ConstantsSet"` | `cfg:ConstantsSet` (набор констант; голый конфигурационный тип без `.Имя`) |
+| `"ReportObject"` | `cfg:ReportObject` (общий объект отчёта без `.Имя`; дотированная форма `ReportObject.Имя` — отдельный отчёт) |
 | `"StandardPeriod"` | `v8:StandardPeriod` (forgiving: `СтандартныйПериод`, `v8:StandardPeriod`) |
 | `"StandardBeginningDate"` | `v8:StandardBeginningDate` (синоним `СтандартнаяДатаНачала`) |
 | `"UUID"` | `v8:UUID` (синоним `УникальныйИдентификатор`) |

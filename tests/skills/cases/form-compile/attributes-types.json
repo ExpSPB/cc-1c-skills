@@ -31,6 +31,8 @@
       { "name": "СписокЗначений", "type": "ValueList", "valueType": "string(50) | decimal(10,2)" },
       { "name": "СписокЛюбой", "type": "ValueList", "valueType": "" },
       { "name": "Идентификатор", "type": "v8:UUID" },
+      { "name": "НаборКонстант", "type": "ConstantsSet" },
+      { "name": "ОбъектОтчета", "type": "ReportObject" },
       { "name": "Таблица", "type": "ValueTable", "title": "Таблица", "columns": [
         { "name": "ИНН", "type": "string(12,fixed)" },
         { "name": "Код", "type": "string(9,fixed)" },
