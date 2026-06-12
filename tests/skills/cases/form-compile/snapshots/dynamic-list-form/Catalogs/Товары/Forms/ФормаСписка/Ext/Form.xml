@@ -100,6 +100,27 @@
 			<Settings xsi:type="DynamicList">
 				<ManualQuery>false</ManualQuery>
 				<DynamicDataRead>true</DynamicDataRead>
+				<Field xsi:type="dcssch:DataSetFieldField">
+					<dcssch:dataPath>Code</dcssch:dataPath>
+					<dcssch:field>Code</dcssch:field>
+					<dcssch:title xsi:type="v8:LocalStringType">
+						<v8:item>
+							<v8:lang>ru</v8:lang>
+							<v8:content>Код</v8:content>
+						</v8:item>
+					</dcssch:title>
+					<dcssch:presentationExpression>"№" + Code</dcssch:presentationExpression>
+					<dcssch:appearance>
+						<dcscor:item xsi:type="dcsset:SettingsParameterValue">
+							<dcscor:parameter>Формат</dcscor:parameter>
+							<dcscor:value xsi:type="xs:string">ДЛ=9</dcscor:value>
+						</dcscor:item>
+						<dcscor:item xsi:type="dcsset:SettingsParameterValue">
+							<dcscor:parameter>ЦветТекста</dcscor:parameter>
+							<dcscor:value xsi:type="v8ui:Color">web:Gray</dcscor:value>
+						</dcscor:item>
+					</dcssch:appearance>
+				</Field>
 				<CalculatedField>
 					<dcssch:dataPath>Метка</dcssch:dataPath>
 					<dcssch:expression>Code + " " + Description</dcssch:expression>

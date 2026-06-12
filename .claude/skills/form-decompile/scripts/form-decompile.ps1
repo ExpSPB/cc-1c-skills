@@ -1,4 +1,4 @@
-﻿# form-decompile v0.113 — Decompile 1C managed Form.xml to JSON DSL (draft)
+﻿# form-decompile v0.114 — Decompile 1C managed Form.xml to JSON DSL (draft)
 # Source: https://github.com/Nikolay-Shirokov/cc-1c-skills
 # ВНИМАНИЕ: раундтрип не гарантируется. Навык исключён из авто-использования моделью.
 param(
@@ -2614,6 +2614,11 @@ if ($attrsNode) {
 					# valueType поля набора (тип значения; вычисляемые/кастомные поля). Грамматика типа.
 					$fvt = $fn.SelectSingleNode("dcssch:valueType", $ns)
 					if ($fvt) { $fvtVal = Decompile-Type $fvt; if ($fvtVal) { $fo['valueType'] = $fvtVal } }
+					# presentationExpression (выражение представления поля) + appearance (формат/оформление поля)
+					$fpe = Get-Child $fn 'presentationExpression'
+					if ($null -ne $fpe -and $fpe -ne '') { $fo['presentationExpression'] = $fpe }
+					$fappNode = $fn.SelectSingleNode("dcssch:appearance", $ns)
+					if ($fappNode) { $fap = Get-SettingsAppearance $fappNode; if ($fap -and $fap.Count -gt 0) { $fo['appearance'] = $fap } }
 					[void]$fields.Add($fo)
 				}
 				$so['fields'] = @($fields)

@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-# form-compile v1.140 — Compile 1C managed form from JSON or object metadata
+# form-compile v1.141 — Compile 1C managed form from JSON or object metadata
 # Source: https://github.com/Nikolay-Shirokov/cc-1c-skills
 import argparse
 import copy
@@ -5373,9 +5373,18 @@ def emit_attributes(lines, attrs, indent, conditional_appearance=None):
                         lines.append(f'{si}\t<dcssch:title xsi:type="v8:LocalStringType">')
                         emit_ml_items(lines, f'{si}\t\t', fld['title'])
                         lines.append(f'{si}\t</dcssch:title>')
+                    # presentationExpression поля — перед valueType (порядок исходника)
+                    if fld.get('presentationExpression'):
+                        lines.append(f'{si}\t<dcssch:presentationExpression>{esc_xml(str(fld["presentationExpression"]))}</dcssch:presentationExpression>')
                     # valueType поля набора (тип значения; вычисляемые/кастомные поля)
                     if fld.get('valueType'):
                         emit_dl_value_type(lines, fld['valueType'], f'{si}\t')
+                    # appearance поля (формат/оформление) — после valueType (порядок исходника)
+                    if fld.get('appearance'):
+                        lines.append(f'{si}\t<dcssch:appearance>')
+                        for ak, av in fld['appearance'].items():
+                            emit_appearance_value(lines, ak, av, f'{si}\t\t')
+                        lines.append(f'{si}\t</dcssch:appearance>')
                     lines.append(f'{si}</Field>')
             # Вычисляемые поля DataSet (<CalculatedField>) — после Field*, до Parameter*.
             emit_calc_fields(lines, s.get('calculatedFields'), si)

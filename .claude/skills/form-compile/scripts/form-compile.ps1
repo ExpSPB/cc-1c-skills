@@ -1,4 +1,4 @@
-﻿# form-compile v1.140 — Compile 1C managed form from JSON or object metadata
+﻿# form-compile v1.141 — Compile 1C managed form from JSON or object metadata
 # Source: https://github.com/Nikolay-Shirokov/cc-1c-skills
 param(
 	[string]$JsonPath,
@@ -5626,8 +5626,16 @@ function Emit-Attributes {
 						Emit-MLItems -val $fld.title -indent "$si`t`t"
 						X "$si`t</dcssch:title>"
 					}
+					# presentationExpression поля — перед valueType (порядок исходника)
+					if ($fld.presentationExpression) { X "$si`t<dcssch:presentationExpression>$(Esc-Xml "$($fld.presentationExpression)")</dcssch:presentationExpression>" }
 					# valueType поля набора (тип значения; вычисляемые/кастомные поля)
 					if ($fld.valueType) { Emit-DLValueType -typeStr "$($fld.valueType)" -indent "$si`t" }
+					# appearance поля (формат/оформление) — после valueType (порядок исходника)
+					if ($fld.appearance) {
+						X "$si`t<dcssch:appearance>"
+						foreach ($prop in $fld.appearance.PSObject.Properties) { Emit-AppearanceValue -key $prop.Name -val $prop.Value -indent "$si`t`t" }
+						X "$si`t</dcssch:appearance>"
+					}
 					X "$si</Field>"
 				}
 			}
