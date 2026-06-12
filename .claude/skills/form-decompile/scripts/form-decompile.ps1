@@ -1,4 +1,4 @@
-﻿# form-decompile v0.118 — Decompile 1C managed Form.xml to JSON DSL (draft)
+﻿# form-decompile v0.119 — Decompile 1C managed Form.xml to JSON DSL (draft)
 # Source: https://github.com/Nikolay-Shirokov/cc-1c-skills
 # ВНИМАНИЕ: раундтрип не гарантируется. Навык исключён из авто-использования моделью.
 param(
@@ -2083,6 +2083,13 @@ function Decompile-Element {
 				else { $obj['commandName'] = $cmd }
 			}
 			$dp = Get-Child $node 'DataPath'; if ($dp) { $obj['path'] = $dp }
+			# Parameter команды: xr:MDObjectRef (объект метаданных, строка) или v8:TypeDescription (тип → {type})
+			$btnParam = $node.SelectSingleNode("lf:Parameter", $ns)
+			if ($btnParam) {
+				$pxt = $btnParam.GetAttribute("type", $NS_XSI)
+				if ($pxt -match 'TypeDescription$') { $pt = Decompile-Type $btnParam; if ($pt) { $obj['parameter'] = [ordered]@{ type = $pt } } }
+				elseif ($btnParam.InnerText) { $obj['parameter'] = $btnParam.InnerText }
+			}
 			Add-CommonProps $obj $node $name
 			$type = Get-Child $node 'Type'
 			if ($type) { $tmap=@{'CommandBarButton'='commandBar';'UsualButton'='usual';'Hyperlink'='hyperlink';'CommandBarHyperlink'='hyperlink'}; if ($tmap.ContainsKey($type)) { $obj['type']=$tmap[$type] } else { $obj['type']=$type } }

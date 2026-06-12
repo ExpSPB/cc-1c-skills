@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-# form-compile v1.145 — Compile 1C managed form from JSON or object metadata
+# form-compile v1.146 — Compile 1C managed form from JSON or object metadata
 # Source: https://github.com/Nikolay-Shirokov/cc-1c-skills
 import argparse
 import copy
@@ -2023,7 +2023,7 @@ KNOWN_KEYS = {
     "commandBarLocation", "searchStringLocation", "viewStatusLocation", "searchControlLocation",
     "excludedCommands",
     "pagesRepresentation",
-    "type", "command", "commandName", "stdCommand", "defaultButton", "locationInCommandBar", "displayImportance",
+    "type", "command", "commandName", "stdCommand", "parameter", "defaultButton", "locationInCommandBar", "displayImportance",
     "commandBar", "contextMenu", "commandSource",
     "src", "valuesPicture", "loadTransparent", "headerPicture", "footerPicture",
     "autofill",
@@ -4440,6 +4440,16 @@ def emit_button(lines, el, name, eid, indent, in_cmd_bar=False):
             lines.append(f'{inner}<CommandName>Form.Item.{m.group(1)}.StandardCommand.{m.group(2)}</CommandName>')
         else:
             lines.append(f'{inner}<CommandName>Form.StandardCommand.{sc}</CommandName>')
+    # Parameter команды (после CommandName): строка → xr:MDObjectRef (объект метаданных);
+    # объект {type} → v8:TypeDescription (грамматика типа). Forgiving-синоним 'параметр'.
+    btn_param = el.get('parameter')
+    if btn_param is None:
+        btn_param = el.get('параметр')
+    if btn_param is not None:
+        if isinstance(btn_param, dict) and btn_param.get('type'):
+            emit_type(lines, str(btn_param['type']), inner, tag='Parameter', tag_attrs=' xsi:type="v8:TypeDescription"')
+        else:
+            lines.append(f'{inner}<Parameter xsi:type="xr:MDObjectRef">{esc_xml(str(btn_param))}</Parameter>')
     # DataPath — привязка команды кнопки к контексту (Объект.Ref, Items.X.CurrentData.Поле)
     if el.get('path'):
         lines.append(f'{inner}<DataPath>{el["path"]}</DataPath>')

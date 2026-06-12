@@ -39,26 +39,34 @@
 					<RepresentationInContextMenu>None</RepresentationInContextMenu>
 					<ExtendedTooltip name="ЗакрытьРасширеннаяПодсказка" id="6"/>
 				</Button>
+				<Button name="СоздатьПоТипу" id="7">
+					<Type>CommandBarButton</Type>
+					<CommandName>Form.Command.Выполнить</CommandName>
+					<Parameter xsi:type="v8:TypeDescription">
+						<v8:Type>cfg:CatalogRef.Справочник1</v8:Type>
+					</Parameter>
+					<ExtendedTooltip name="СоздатьПоТипуРасширеннаяПодсказка" id="8"/>
+				</Button>
 			</ChildItems>
 		</CommandBar>
-		<InputField name="Результат" id="7">
+		<InputField name="Результат" id="9">
 			<DataPath>Результат</DataPath>
 			<ReadOnly>true</ReadOnly>
 			<MultiLine>true</MultiLine>
 			<AutoMaxWidth>false</AutoMaxWidth>
 			<Height>8</Height>
-			<ContextMenu name="РезультатКонтекстноеМеню" id="8"/>
-			<ExtendedTooltip name="РезультатРасширеннаяПодсказка" id="9"/>
+			<ContextMenu name="РезультатКонтекстноеМеню" id="10"/>
+			<ExtendedTooltip name="РезультатРасширеннаяПодсказка" id="11"/>
 		</InputField>
 	</ChildItems>
 	<Attributes>
-		<Attribute name="Объект" id="10">
+		<Attribute name="Объект" id="12">
 			<Type>
 				<v8:Type>cfg:DataProcessorObject.Команды</v8:Type>
 			</Type>
 			<MainAttribute>true</MainAttribute>
 		</Attribute>
-		<Attribute name="Результат" id="11">
+		<Attribute name="Результат" id="13">
 			<Title>
 				<v8:item>
 					<v8:lang>ru</v8:lang>
@@ -75,7 +83,7 @@
 		</Attribute>
 	</Attributes>
 	<Commands>
-		<Command name="Выполнить" id="12">
+		<Command name="Выполнить" id="14">
 			<Title>
 				<v8:item>
 					<v8:lang>ru</v8:lang>
@@ -94,7 +102,7 @@
 				<xr:TransparentPixel x="1" y="1"/>
 			</Picture>
 		</Command>
-		<Command name="БезЗаголовка" id="13">
+		<Command name="БезЗаголовка" id="15">
 			<Action>БезЗаголовкаОбработка</Action>
 			<Picture>
 				<xr:Ref>StdPicture.Refresh</xr:Ref>

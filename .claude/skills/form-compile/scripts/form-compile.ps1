@@ -1,4 +1,4 @@
-﻿# form-compile v1.145 — Compile 1C managed form from JSON or object metadata
+﻿# form-compile v1.146 — Compile 1C managed form from JSON or object metadata
 # Source: https://github.com/Nikolay-Shirokov/cc-1c-skills
 param(
 	[string]$JsonPath,
@@ -2922,7 +2922,7 @@ function Emit-Element {
 		# pages-specific
 		"pagesRepresentation"=1
 		# button-specific
-		"type"=1;"command"=1;"commandName"=1;"stdCommand"=1;"defaultButton"=1;"locationInCommandBar"=1;"displayImportance"=1
+		"type"=1;"command"=1;"commandName"=1;"stdCommand"=1;"parameter"=1;"defaultButton"=1;"locationInCommandBar"=1;"displayImportance"=1
 		# picture/decoration
 		"src"=1;"valuesPicture"=1;"loadTransparent"=1;"headerPicture"=1;"footerPicture"=1
 		# cmdBar-specific
@@ -4716,6 +4716,16 @@ function Emit-Button {
 			X "$inner<CommandName>Form.Item.$($Matches[1]).StandardCommand.$($Matches[2])</CommandName>"
 		} else {
 			X "$inner<CommandName>Form.StandardCommand.$sc</CommandName>"
+		}
+	}
+	# Parameter команды (после CommandName): строка → xr:MDObjectRef (объект метаданных);
+	# объект {type} → v8:TypeDescription (грамматика типа). Forgiving-синоним 'параметр'.
+	$btnParam = if ($null -ne $el.PSObject.Properties['parameter']) { $el.parameter } elseif ($null -ne $el.PSObject.Properties['параметр']) { $el.параметр } else { $null }
+	if ($null -ne $btnParam) {
+		if (($btnParam -is [System.Management.Automation.PSCustomObject] -or $btnParam -is [hashtable]) -and $btnParam.type) {
+			Emit-Type -typeStr "$($btnParam.type)" -indent $inner -tag "Parameter" -tagAttrs ' xsi:type="v8:TypeDescription"'
+		} else {
+			X "$inner<Parameter xsi:type=`"xr:MDObjectRef`">$(Esc-Xml "$btnParam")</Parameter>"
 		}
 	}
 	# DataPath — привязка команды кнопки к контексту (Объект.Ref, Items.X.CurrentData.Поле)

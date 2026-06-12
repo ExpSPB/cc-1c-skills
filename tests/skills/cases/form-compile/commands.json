@@ -3,6 +3,11 @@
   "preRun": [
     {
       "script": "meta-compile/scripts/meta-compile",
+      "input": { "type": "Catalog", "name": "Справочник1" },
+      "args": { "-JsonPath": "{inputFile}", "-OutputDir": "{workDir}" }
+    },
+    {
+      "script": "meta-compile/scripts/meta-compile",
       "input": { "type": "DataProcessor", "name": "Команды" },
       "args": { "-JsonPath": "{inputFile}", "-OutputDir": "{workDir}" }
     },
@@ -19,7 +24,8 @@
     "elements": [
       { "cmdBar": "Панель", "horizontalLocation": "right", "children": [
         { "button": "Выполнить", "command": "Выполнить", "defaultButton": true },
-        { "button": "Закрыть", "stdCommand": "Close", "representationInContextMenu": "None" }
+        { "button": "Закрыть", "stdCommand": "Close", "representationInContextMenu": "None" },
+        { "button": "СоздатьПоТипу", "command": "Выполнить", "параметр": { "type": "CatalogRef.Справочник1" } }
       ]},
       { "input": "Результат", "path": "Результат", "multiLine": true, "height": 8, "readOnly": true }
     ],

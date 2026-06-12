@@ -246,6 +246,7 @@
 		</Properties>
 		<ChildObjects>
 			<Language>Русский</Language>
+			<Catalog>Справочник1</Catalog>
 			<DataProcessor>Команды</DataProcessor>
 		</ChildObjects>
 	</Configuration>

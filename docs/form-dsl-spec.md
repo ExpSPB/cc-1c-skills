@@ -677,6 +677,7 @@ Pages поддерживает `pagesRepresentation`: `None`, `TabsOnTop`, `Tabs
 | `command` | string | Имя команды формы (→ `Form.Command.<name>`) |
 | `commandName` | string | Глобальная команда «как есть» (`CommonCommand.X`, `Catalog.X.Command.Y` …) — без обёртки `Form.` |
 | `stdCommand` | string | Стандартная команда (→ `Form.StandardCommand.<name>`; `X.Y` → `Form.Item.X.StandardCommand.Y`) |
+| `parameter` | string/object | Параметр команды (`<Parameter>`, после `CommandName`). **Строка** → `xr:MDObjectRef` (объект метаданных, напр. `"DocumentJournal.Взаимодействия"` — для `ShowInList`). **Объект `{ type }`** → `v8:TypeDescription` (грамматика типа, напр. `{ "type": "DocumentRef.Заказ" }` — для `CreateByParameter`). Синоним `параметр` |
 | `type` | string | `usual`, `hyperlink`, `commandBar` |
 | `defaultButton` | bool | Кнопка по умолчанию |
 | `checked` | bool | Пометка (нажатое состояние toggle-кнопки командной панели) → `<Check>true</Check>`. Платформа эмитит только `true`. Ключ `checked` (не `check` — `check` — тип-ключ ПоляФлажка) |
