@@ -1,4 +1,4 @@
-﻿# form-compile v1.151 — Compile 1C managed form from JSON or object metadata
+﻿# form-compile v1.152 — Compile 1C managed form from JSON or object metadata
 # Source: https://github.com/Nikolay-Shirokov/cc-1c-skills
 param(
 	[string]$JsonPath,
@@ -1805,9 +1805,9 @@ function Emit-FilterItem {
 }
 
 function Emit-Filter {
-	param($items, [string]$indent, $blockViewMode = $null, $blockUserSettingID = $null)
+	param($items, [string]$indent, $blockViewMode = $null, $blockUserSettingID = $null, $blockUserSettingPresentation = $null)
 	$hasItems = $items -and $items.Count -gt 0
-	$hasBlockMeta = ($null -ne $blockViewMode) -or ($null -ne $blockUserSettingID)
+	$hasBlockMeta = ($null -ne $blockViewMode) -or ($null -ne $blockUserSettingID) -or ($null -ne $blockUserSettingPresentation)
 	if (-not $hasItems -and -not $hasBlockMeta) { return }
 	X "$indent<dcsset:filter>"
 	foreach ($item in $items) {
@@ -1827,13 +1827,14 @@ function Emit-Filter {
 		$uid = if ("$blockUserSettingID" -eq 'auto') { New-Guid-String } else { "$blockUserSettingID" }
 		X "$indent`t<dcsset:userSettingID>$(Esc-Xml $uid)</dcsset:userSettingID>"
 	}
+	if ($null -ne $blockUserSettingPresentation) { Emit-USPresentation -val $blockUserSettingPresentation -tag "dcsset:userSettingPresentation" -indent "$indent`t" }
 	X "$indent</dcsset:filter>"
 }
 
 function Emit-Order {
-	param($items, [string]$indent, [switch]$skipAuto, $blockViewMode = $null, $blockUserSettingID = $null)
+	param($items, [string]$indent, [switch]$skipAuto, $blockViewMode = $null, $blockUserSettingID = $null, $blockUserSettingPresentation = $null)
 	$hasItems = $items -and $items.Count -gt 0
-	$hasBlockMeta = ($null -ne $blockViewMode) -or ($null -ne $blockUserSettingID)
+	$hasBlockMeta = ($null -ne $blockViewMode) -or ($null -ne $blockUserSettingID) -or ($null -ne $blockUserSettingPresentation)
 	if (-not $hasItems -and -not $hasBlockMeta) { return }
 	X "$indent<dcsset:order>"
 	foreach ($item in $items) {
@@ -1867,6 +1868,7 @@ function Emit-Order {
 		$uid = if ("$blockUserSettingID" -eq 'auto') { New-Guid-String } else { "$blockUserSettingID" }
 		X "$indent`t<dcsset:userSettingID>$(Esc-Xml $uid)</dcsset:userSettingID>"
 	}
+	if ($null -ne $blockUserSettingPresentation) { Emit-USPresentation -val $blockUserSettingPresentation -tag "dcsset:userSettingPresentation" -indent "$indent`t" }
 	X "$indent</dcsset:order>"
 }
 
@@ -1963,9 +1965,9 @@ function Emit-AppearanceValue {
 }
 
 function Emit-ConditionalAppearance {
-	param($items, [string]$indent, $blockViewMode = $null, $blockUserSettingID = $null, [string]$wrapTag = 'dcsset:conditionalAppearance')
+	param($items, [string]$indent, $blockViewMode = $null, $blockUserSettingID = $null, [string]$wrapTag = 'dcsset:conditionalAppearance', $blockUserSettingPresentation = $null)
 	$hasItems = $items -and $items.Count -gt 0
-	$hasBlockMeta = ($null -ne $blockViewMode) -or ($null -ne $blockUserSettingID)
+	$hasBlockMeta = ($null -ne $blockViewMode) -or ($null -ne $blockUserSettingID) -or ($null -ne $blockUserSettingPresentation)
 	if (-not $hasItems -and -not $hasBlockMeta) { return }
 	X "$indent<$wrapTag>"
 	foreach ($ca in $items) {
@@ -2020,6 +2022,7 @@ function Emit-ConditionalAppearance {
 		$uid = if ("$blockUserSettingID" -eq 'auto') { New-Guid-String } else { "$blockUserSettingID" }
 		X "$indent`t<dcsset:userSettingID>$(Esc-Xml $uid)</dcsset:userSettingID>"
 	}
+	if ($null -ne $blockUserSettingPresentation) { Emit-USPresentation -val $blockUserSettingPresentation -tag "dcsset:userSettingPresentation" -indent "$indent`t" }
 	X "$indent</$wrapTag>"
 }
 
@@ -5727,12 +5730,17 @@ function Emit-Attributes {
 				# Частичная/минимальная форма скелета — эмитим ТОЛЬКО указанные части с их блок-метой.
 				# meta: 'v'=viewMode, 'u'=userSettingID (контейнеры); itemsViewMode/itemsUserSettingID → present.
 				foreach ($prop in $st.listSettings.PSObject.Properties) {
-					$tag = $prop.Name; $meta = "$($prop.Value)"
+					$tag = $prop.Name; $pv = $prop.Value
+					# Значение дескриптора: строка-код "vu" ИЛИ объект { meta:"vu", presentation:<текст/ML> }
+					# (контейнер несёт собственный userSettingPresentation — кастомную подпись настройки).
+					if (($pv -is [PSCustomObject]) -or ($pv -is [System.Collections.IDictionary])) {
+						$meta = "$(Get-Prop $pv 'meta')"; $bpres = Get-Prop $pv 'presentation'
+					} else { $meta = "$pv"; $bpres = $null }
 					$bvm = if ($meta -match 'v') { 'Normal' } else { $null }
 					switch ($tag) {
-						'filter'                { $bus = if ($meta -match 'u') { $script:CANON_FILTER_ID } else { $null }; Emit-Filter -items $st.filter -indent $lsi -blockViewMode $bvm -blockUserSettingID $bus }
-						'order'                 { $bus = if ($meta -match 'u') { $script:CANON_ORDER_ID } else { $null }; Emit-Order -items $st.order -indent $lsi -blockViewMode $bvm -blockUserSettingID $bus }
-						'conditionalAppearance' { $bus = if ($meta -match 'u') { $script:CANON_CA_ID } else { $null }; Emit-ConditionalAppearance -items $st.conditionalAppearance -indent $lsi -blockViewMode $bvm -blockUserSettingID $bus }
+						'filter'                { $bus = if ($meta -match 'u') { $script:CANON_FILTER_ID } else { $null }; Emit-Filter -items $st.filter -indent $lsi -blockViewMode $bvm -blockUserSettingID $bus -blockUserSettingPresentation $bpres }
+						'order'                 { $bus = if ($meta -match 'u') { $script:CANON_ORDER_ID } else { $null }; Emit-Order -items $st.order -indent $lsi -blockViewMode $bvm -blockUserSettingID $bus -blockUserSettingPresentation $bpres }
+						'conditionalAppearance' { $bus = if ($meta -match 'u') { $script:CANON_CA_ID } else { $null }; Emit-ConditionalAppearance -items $st.conditionalAppearance -indent $lsi -blockViewMode $bvm -blockUserSettingID $bus -blockUserSettingPresentation $bpres }
 						'itemsViewMode'         { X "$lsi<dcsset:itemsViewMode>Normal</dcsset:itemsViewMode>" }
 						'itemsUserSettingID'    { X "$lsi<dcsset:itemsUserSettingID>$($script:CANON_ITEMS_ID)</dcsset:itemsUserSettingID>" }
 						'structure'             { Emit-ListGrouping (Get-ListGroupingValue $st) $lsi }

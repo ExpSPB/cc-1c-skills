@@ -1,4 +1,4 @@
-﻿# form-decompile v0.126 — Decompile 1C managed Form.xml to JSON DSL (draft)
+﻿# form-decompile v0.127 — Decompile 1C managed Form.xml to JSON DSL (draft)
 # Source: https://github.com/Nikolay-Shirokov/cc-1c-skills
 # ВНИМАНИЕ: раундтрип не гарантируется. Навык исключён из авто-использования моделью.
 param(
@@ -134,7 +134,14 @@ function Get-ListSettingsShape {
 		if ($tag -in @('filter','order','conditionalAppearance')) {
 			$hasVM = $null -ne $child.SelectSingleNode("dcsset:viewMode", $ns)
 			$hasUS = $null -ne $child.SelectSingleNode("dcsset:userSettingID", $ns)
-			$shape[$tag] = "$(if ($hasVM) {'v'})$(if ($hasUS) {'u'})"
+			$code = "$(if ($hasVM) {'v'})$(if ($hasUS) {'u'})"
+			# Контейнер может нести собственный <dcsset:userSettingPresentation> (кастомная подпись
+			# настройки) — сохраняем форму по xsi:type (Get-PresByType: ru-only LocalString ≠ xs:string).
+			$uspNode = $child.SelectSingleNode("dcsset:userSettingPresentation", $ns)
+			if ($uspNode) {
+				$usp = Get-PresByType $uspNode
+				$shape[$tag] = [ordered]@{ meta = $code; presentation = $usp }
+			} else { $shape[$tag] = $code }
 		} elseif ($tag -eq 'itemsViewMode') { $shape['itemsViewMode'] = $true }
 		elseif ($tag -eq 'itemsUserSettingID') { $shape['itemsUserSettingID'] = $true }
 		elseif ($tag -eq 'item') { if ($hasGrouping) { $shape['structure'] = $true } else { return $null } }

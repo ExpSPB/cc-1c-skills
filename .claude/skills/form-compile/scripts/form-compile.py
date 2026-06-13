@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-# form-compile v1.151 — Compile 1C managed form from JSON or object metadata
+# form-compile v1.152 — Compile 1C managed form from JSON or object metadata
 # Source: https://github.com/Nikolay-Shirokov/cc-1c-skills
 import argparse
 import copy
@@ -1533,9 +1533,9 @@ def emit_filter_item(lines, item, indent):
     lines.append(f'{indent}</dcsset:item>')
 
 
-def emit_filter(lines, items, indent, block_view_mode=None, block_user_setting_id=None):
+def emit_filter(lines, items, indent, block_view_mode=None, block_user_setting_id=None, block_user_setting_presentation=None):
     has_items = bool(items) and len(items) > 0
-    has_block_meta = (block_view_mode is not None) or (block_user_setting_id is not None)
+    has_block_meta = (block_view_mode is not None) or (block_user_setting_id is not None) or (block_user_setting_presentation is not None)
     if not has_items and not has_block_meta:
         return
     lines.append(f'{indent}<dcsset:filter>')
@@ -1561,12 +1561,14 @@ def emit_filter(lines, items, indent, block_view_mode=None, block_user_setting_i
     if block_user_setting_id is not None:
         uid = new_uuid() if str(block_user_setting_id) == 'auto' else str(block_user_setting_id)
         lines.append(f'{indent}\t<dcsset:userSettingID>{esc_xml(uid)}</dcsset:userSettingID>')
+    if block_user_setting_presentation is not None:
+        emit_us_presentation(lines, f'{indent}\t', 'dcsset:userSettingPresentation', block_user_setting_presentation)
     lines.append(f'{indent}</dcsset:filter>')
 
 
-def emit_order(lines, items, indent, skip_auto=False, block_view_mode=None, block_user_setting_id=None):
+def emit_order(lines, items, indent, skip_auto=False, block_view_mode=None, block_user_setting_id=None, block_user_setting_presentation=None):
     has_items = bool(items) and len(items) > 0
-    has_block_meta = (block_view_mode is not None) or (block_user_setting_id is not None)
+    has_block_meta = (block_view_mode is not None) or (block_user_setting_id is not None) or (block_user_setting_presentation is not None)
     if not has_items and not has_block_meta:
         return
     lines.append(f'{indent}<dcsset:order>')
@@ -1610,6 +1612,8 @@ def emit_order(lines, items, indent, skip_auto=False, block_view_mode=None, bloc
     if block_user_setting_id is not None:
         uid = new_uuid() if str(block_user_setting_id) == 'auto' else str(block_user_setting_id)
         lines.append(f'{indent}\t<dcsset:userSettingID>{esc_xml(uid)}</dcsset:userSettingID>')
+    if block_user_setting_presentation is not None:
+        emit_us_presentation(lines, f'{indent}\t', 'dcsset:userSettingPresentation', block_user_setting_presentation)
     lines.append(f'{indent}</dcsset:order>')
 
 
@@ -1870,9 +1874,9 @@ def emit_restrict_block(lines, tag, ur, indent):
     lines.append(f'{indent}</dcssch:{tag}>')
 
 
-def emit_conditional_appearance(lines, items, indent, block_view_mode=None, block_user_setting_id=None, wrap_tag='dcsset:conditionalAppearance'):
+def emit_conditional_appearance(lines, items, indent, block_view_mode=None, block_user_setting_id=None, wrap_tag='dcsset:conditionalAppearance', block_user_setting_presentation=None):
     has_items = bool(items) and len(items) > 0
-    has_block_meta = (block_view_mode is not None) or (block_user_setting_id is not None)
+    has_block_meta = (block_view_mode is not None) or (block_user_setting_id is not None) or (block_user_setting_presentation is not None)
     if not has_items and not has_block_meta:
         return
     lines.append(f'{indent}<{wrap_tag}>')
@@ -1928,6 +1932,8 @@ def emit_conditional_appearance(lines, items, indent, block_view_mode=None, bloc
     if block_user_setting_id is not None:
         uid = new_uuid() if str(block_user_setting_id) == 'auto' else str(block_user_setting_id)
         lines.append(f'{indent}\t<dcsset:userSettingID>{esc_xml(uid)}</dcsset:userSettingID>')
+    if block_user_setting_presentation is not None:
+        emit_us_presentation(lines, f'{indent}\t', 'dcsset:userSettingPresentation', block_user_setting_presentation)
     lines.append(f'{indent}</{wrap_tag}>')
 
 
@@ -5479,18 +5485,23 @@ def emit_attributes(lines, attrs, indent, conditional_appearance=None):
             ls_shape = s.get('listSettings')
             if ls_shape is not None:
                 # Частичная/минимальная форма скелета — эмитим ТОЛЬКО указанные части с их блок-метой.
-                for tag, meta in ls_shape.items():
-                    meta = str(meta)
+                for tag, pv in ls_shape.items():
+                    # Значение дескриптора: строка-код "vu" ИЛИ объект {meta, presentation}
+                    # (контейнер несёт собственный userSettingPresentation — подпись настройки).
+                    if isinstance(pv, dict):
+                        meta = str(pv.get('meta', '')); bpres = pv.get('presentation')
+                    else:
+                        meta = str(pv); bpres = None
                     bvm = 'Normal' if 'v' in meta else None
                     if tag == 'filter':
                         bus = CANON_FILTER_ID if 'u' in meta else None
-                        emit_filter(lines, s.get('filter'), lsi, block_view_mode=bvm, block_user_setting_id=bus)
+                        emit_filter(lines, s.get('filter'), lsi, block_view_mode=bvm, block_user_setting_id=bus, block_user_setting_presentation=bpres)
                     elif tag == 'order':
                         bus = CANON_ORDER_ID if 'u' in meta else None
-                        emit_order(lines, s.get('order'), lsi, block_view_mode=bvm, block_user_setting_id=bus)
+                        emit_order(lines, s.get('order'), lsi, block_view_mode=bvm, block_user_setting_id=bus, block_user_setting_presentation=bpres)
                     elif tag == 'conditionalAppearance':
                         bus = CANON_CA_ID if 'u' in meta else None
-                        emit_conditional_appearance(lines, s.get('conditionalAppearance'), lsi, block_view_mode=bvm, block_user_setting_id=bus)
+                        emit_conditional_appearance(lines, s.get('conditionalAppearance'), lsi, block_view_mode=bvm, block_user_setting_id=bus, block_user_setting_presentation=bpres)
                     elif tag == 'itemsViewMode':
                         lines.append(f'{lsi}<dcsset:itemsViewMode>Normal</dcsset:itemsViewMode>')
                     elif tag == 'itemsUserSettingID':
