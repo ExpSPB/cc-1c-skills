@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-# form-compile v1.149 — Compile 1C managed form from JSON or object metadata
+# form-compile v1.150 — Compile 1C managed form from JSON or object metadata
 # Source: https://github.com/Nikolay-Shirokov/cc-1c-skills
 import argparse
 import copy
@@ -6163,13 +6163,18 @@ def main():
 
     # MobileDeviceCommandBarContent — форменный список имён командных панелей/кнопок
     # (Presentation пустой, CheckState=0, тип xs:string — константы; варьируется только имя-Value).
-    if defn.get('mobileCommandBarContent') and len(defn['mobileCommandBarContent']) > 0:
+    # 12 форм корпуса несут один пустой item (Value="") — список присутствует, но не пуст по len.
+    if defn.get('mobileCommandBarContent') is not None and len(defn['mobileCommandBarContent']) > 0:
         lines.append('\t<MobileDeviceCommandBarContent>')
         for nm in defn['mobileCommandBarContent']:
             lines.append('\t\t<xr:Item>')
             lines.append('\t\t\t<xr:Presentation/>')
             lines.append('\t\t\t<xr:CheckState>0</xr:CheckState>')
-            lines.append(f'\t\t\t<xr:Value xsi:type="xs:string">{esc_xml(str(nm))}</xr:Value>')
+            # пустое значение → самозакрывающийся тег (зеркало платформы)
+            if not str(nm):
+                lines.append('\t\t\t<xr:Value xsi:type="xs:string"/>')
+            else:
+                lines.append(f'\t\t\t<xr:Value xsi:type="xs:string">{esc_xml(str(nm))}</xr:Value>')
             lines.append('\t\t</xr:Item>')
         lines.append('\t</MobileDeviceCommandBarContent>')
 
