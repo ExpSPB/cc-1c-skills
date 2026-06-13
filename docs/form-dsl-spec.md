@@ -60,6 +60,7 @@
 | `repostOnWrite` | `<RepostOnWrite>` | `true` / `false` |
 | `autoURL` | `<AutoURL>` | `true` / `false` |
 | `enabled` | `<Enabled>` | `true` / `false` — доступность всей формы (редкое; форма-уровень) |
+| `scale` | `<Scale>` | масштаб формы (число, напр. `98`; редкое) |
 | `autoFillCheck` | `<AutoFillCheck>` | `true` / `false` |
 | `customizable` | `<Customizable>` | `true` / `false` |
 | `enterKeyBehavior` | `<EnterKeyBehavior>` | `DefaultButton`, `NewLine` |

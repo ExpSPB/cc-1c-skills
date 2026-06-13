@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-# form-compile v1.167 — Compile 1C managed form from JSON or object metadata
+# form-compile v1.168 — Compile 1C managed form from JSON or object metadata
 # Source: https://github.com/Nikolay-Shirokov/cc-1c-skills
 import argparse
 import copy
@@ -3387,6 +3387,11 @@ GENERIC_SCALARS = [
     ('MultipleValuesBackColor', 'multipleValuesBackColor', 'value'),
     ('MultipleValuePictureShape', 'multipleValuePictureShape', 'value'),
     ('MultipleValuePictureDataPath', 'multipleValuePictureDataPath', 'value'),
+    # Хвост листовых скаляров (по 1): автокоррекция / уникальность команды / пустое множ.значение / гориз.сжатие
+    ('AutoCorrectionOnTextInput', 'autoCorrectionOnTextInput', 'value'),
+    ('CommandUniqueness', 'commandUniqueness', 'bool'),
+    ('AllowInputEmptyMultipleValues', 'allowInputEmptyMultipleValues', 'bool'),
+    ('BehaviorOnHorizontalCompression', 'behaviorOnHorizontalCompression', 'value'),
 ]
 
 
@@ -4063,6 +4068,11 @@ def emit_check(lines, el, name, eid, indent):
 
     if el.get('warningOnEdit') is not None:
         emit_mltext(lines, inner, 'WarningOnEdit', el['warningOnEdit'])
+    # FooterDataPath / FooterText — общие cell-свойства колонки (как у input/labelField)
+    if el.get('footerDataPath'):
+        lines.append(f'{inner}<FooterDataPath>{esc_xml(str(el["footerDataPath"]))}</FooterDataPath>')
+    if el.get('footerText') is not None:
+        emit_mltext(lines, inner, 'FooterText', el['footerText'])
 
     # Формат / формат редактирования (LocalStringType — строка или {ru,en})
     if el.get('format'):
@@ -4748,9 +4758,10 @@ def emit_command_bar(lines, el, name, eid, indent):
     if el.get('autofill') is True:
         lines.append(f'{inner}<Autofill>true</Autofill>')
 
-    _hl = get_hlocation(el)
-    if _hl:
-        lines.append(f'{inner}<HorizontalLocation>{_hl}</HorizontalLocation>')
+    # CommandBar хранит HorizontalLocation фактически (включая Auto); ≠ дополнениям (Auto=скип)
+    if el.get('horizontalLocation'):
+        _hlv = {'auto': 'Auto', 'left': 'Left', 'right': 'Right', 'center': 'Center'}.get(str(el['horizontalLocation']).lower(), str(el['horizontalLocation']))
+        lines.append(f'{inner}<HorizontalLocation>{_hlv}</HorizontalLocation>')
 
     emit_common_flags(lines, el, inner)
     emit_layout(lines, el, inner)

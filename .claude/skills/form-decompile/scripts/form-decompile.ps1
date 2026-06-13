@@ -1,4 +1,4 @@
-﻿# form-decompile v0.144 — Decompile 1C managed Form.xml to JSON DSL (draft)
+﻿# form-decompile v0.145 — Decompile 1C managed Form.xml to JSON DSL (draft)
 # Source: https://github.com/Nikolay-Shirokov/cc-1c-skills
 # ВНИМАНИЕ: раундтрип не гарантируется. Навык исключён из авто-использования моделью.
 param(
@@ -1638,6 +1638,11 @@ $GENERIC_SCALARS = @(
 	@{ Tag='MultipleValuesBackColor'; Key='multipleValuesBackColor'; Kind='value' }
 	@{ Tag='MultipleValuePictureShape'; Key='multipleValuePictureShape'; Kind='value' }
 	@{ Tag='MultipleValuePictureDataPath'; Key='multipleValuePictureDataPath'; Kind='value' }
+	# Хвост листовых скаляров (по 1): автокоррекция / уникальность команды / пустое множ.значение / гориз.сжатие
+	@{ Tag='AutoCorrectionOnTextInput'; Key='autoCorrectionOnTextInput'; Kind='value' }
+	@{ Tag='CommandUniqueness'; Key='commandUniqueness'; Kind='bool' }
+	@{ Tag='AllowInputEmptyMultipleValues'; Key='allowInputEmptyMultipleValues'; Kind='bool' }
+	@{ Tag='BehaviorOnHorizontalCompression'; Key='behaviorOnHorizontalCompression'; Kind='value' }
 )
 
 # Захват generic-скаляров. Специфичная обработка (если ключ уже задан) — побеждает.
@@ -1969,6 +1974,9 @@ function Decompile-Element {
 			elseif ($cbt -ne 'Auto') { $obj['checkBoxType'] = $cbt.Substring(0,1).ToLower() + $cbt.Substring(1) }
 			Add-TitleLocation $obj $node 'Right'
 			$woe = $node.SelectSingleNode("lf:WarningOnEdit", $ns); if ($woe) { $t = Get-LangTextWS $woe; if ($null -ne $t) { $obj['warningOnEdit'] = $t } }
+			# FooterDataPath / FooterText — общие cell-свойства колонки (как у input/labelField)
+			$fdp = Get-Child $node 'FooterDataPath'; if ($fdp) { $obj['footerDataPath'] = $fdp }
+			$ftxt = $node.SelectSingleNode("lf:FooterText", $ns); if ($ftxt) { $t = Get-LangTextWS $ftxt; if ($null -ne $t) { $obj['footerText'] = $t } }
 			Add-FormatProps $obj $node
 		}
 		'RadioButtonField' {
@@ -2513,7 +2521,7 @@ $titleNode = $root.SelectSingleNode("lf:Title", $ns)
 if ($titleNode) { $t = Get-LangText $titleNode; if ($null -ne $t) { $dsl['title'] = $t } }
 
 # properties (прямые скаляры под <Form>, PascalCase → camelCase)
-$KNOWN_FORM_PROPS = @('AutoTitle','ReportResult','DetailsData','ReportFormType','AutoShowState','ReportResultViewMode','ViewModeApplicationOnSetReportResult','WindowOpeningMode','CommandBarLocation','SaveDataInSettings','AutoSaveDataInSettings','AutoTime','UsePostingMode','RepostOnWrite','AutoURL','AutoFillCheck','Customizable','EnterKeyBehavior','VerticalScroll','Width','Height','Group','UseForFoldersAndItems','SaveWindowSettings','ScalingMode','VerticalSpacing','VariantAppearance','ShowCloseButton','HorizontalAlign','ChildrenAlign','ShowTitle','ConversationsRepresentation','CollapseItemsByImportanceVariant','GroupList','ChildItemsWidth','VerticalAlign','HorizontalSpacing','CustomSettingsFolder','SettingsStorage','Enabled')
+$KNOWN_FORM_PROPS = @('AutoTitle','ReportResult','DetailsData','ReportFormType','AutoShowState','ReportResultViewMode','ViewModeApplicationOnSetReportResult','WindowOpeningMode','CommandBarLocation','SaveDataInSettings','AutoSaveDataInSettings','AutoTime','UsePostingMode','RepostOnWrite','AutoURL','AutoFillCheck','Customizable','EnterKeyBehavior','VerticalScroll','Width','Height','Group','UseForFoldersAndItems','SaveWindowSettings','ScalingMode','VerticalSpacing','VariantAppearance','ShowCloseButton','HorizontalAlign','ChildrenAlign','ShowTitle','ConversationsRepresentation','CollapseItemsByImportanceVariant','GroupList','ChildItemsWidth','VerticalAlign','HorizontalSpacing','CustomSettingsFolder','SettingsStorage','Enabled','Scale')
 $props = [ordered]@{}
 foreach ($pn in $KNOWN_FORM_PROPS) {
 	$v = Get-Child $root $pn

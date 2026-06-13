@@ -1,4 +1,4 @@
-﻿# form-compile v1.167 — Compile 1C managed form from JSON or object metadata
+﻿# form-compile v1.168 — Compile 1C managed form from JSON or object metadata
 # Source: https://github.com/Nikolay-Shirokov/cc-1c-skills
 param(
 	[string]$JsonPath,
@@ -3269,6 +3269,12 @@ $script:genericScalars = @(
 	@{ Tag='MultipleValuesBackColor';      Key='multipleValuesBackColor';      Kind='value' }
 	@{ Tag='MultipleValuePictureShape';    Key='multipleValuePictureShape';    Kind='value' }
 	@{ Tag='MultipleValuePictureDataPath'; Key='multipleValuePictureDataPath'; Kind='value' }
+	# Хвост листовых скаляров (по 1 в корпусе): автокоррекция ввода (input) / уникальность команды
+	# (button) / допуск пустого множ. значения (input) / поведение при гориз. сжатии (table)
+	@{ Tag='AutoCorrectionOnTextInput';    Key='autoCorrectionOnTextInput';    Kind='value' }
+	@{ Tag='CommandUniqueness';            Key='commandUniqueness';            Kind='bool'  }
+	@{ Tag='AllowInputEmptyMultipleValues';Key='allowInputEmptyMultipleValues';Kind='bool'  }
+	@{ Tag='BehaviorOnHorizontalCompression'; Key='behaviorOnHorizontalCompression'; Kind='value' }
 )
 
 function Emit-GenericScalars {
@@ -3958,6 +3964,9 @@ function Emit-Check {
 	Emit-Layout -el $el -indent $inner
 
 	if ($null -ne $el.warningOnEdit) { Emit-MLText -tag "WarningOnEdit" -text $el.warningOnEdit -indent $inner }
+	# FooterDataPath / FooterText — общие cell-свойства колонки (как у input/labelField)
+	if ($el.footerDataPath) { X "$inner<FooterDataPath>$(Esc-Xml "$($el.footerDataPath)")</FooterDataPath>" }
+	if ($null -ne $el.footerText) { Emit-MLText -tag "FooterText" -text $el.footerText -indent $inner }
 
 	# Формат / формат редактирования (LocalStringType — строка или {ru,en})
 	if ($el.format)     { Emit-MLText -tag "Format" -text $el.format -indent $inner }
@@ -5014,7 +5023,12 @@ function Emit-CommandBar {
 
 	if ($el.autofill -eq $true) { X "$inner<Autofill>true</Autofill>" }
 
-	$hl = Get-HLocation $el; if ($hl) { X "$inner<HorizontalLocation>$hl</HorizontalLocation>" }
+	# CommandBar хранит HorizontalLocation фактически (включая Auto — декомпилятор ловит только при наличии);
+	# ≠ дополнениям, где Auto = умолчание-скип (Get-HLocation).
+	if ($el.horizontalLocation) {
+		$hlv = switch ("$($el.horizontalLocation)".ToLower()) { 'auto' {'Auto'} 'left' {'Left'} 'right' {'Right'} 'center' {'Center'} default {"$($el.horizontalLocation)"} }
+		X "$inner<HorizontalLocation>$hlv</HorizontalLocation>"
+	}
 	Emit-CommonFlags -el $el -indent $inner
 	Emit-Layout -el $el -indent $inner
 	Emit-Companion -tag "ExtendedTooltip" -name "${name}РасширеннаяПодсказка" -indent $inner -content $el.extendedTooltip
