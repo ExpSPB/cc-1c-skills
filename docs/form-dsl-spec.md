@@ -647,6 +647,8 @@ companion-панели с собственным контентом. Оба не
 | `title` | string/object | Заголовок группы |
 | `showTitle` | bool | Показывать заголовок |
 | `showInHeader` | bool | Показывать в шапке таблицы |
+| `headerDataPath` | string | Динамический заголовок группы из данных (`<HeaderDataPath>`, путь реквизита — заголовок берётся из значения) |
+| `headerFormat` | string/object | Формат заголовка группы (`<HeaderFormat>`, ML-текст — строка ru или `{ru,en}`) |
 | `width` | int | Ширина |
 | `horizontalStretch` | bool | Растягивание |
 | `children` | array | Колонки внутри группы |

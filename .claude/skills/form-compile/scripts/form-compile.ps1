@@ -1,4 +1,4 @@
-﻿# form-compile v1.150 — Compile 1C managed form from JSON or object metadata
+﻿# form-compile v1.151 — Compile 1C managed form from JSON or object metadata
 # Source: https://github.com/Nikolay-Shirokov/cc-1c-skills
 param(
 	[string]$JsonPath,
@@ -2914,6 +2914,7 @@ function Emit-Element {
 		"wrap"=1;"openButton"=1;"listChoiceMode"=1;"showInFooter"=1
 		"extendedEditMultipleValues"=1;"chooseType"=1;"autoCellHeight"=1
 		"choiceButtonRepresentation"=1;"footerHorizontalAlign"=1;"headerHorizontalAlign"=1
+		"headerDataPath"=1;"headerFormat"=1
 		"format"=1;"editFormat"=1;"choiceParameters"=1;"choiceParameterLinks"=1;"typeLink"=1
 		# label/hyperlink
 		"hyperlink"=1;"formatted"=1
@@ -3067,8 +3068,12 @@ function Emit-CommonElementProps {
 	foreach ($p in @(@('showInHeader','ShowInHeader'), @('showInFooter','ShowInFooter'), @('autoCellHeight','AutoCellHeight'))) {
 		if ($null -ne $el.($p[0])) { X "$indent<$($p[1])>$(if ($el.($p[0])){'true'}else{'false'})</$($p[1])>" }
 	}
+	# Динамический заголовок колонки-группы из данных (HeaderDataPath) — перед HeaderHorizontalAlign (порядок XSD)
+	if ($el.headerDataPath) { X "$indent<HeaderDataPath>$(Esc-Xml "$($el.headerDataPath)")</HeaderDataPath>" }
 	if ($el.footerHorizontalAlign) { X "$indent<FooterHorizontalAlign>$($el.footerHorizontalAlign)</FooterHorizontalAlign>" }
 	if ($el.headerHorizontalAlign) { X "$indent<HeaderHorizontalAlign>$($el.headerHorizontalAlign)</HeaderHorizontalAlign>" }
+	# Формат заголовка колонки-группы (ML-текст) — после HeaderHorizontalAlign (порядок XSD)
+	if ($el.headerFormat) { Emit-MLText -tag "HeaderFormat" -text $el.headerFormat -indent $indent }
 }
 
 # Картинка-ссылка с прозрачностью (HeaderPicture/FooterPicture/ValuesPicture/Page Picture).

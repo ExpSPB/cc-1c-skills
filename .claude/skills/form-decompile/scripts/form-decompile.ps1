@@ -1,4 +1,4 @@
-﻿# form-decompile v0.125 — Decompile 1C managed Form.xml to JSON DSL (draft)
+﻿# form-decompile v0.126 — Decompile 1C managed Form.xml to JSON DSL (draft)
 # Source: https://github.com/Nikolay-Shirokov/cc-1c-skills
 # ВНИМАНИЕ: раундтрип не гарантируется. Навык исключён из авто-использования моделью.
 param(
@@ -997,6 +997,9 @@ function Add-Layout {
 	}
 	$fha = Get-Child $node 'FooterHorizontalAlign'; if ($fha) { $obj['footerHorizontalAlign'] = $fha }
 	$hha = Get-Child $node 'HeaderHorizontalAlign'; if ($hha) { $obj['headerHorizontalAlign'] = $hha }
+	# ColumnGroup: динамический заголовок из данных + формат заголовка (ML-текст)
+	$hdp = Get-Child $node 'HeaderDataPath'; if ($hdp) { $obj['headerDataPath'] = $hdp }
+	$hfNode = $node.SelectSingleNode("lf:HeaderFormat", $ns); if ($hfNode) { $hf = Get-LangText $hfNode; if ($null -ne $hf) { $obj['headerFormat'] = $hf } }
 }
 
 # TitleLocation у check/radio (зеркало Emit-TitleLocation):

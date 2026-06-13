@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-# form-compile v1.150 — Compile 1C managed form from JSON or object metadata
+# form-compile v1.151 — Compile 1C managed form from JSON or object metadata
 # Source: https://github.com/Nikolay-Shirokov/cc-1c-skills
 import argparse
 import copy
@@ -2028,6 +2028,7 @@ KNOWN_KEYS = {
     "wrap", "openButton", "listChoiceMode", "showInHeader", "showInFooter",
     "extendedEditMultipleValues", "chooseType", "autoCellHeight",
     "choiceButtonRepresentation", "footerHorizontalAlign", "headerHorizontalAlign",
+    "headerDataPath", "headerFormat",
     "format", "editFormat", "choiceParameters", "choiceParameterLinks", "typeLink",
     "hyperlink", "formatted",
     "collapsedTitle", "showTitle", "united", "collapsed", "behavior",
@@ -2814,10 +2815,16 @@ def emit_common_element_props(lines, el, indent):
     for key, tag in (('showInHeader', 'ShowInHeader'), ('showInFooter', 'ShowInFooter'), ('autoCellHeight', 'AutoCellHeight')):
         if el.get(key) is not None:
             lines.append(f'{indent}<{tag}>{"true" if el[key] else "false"}</{tag}>')
+    # Динамический заголовок колонки-группы из данных (HeaderDataPath) — перед HeaderHorizontalAlign (порядок XSD)
+    if el.get('headerDataPath'):
+        lines.append(f"{indent}<HeaderDataPath>{esc_xml(str(el['headerDataPath']))}</HeaderDataPath>")
     if el.get('footerHorizontalAlign'):
         lines.append(f"{indent}<FooterHorizontalAlign>{el['footerHorizontalAlign']}</FooterHorizontalAlign>")
     if el.get('headerHorizontalAlign'):
         lines.append(f"{indent}<HeaderHorizontalAlign>{el['headerHorizontalAlign']}</HeaderHorizontalAlign>")
+    # Формат заголовка колонки-группы (ML-текст) — после HeaderHorizontalAlign (порядок XSD)
+    if el.get('headerFormat'):
+        emit_mltext(lines, indent, 'HeaderFormat', el['headerFormat'])
 
 
 def emit_picture_ref(lines, val, pic_tag, indent):
