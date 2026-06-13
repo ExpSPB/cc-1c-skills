@@ -1,4 +1,4 @@
-﻿# form-compile v1.165 — Compile 1C managed form from JSON or object metadata
+﻿# form-compile v1.166 — Compile 1C managed form from JSON or object metadata
 # Source: https://github.com/Nikolay-Shirokov/cc-1c-skills
 param(
 	[string]$JsonPath,
@@ -5230,6 +5230,7 @@ function Emit-DLValue {
 	if ($type -match '^(date|dateTime|time)') { X "$indent<dcssch:value xsi:type=`"xs:dateTime`">$(Esc-Xml $valStr)</dcssch:value>" }
 	elseif ($type -eq "boolean") { X "$indent<dcssch:value xsi:type=`"xs:boolean`">$(Esc-Xml $valStr)</dcssch:value>" }
 	elseif ($type -eq 'v8:Type') { $nsAttr = Get-ValueTypeNsAttr -valueType 'v8:Type' -value $valStr; X "$indent<dcssch:value$nsAttr xsi:type=`"v8:Type`">$(Esc-Xml $valStr)</dcssch:value>" }
+	elseif ($type -match '^ent:') { X "$indent<dcssch:value xsi:type=`"$type`">$(Esc-Xml $valStr)</dcssch:value>" }   # системное перечисление (ent:X) — value несёт тот же xsi:type
 	elseif ($type -match '^decimal') { X "$indent<dcssch:value xsi:type=`"xs:decimal`">$(Esc-Xml $valStr)</dcssch:value>" }
 	elseif ($type -match '^string') { X "$indent<dcssch:value xsi:type=`"xs:string`">$(Esc-Xml $valStr)</dcssch:value>" }
 	elseif ($type -match '^(CatalogRef|DocumentRef|EnumRef|ChartOfAccountsRef|ChartOfCharacteristicTypesRef|ChartOfCalculationTypesRef|BusinessProcessRef|TaskRef|ExchangePlanRef)\.') { X "$indent<dcssch:value xsi:type=`"dcscor:DesignTimeValue`">$(Esc-Xml $valStr)</dcssch:value>" }
@@ -5794,6 +5795,7 @@ function Emit-Attributes {
 						'itemsViewMode'         { X "$lsi<dcsset:itemsViewMode>Normal</dcsset:itemsViewMode>" }
 						'itemsUserSettingID'    { X "$lsi<dcsset:itemsUserSettingID>$($script:CANON_ITEMS_ID)</dcsset:itemsUserSettingID>" }
 						'itemsUserSettingPresentation' { Emit-USPresentation -val $pv -tag "dcsset:itemsUserSettingPresentation" -indent $lsi }
+						'dataParameters'        { Emit-DataParameters -items $st.dataParameters -indent $lsi }
 						'structure'             { Emit-ListGrouping (Get-ListGroupingValue $st) $lsi }
 					}
 				}

@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-# form-compile v1.165 — Compile 1C managed form from JSON or object metadata
+# form-compile v1.166 — Compile 1C managed form from JSON or object metadata
 # Source: https://github.com/Nikolay-Shirokov/cc-1c-skills
 import argparse
 import copy
@@ -4973,6 +4973,9 @@ def emit_dl_value(lines, type_str, val, indent, value_list_allowed=False):
     elif t == 'v8:Type':
         ns_attr = _value_type_ns_attr('v8:Type', val_str)
         lines.append(f'{indent}<dcssch:value{ns_attr} xsi:type="v8:Type">{esc_xml(val_str)}</dcssch:value>')
+    elif re.match(r'^ent:', t):
+        # системное перечисление (ent:X) — value несёт тот же xsi:type
+        lines.append(f'{indent}<dcssch:value xsi:type="{t}">{esc_xml(val_str)}</dcssch:value>')
     elif re.match(r'^decimal', t):
         lines.append(f'{indent}<dcssch:value xsi:type="xs:decimal">{esc_xml(val_str)}</dcssch:value>')
     elif re.match(r'^string', t):
@@ -5572,6 +5575,8 @@ def emit_attributes(lines, attrs, indent, conditional_appearance=None):
                         lines.append(f'{lsi}<dcsset:itemsUserSettingID>{CANON_ITEMS_ID}</dcsset:itemsUserSettingID>')
                     elif tag == 'itemsUserSettingPresentation':
                         emit_us_presentation(lines, lsi, 'dcsset:itemsUserSettingPresentation', pv)
+                    elif tag == 'dataParameters':
+                        emit_data_parameters(lines, s.get('dataParameters'), lsi)
                     elif tag == 'structure':
                         emit_list_grouping(lines, get_list_grouping_value(s), lsi)
             else:

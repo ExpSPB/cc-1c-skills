@@ -1,4 +1,4 @@
-﻿# form-decompile v0.141 — Decompile 1C managed Form.xml to JSON DSL (draft)
+﻿# form-decompile v0.142 — Decompile 1C managed Form.xml to JSON DSL (draft)
 # Source: https://github.com/Nikolay-Shirokov/cc-1c-skills
 # ВНИМАНИЕ: раундтрип не гарантируется. Навык исключён из авто-использования моделью.
 param(
@@ -145,8 +145,9 @@ function Get-ListSettingsShape {
 		} elseif ($tag -eq 'itemsViewMode') { $shape['itemsViewMode'] = $true }
 		elseif ($tag -eq 'itemsUserSettingID') { $shape['itemsUserSettingID'] = $true }
 		elseif ($tag -eq 'itemsUserSettingPresentation') { $shape['itemsUserSettingPresentation'] = Get-PresByType $child }   # items-уровневая подпись (форма по xsi:type)
+		elseif ($tag -eq 'dataParameters') { $shape['dataParameters'] = $true }   # значения параметров запроса (контент в settings.dataParameters)
 		elseif ($tag -eq 'item') { if ($hasGrouping) { $shape['structure'] = $true } else { return $null } }
-		else { return $null }  # dataParameters/… → канон-fallback
+		else { return $null }  # неизвестный top-level → канон-fallback
 	}
 	# Полный каноничный скелет → опускаем (компилятор регенерит)
 	if ($shape.Count -eq 5 -and $shape['filter'] -eq 'vu' -and $shape['order'] -eq 'vu' -and `
@@ -1485,11 +1486,17 @@ function Build-DLParameter {
 	# value — опускаем nil (дефолт), КРОМЕ valueListAllowed+nil: платформа пишет <value xsi:nil/>
 	# не всегда (корпус 27 с / 47 без), а компилятор при valueListAllowed по умолчанию его НЕ эмитит →
 	# явный маркер value:null, чтобы реэмитить nil. (Различается через Has-DLProp в компиляторе.)
-	$vNode = $pNode.SelectSingleNode("dcssch:value", $ns)
-	if ($vNode -and ($vNode.GetAttribute("nil", $NS_XSI) -ne 'true')) {
-		$o['value'] = Convert-TypedValue -raw $vNode.InnerText -xsiType ($vNode.GetAttribute("type", $NS_XSI))
-	} elseif ($vNode -and ((Get-Child $pNode 'valueListAllowed') -eq 'true')) {
-		$o['value'] = $null
+	$vNodes = @($pNode.SelectNodes("dcssch:value", $ns))
+	if ($vNodes.Count -gt 1) {
+		# valueListAllowed: список значений — захватываем ВСЕ <dcssch:value> массивом
+		$o['value'] = @($vNodes | ForEach-Object { Convert-TypedValue -raw $_.InnerText -xsiType ($_.GetAttribute("type", $NS_XSI)) })
+	} elseif ($vNodes.Count -eq 1) {
+		$vNode = $vNodes[0]
+		if ($vNode.GetAttribute("nil", $NS_XSI) -ne 'true') {
+			$o['value'] = Convert-TypedValue -raw $vNode.InnerText -xsiType ($vNode.GetAttribute("type", $NS_XSI))
+		} elseif ((Get-Child $pNode 'valueListAllowed') -eq 'true') {
+			$o['value'] = $null
+		}
 	}
 	# useRestriction — опускаем true (дефолт), фиксируем false
 	if ((Get-Child $pNode 'useRestriction') -eq 'false') { $o['useRestriction'] = $false }
