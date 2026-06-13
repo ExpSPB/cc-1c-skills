@@ -1,4 +1,4 @@
-﻿# form-compile v1.162 — Compile 1C managed form from JSON or object metadata
+﻿# form-compile v1.163 — Compile 1C managed form from JSON or object metadata
 # Source: https://github.com/Nikolay-Shirokov/cc-1c-skills
 param(
 	[string]$JsonPath,
@@ -3754,6 +3754,9 @@ function Emit-Group {
 		X "$inner<Representation>$repr</Representation>"
 	}
 
+	# Использование текущей строки группы (после Representation, порядок XSD)
+	if ($el.currentRowUse) { X "$inner<CurrentRowUse>$($el.currentRowUse)</CurrentRowUse>" }
+
 	# ShowTitle
 	if ($null -ne $el.showTitle) { X "$inner<ShowTitle>$(if ($el.showTitle){'true'}else{'false'})</ShowTitle>" }
 	# Заголовок свёрнутого представления (collapsible/popup) — мультиязычный текст
@@ -4869,6 +4872,8 @@ function Emit-PictureField {
 	if ($el.hyperlink -eq $true) { X "$inner<Hyperlink>true</Hyperlink>" }
 
 	Emit-Layout -el $el -indent $inner
+	# EnableDrag — фактическое значение (поле картинки перетаскиваемо; декомпилятор ловит generic-ом)
+	if ($null -ne $el.enableDrag) { X "$inner<EnableDrag>$(if ($el.enableDrag){'true'}else{'false'})</EnableDrag>" }
 
 	# FooterDataPath / FooterText — общие cell-свойства колонки (как у input/labelField)
 	if ($el.footerDataPath) { X "$inner<FooterDataPath>$(Esc-Xml "$($el.footerDataPath)")</FooterDataPath>" }
@@ -5118,6 +5123,9 @@ function Emit-AttrColumn {
 	X "$indent<Column name=`"$($col.name)`" id=`"$colId`">"
 	if ($col.title) { Emit-MLText -tag "Title" -text $col.title -indent "$indent`t" }
 	Emit-Type -typeStr "$($col.type)" -indent "$indent`t"
+	# Проверка заполнения колонки → <FillCheck> (как у реквизита; bool true→ShowError / строка verbatim)
+	$cfcRaw = if ($null -ne $col.PSObject.Properties['fillCheck']) { $col.fillCheck } elseif ($null -ne $col.PSObject.Properties['fillChecking']) { $col.fillChecking } else { $null }
+	if ($null -ne $cfcRaw) { $cfcv = if ($cfcRaw -is [bool]) { if ($cfcRaw) { 'ShowError' } else { $null } } else { "$cfcRaw" }; if ($cfcv) { X "$indent`t<FillCheck>$cfcv</FillCheck>" } }
 	Emit-FunctionalOptions -fo $col.functionalOptions -indent "$indent`t"
 	# Ролевой доступ колонки (View/Edit) — xr-флаг, как у самого реквизита
 	if ($null -ne $col.view) { Emit-XrFlag -tag 'View' -val $col.view -indent "$indent`t" }

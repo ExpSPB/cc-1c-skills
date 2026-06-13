@@ -59,6 +59,7 @@
 | `usePostingMode` | `<UsePostingMode>` | `Auto`, `Postings`, `Movements` |
 | `repostOnWrite` | `<RepostOnWrite>` | `true` / `false` |
 | `autoURL` | `<AutoURL>` | `true` / `false` |
+| `enabled` | `<Enabled>` | `true` / `false` — доступность всей формы (редкое; форма-уровень) |
 | `autoFillCheck` | `<AutoFillCheck>` | `true` / `false` |
 | `customizable` | `<Customizable>` | `true` / `false` |
 | `enterKeyBehavior` | `<EnterKeyBehavior>` | `DefaultButton`, `NewLine` |
@@ -372,6 +373,7 @@ companion-панели с собственным контентом. Оба не
 | `children` | array | Вложенные элементы |
 | `showTitle` | bool | Показывать заголовок группы |
 | `representation` | string | `none`, `normal`, `weak`, `strong` |
+| `currentRowUse` | string | Использование текущей строки группы (`<CurrentRowUse>`: `DontUse`/`Use`/…) — редкое |
 | `united` | bool | Объединение |
 
 #### input — InputField
@@ -857,7 +859,7 @@ Forgiving-синонимы типа: XML-имя (`SpreadSheetDocumentField`) и 
 | `savedData` | bool | Сохраняемые данные (`<SavedData>`). **`false`** → суппресс авто-вывода компилятора (main-реквизит объектного типа Catalog/Document/ChartOf*/ExchangePlan/BusinessProcess/Task Object + RecordManager → `SavedData=true`). Нет ключа → авто-вывод |
 | `save` | bool/string/array | Сохранение значения в пользовательских настройках (`<Save><Field>…`). `true` → `<Field>имя</Field>`; строка/массив строк → под-поля с авто-префиксом `имя.` (путь с точкой / ссылка вида `N/M` или `N/M:…` / совпадающее с именем — берётся как есть). Нет ключа или `false` → не эмитится. Пример периода: `["Период","EndDate","StartDate","Variant"]`. **Многоуровневый путь** (напр. `КомпоновщикНастроек.Settings.Filter`) хранится ПОЛНЫМ (декомпилятор снимает префикс `имя.` только у простого под-поля без точки — иначе компилятор по dot-правилу не реинъектит префикс) |
 | `fillCheck` | bool/string | Проверка заполнения реквизита (`<FillCheck>`). `true` → `ShowError` (единственное значение в схеме); строка → verbatim. Синоним `fillChecking`. (`<FillChecking>` в схеме нет — был багом) |
-| `columns` | array | Колонки для ValueTable/ValueTree (`{ name, type, title?, functionalOptions?, view?, edit?, useAlways? }`). `view`/`edit` — ролевой доступ колонки (`<View>`/`<Edit>` xr-флаг, тот же формат `bool \| {common, roles}`, что у реквизита, §4.1c; редкое) |
+| `columns` | array | Колонки для ValueTable/ValueTree (`{ name, type, title?, fillCheck?, functionalOptions?, view?, edit?, useAlways? }`). `fillCheck` — проверка заполнения колонки (как у реквизита: `true`→`ShowError` / строка). `view`/`edit` — ролевой доступ колонки (`<View>`/`<Edit>` xr-флаг, тот же формат `bool \| {common, roles}`, что у реквизита, §4.1c; редкое) |
 | `additionalColumns` | array | Доп. колонки табличных частей объекта: `[{ table: "Объект.ТабЧасть", columns: [<col>] }]`. У главного реквизита-объекта; `<col>` — та же грамматика, что у `columns`. Эмитятся в `<Columns>` после прямых колонок |
 | `settings` | object | Настройки динамического списка (только `type: "DynamicList"`) |
 | `planner` | object | Design-time конфигурация планировщика (только `type: "pl:Planner"`, `<Settings xsi:type="pl:Planner">`). См. ниже |

@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-# form-compile v1.162 — Compile 1C managed form from JSON or object metadata
+# form-compile v1.163 — Compile 1C managed form from JSON or object metadata
 # Source: https://github.com/Nikolay-Shirokov/cc-1c-skills
 import argparse
 import copy
@@ -3856,6 +3856,10 @@ def emit_group(lines, el, name, eid, indent):
         repr_val = repr_map.get(str(el['representation']), str(el['representation']))
         lines.append(f'{inner}<Representation>{repr_val}</Representation>')
 
+    # Использование текущей строки группы (после Representation, порядок XSD)
+    if el.get('currentRowUse'):
+        lines.append(f'{inner}<CurrentRowUse>{el["currentRowUse"]}</CurrentRowUse>')
+
     # ShowTitle
     if el.get('showTitle') is not None:
         lines.append(f'{inner}<ShowTitle>{"true" if el["showTitle"] else "false"}</ShowTitle>')
@@ -4600,6 +4604,9 @@ def emit_picture_field(lines, el, name, eid, indent):
         lines.append(f'{inner}<Hyperlink>true</Hyperlink>')
 
     emit_layout(lines, el, inner)
+    # EnableDrag — фактическое значение (поле картинки перетаскиваемо; декомпилятор ловит generic-ом)
+    if el.get('enableDrag') is not None:
+        lines.append(f'{inner}<EnableDrag>{"true" if el["enableDrag"] else "false"}</EnableDrag>')
 
     # FooterDataPath / FooterText — общие cell-свойства колонки (как у input/labelField)
     if el.get('footerDataPath'):
@@ -4844,6 +4851,12 @@ def emit_attr_column(lines, col, indent):
     if col.get('title'):
         emit_mltext(lines, f'{indent}\t', 'Title', col['title'])
     emit_type(lines, str(col.get('type', '')), f'{indent}\t')
+    # Проверка заполнения колонки → <FillCheck> (как у реквизита; bool true→ShowError / строка verbatim)
+    cfc = col.get('fillCheck') if col.get('fillCheck') is not None else col.get('fillChecking')
+    if cfc is not None:
+        cfcv = ('ShowError' if cfc else None) if isinstance(cfc, bool) else str(cfc)
+        if cfcv:
+            lines.append(f'{indent}\t<FillCheck>{cfcv}</FillCheck>')
     emit_functional_options(lines, col.get('functionalOptions'), f'{indent}\t')
     # Ролевой доступ колонки (View/Edit) — xr-флаг, как у самого реквизита
     if col.get('view') is not None:
