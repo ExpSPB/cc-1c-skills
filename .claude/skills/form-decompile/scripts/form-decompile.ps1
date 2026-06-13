@@ -1,4 +1,4 @@
-﻿# form-decompile v0.143 — Decompile 1C managed Form.xml to JSON DSL (draft)
+﻿# form-decompile v0.144 — Decompile 1C managed Form.xml to JSON DSL (draft)
 # Source: https://github.com/Nikolay-Shirokov/cc-1c-skills
 # ВНИМАНИЕ: раундтрип не гарантируется. Навык исключён из авто-использования моделью.
 param(
@@ -648,6 +648,7 @@ function Build-FilterItem {
 			if ($null -ne $bi) { $items += $bi }
 		}
 		$gObj = [ordered]@{ group = $groupName; items = $items }
+		if ((Get-Text $itemNode "dcsset:use") -eq 'false') { $gObj['use'] = $false }   # группа отключена (@off)
 		$gPresNode = $itemNode.SelectSingleNode("dcsset:presentation", $ns)
 		if ($gPresNode) {
 			# Сохраняем форму по xsi:type (LocalStringType ru-only ≠ xs:string)

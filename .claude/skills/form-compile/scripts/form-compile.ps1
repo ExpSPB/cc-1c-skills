@@ -1,4 +1,4 @@
-﻿# form-compile v1.166 — Compile 1C managed form from JSON or object metadata
+﻿# form-compile v1.167 — Compile 1C managed form from JSON or object metadata
 # Source: https://github.com/Nikolay-Shirokov/cc-1c-skills
 param(
 	[string]$JsonPath,
@@ -1695,6 +1695,7 @@ function Emit-FilterItem {
 	if ($item.group) {
 		$groupType = switch ("$($item.group)") { "And" { "AndGroup" } "Or" { "OrGroup" } "Not" { "NotGroup" } default { "$($item.group)Group" } }
 		X "$indent<dcsset:item xsi:type=`"dcsset:FilterItemGroup`">"
+		if ($item.use -eq $false) { X "$indent`t<dcsset:use>false</dcsset:use>" }   # группа отключена (перед groupType, порядок исходника)
 		X "$indent`t<dcsset:groupType>$groupType</dcsset:groupType>"
 		if ($item.items) {
 			foreach ($sub in $item.items) {

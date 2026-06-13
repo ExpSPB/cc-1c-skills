@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-# form-compile v1.166 — Compile 1C managed form from JSON or object metadata
+# form-compile v1.167 — Compile 1C managed form from JSON or object metadata
 # Source: https://github.com/Nikolay-Shirokov/cc-1c-skills
 import argparse
 import copy
@@ -1441,6 +1441,8 @@ def emit_filter_item(lines, item, indent):
         g = str(item['group'])
         group_type = {'And': 'AndGroup', 'Or': 'OrGroup', 'Not': 'NotGroup'}.get(g, g + 'Group')
         lines.append(f'{indent}<dcsset:item xsi:type="dcsset:FilterItemGroup">')
+        if item.get('use') is False:
+            lines.append(f'{indent}\t<dcsset:use>false</dcsset:use>')   # группа отключена (перед groupType)
         lines.append(f'{indent}\t<dcsset:groupType>{group_type}</dcsset:groupType>')
         if item.get('items'):
             for sub in item['items']:
