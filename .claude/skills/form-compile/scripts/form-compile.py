@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-# form-compile v1.171 — Compile 1C managed form from JSON or object metadata
+# form-compile v1.172 — Compile 1C managed form from JSON or object metadata
 # Source: https://github.com/Nikolay-Shirokov/cc-1c-skills
 import argparse
 import copy
@@ -3827,6 +3827,11 @@ def emit_element(lines, el, indent, in_cmd_bar=False):
             emitter(lines, el, name, eid, indent)
 
 
+def _warn_unrecognized(key, raw, valid, owner):
+    # drop-on-miss enum: значение не распознано → тег не эмитится. Громко, чтобы автор увидел потерю.
+    print(f"[WARN] Unrecognized {key} '{raw}' on '{owner}'. Valid values: {', '.join(valid)}. Value ignored.")
+
+
 def emit_group(lines, el, name, eid, indent):
     lines.append(f'{indent}<UsualGroup name="{name}" id="{eid}"{di_attr(el)}>')
     inner = f'{indent}\t'
@@ -3847,12 +3852,16 @@ def emit_group(lines, el, name, eid, indent):
     orientation = orientation_map.get(group_val)
     if orientation:
         lines.append(f'{inner}<Group>{orientation}</Group>')
+    elif group_val:
+        _warn_unrecognized('group orientation', el.get('group'), ('vertical', 'horizontalIfPossible', 'alwaysHorizontal'), name)
 
     # Behavior: ключ behavior (usual/collapsible/popup) → <Behavior>; отсутствие = Авто (не эмитим).
     behavior_val = str(el['behavior']).lower() if el.get('behavior') else ('collapsible' if group_val == 'collapsible' else None)
     bmap = {'usual': 'Usual', 'collapsible': 'Collapsible', 'popup': 'PopUp'}
     if behavior_val and behavior_val in bmap:
         lines.append(f'{inner}<Behavior>{bmap[behavior_val]}</Behavior>')
+    elif el.get('behavior') and behavior_val not in bmap:
+        _warn_unrecognized('behavior', el.get('behavior'), ('collapsible', 'popup'), name)
     # Collapsed — у Collapsible и PopUp (не привязано к одному behavior)
     if el.get('collapsed') is True:
         lines.append(f'{inner}<Collapsed>true</Collapsed>')
@@ -3914,15 +3923,17 @@ def emit_column_group(lines, el, name, eid, indent):
 
     emit_title(lines, el, name, inner)
 
-    group_val = str(el.get('columnGroup', ''))
+    group_val = str(el.get('columnGroup', '')).lower()
     orientation_map = {
         'horizontal': 'Horizontal',
         'vertical': 'Vertical',
-        'inCell': 'InCell',
+        'incell': 'InCell',
     }
     orientation = orientation_map.get(group_val)
     if orientation:
         lines.append(f'{inner}<Group>{orientation}</Group>')
+    elif group_val:
+        _warn_unrecognized('columnGroup orientation', el.get('columnGroup'), ('vertical', 'horizontal', 'inCell'), name)
 
     if el.get('showTitle') is not None:
         lines.append(f'{inner}<ShowTitle>{"true" if el["showTitle"] else "false"}</ShowTitle>')
@@ -4428,13 +4439,15 @@ def emit_page(lines, el, name, eid, indent):
         orientation_map = {
             'horizontal': 'Horizontal',
             'vertical': 'Vertical',
-            'alwaysHorizontal': 'AlwaysHorizontal',
-            'alwaysVertical': 'AlwaysVertical',
-            'horizontalIfPossible': 'HorizontalIfPossible',
+            'alwayshorizontal': 'AlwaysHorizontal',
+            'alwaysvertical': 'AlwaysVertical',
+            'horizontalifpossible': 'HorizontalIfPossible',
         }
-        orientation = orientation_map.get(str(el['group']))
+        orientation = orientation_map.get(str(el['group']).lower())
         if orientation:
             lines.append(f'{inner}<Group>{orientation}</Group>')
+        else:
+            _warn_unrecognized('page group orientation', el['group'], ('vertical', 'horizontalIfPossible', 'alwaysHorizontal'), name)
     if el.get('showTitle') is not None:
         lines.append(f'{inner}<ShowTitle>{"true" if el["showTitle"] else "false"}</ShowTitle>')
     # Формат значения пути к данным заголовка (<Format>; парный к titleDataPath страницы)

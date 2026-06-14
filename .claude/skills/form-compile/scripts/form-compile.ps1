@@ -1,4 +1,4 @@
-﻿# form-compile v1.171 — Compile 1C managed form from JSON or object metadata
+﻿# form-compile v1.172 — Compile 1C managed form from JSON or object metadata
 # Source: https://github.com/Nikolay-Shirokov/cc-1c-skills
 param(
 	[string]$JsonPath,
@@ -3719,6 +3719,12 @@ function Emit-TitleLocation {
 	}
 }
 
+function Warn-Unrecognized {
+	# drop-on-miss enum: значение не распознано → тег не эмитится. Громко, чтобы автор увидел потерю.
+	param([string]$key, $raw, [string[]]$valid, [string]$owner)
+	Write-Warning "Unrecognized $key '$raw' on '$owner'. Valid values: $($valid -join ', '). Value ignored."
+}
+
 function Emit-Group {
 	param($el, [string]$name, [int]$id, [string]$indent)
 
@@ -3739,6 +3745,7 @@ function Emit-Group {
 		default            { $null }
 	}
 	if ($orientation) { X "$inner<Group>$orientation</Group>" }
+	elseif ($groupVal) { Warn-Unrecognized 'group orientation' $el.group @('vertical','horizontalIfPossible','alwaysHorizontal') $name }
 
 	# Behavior: ключ behavior (usual/collapsible/popup) → <Behavior>; отсутствие = Авто (не эмитим).
 	# Legacy: group:'collapsible' эквивалентно behavior:'collapsible'.
@@ -3746,6 +3753,8 @@ function Emit-Group {
 	$bmap = @{ "usual"="Usual"; "collapsible"="Collapsible"; "popup"="PopUp" }
 	if ($behaviorVal -and $bmap.ContainsKey($behaviorVal)) {
 		X "$inner<Behavior>$($bmap[$behaviorVal])</Behavior>"
+	} elseif ($el.behavior -and -not $bmap.ContainsKey($behaviorVal)) {
+		Warn-Unrecognized 'behavior' $el.behavior @('collapsible','popup') $name
 	}
 	# Collapsed — у Collapsible и PopUp (не привязано к одному behavior)
 	if ($el.collapsed -eq $true) { X "$inner<Collapsed>true</Collapsed>" }
@@ -3815,6 +3824,7 @@ function Emit-ColumnGroup {
 		default      { $null }
 	}
 	if ($orientation) { X "$inner<Group>$orientation</Group>" }
+	elseif ($groupVal) { Warn-Unrecognized 'columnGroup orientation' $el.columnGroup @('vertical','horizontal','inCell') $name }
 
 	if ($null -ne $el.showTitle) { X "$inner<ShowTitle>$(if ($el.showTitle){'true'}else{'false'})</ShowTitle>" }
 	# showInHeader эмитится общим Emit-CommonElementProps (через Emit-Layout)
@@ -4698,6 +4708,7 @@ function Emit-Page {
 			default               { $null }
 		}
 		if ($orientation) { X "$inner<Group>$orientation</Group>" }
+		else { Warn-Unrecognized 'page group orientation' $el.group @('vertical','horizontalIfPossible','alwaysHorizontal') $name }
 	}
 	if ($null -ne $el.showTitle) { X "$inner<ShowTitle>$(if ($el.showTitle){'true'}else{'false'})</ShowTitle>" }
 	# Формат значения пути к данным заголовка (<Format>; парный к titleDataPath страницы)
