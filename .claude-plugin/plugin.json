@@ -27,5 +27,6 @@
     "testing",
     "test-automation"
   ],
-  "skills": "./.claude/skills/"
+  "skills": "./.claude/skills/",
+  "hooks": "./hooks/hooks.json"
 }
