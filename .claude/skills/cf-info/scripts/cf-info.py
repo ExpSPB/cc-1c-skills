@@ -1,9 +1,10 @@
 #!/usr/bin/env python3
-# cf-info v1.2 — Compact summary of 1C configuration root
+# cf-info v1.3 — Compact summary of 1C configuration root
 # Source: https://github.com/Nikolay-Shirokov/cc-1c-skills
 
 import argparse
 import os
+import re
 import sys
 from collections import OrderedDict
 from lxml import etree
@@ -219,6 +220,71 @@ def get_home_page_layout():
 
 home_page = get_home_page_layout()
 
+# --- Support state (Ext/ParentConfigurations.bin) ---
+# Decodes the 1C support-state file. See docs/1c-support-state-spec.md.
+# Returns None on absent/error; else dict: state='absent'|'removed'|'parsed',
+#   g (0=editing on, 1=off), k (vendor configs), vendors [{vendor,name,version}],
+#   counts [locked, editable, removed] by f1 — record tally (k>1 counts each
+#   vendor block separately); only computed when g==0.
+def read_support_state(bin_path):
+    try:
+        if not os.path.isfile(bin_path):
+            return {"state": "absent"}
+        data = open(bin_path, "rb").read()
+        if len(data) <= 32:
+            return {"state": "removed"}
+        if data[:3] == b"\xef\xbb\xbf":
+            data = data[3:]
+        text = data.decode("utf-8", "replace")
+        h = re.match(r"\{6,(\d+),(\d+),", text)
+        if not h:
+            return None
+        g = int(h.group(1))
+        k = int(h.group(2))
+        if k == 0:
+            return {"state": "removed"}
+        vendors = []
+        for m in re.finditer(r'"((?:[^"]|"")*)","((?:[^"]|"")*)","((?:[^"]|"")*)",\d+,', text):
+            vendors.append({
+                "version": m.group(1).replace('""', '"'),
+                "vendor": m.group(2).replace('""', '"'),
+                "name": m.group(3).replace('""', '"'),
+            })
+        counts = None
+        if g == 0:
+            counts = [0, 0, 0]
+            for m in re.finditer(r"([0-2]),0,[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}", text):
+                counts[int(m.group(1))] += 1
+        return {"state": "parsed", "g": g, "k": k, "vendors": vendors, "counts": counts}
+    except Exception:
+        return None
+
+def get_support_lines():
+    config_dir = os.path.dirname(config_path)
+    bin_path = os.path.join(config_dir, "Ext", "ParentConfigurations.bin")
+    st = read_support_state(bin_path)
+    res = []
+    if not st or st["state"] == "absent":
+        if cfg_ext_purpose:
+            res.append("Поддержка:      расширение (CFE), правки свободны")
+        else:
+            res.append("Поддержка:      не на поддержке (своя конфигурация)")
+        return res
+    if st["state"] == "removed":
+        res.append("Поддержка:      снята с поддержки полностью")
+        return res
+    res.append("Поддержка:      на поддержке")
+    if st["g"] == 0:
+        res.append("  Возможность изменения: включена")
+        res.append(f"  Объектов: на замке {st['counts'][0]} / редактируется {st['counts'][1]} / снято {st['counts'][2]}")
+    else:
+        res.append("  Возможность изменения: выключена — вся конфигурация read-only (правки заблокированы)")
+    res.append(f"  Конфигураций поставщика: {st['k']}")
+    if st["k"] > 1:
+        for v in st["vendors"]:
+            res.append(f"  Поставщик: {v['vendor']} — {v['name']} {v['version']}")
+    return res
+
 def format_home_page_item(it, detailed):
     badges = [f"h={it['height']}"]
     if not it["common"]:
@@ -249,6 +315,7 @@ cfg_version = get_prop_text("Version")
 cfg_vendor = get_prop_text("Vendor")
 cfg_compat = get_prop_text("CompatibilityMode")
 cfg_ext_compat = get_prop_text("ConfigurationExtensionCompatibilityMode")
+cfg_ext_purpose = get_prop_text("ConfigurationExtensionPurpose")
 cfg_default_run = get_prop_text("DefaultRunMode")
 cfg_script = get_prop_text("ScriptVariant")
 cfg_default_lang = get_prop_text("DefaultLanguage")
@@ -281,6 +348,8 @@ if args.Mode == "overview" and not args.Section:
         out(f"Поставщик:      {cfg_vendor}")
     if cfg_version:
         out(f"Версия:         {cfg_version}")
+    for ln in get_support_lines():
+        out(ln)
     out(f"Совместимость:  {cfg_compat}")
     out(f"Режим запуска:  {cfg_default_run}")
     out(f"Язык скриптов:  {cfg_script}")
@@ -369,6 +438,8 @@ if args.Mode == "full" and not args.Section:
         out(f"Поставщик:      {cfg_vendor}")
     if cfg_version:
         out(f"Версия:         {cfg_version}")
+    for ln in get_support_lines():
+        out(ln)
     cfg_update_addr = get_prop_text("UpdateCatalogAddress")
     if cfg_update_addr:
         out(f"Каталог обн.:   {cfg_update_addr}")
