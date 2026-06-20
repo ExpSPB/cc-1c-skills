@@ -181,37 +181,46 @@ console.log('=== skill-suggester: PostToolUse nudge ===');
   writeFileSync(join(SYNTH, 'ext', 'Configuration.xml'),
     '<?xml version="1.0"?>\n<MetaDataObject><Configuration uuid="x"><Properties><ConfigurationExtensionPurpose>Customization</ConfigurationExtensionPurpose></Properties></Configuration></MetaDataObject>');
 
-  const read = (fp, session = 's1', tool = 'Read') => suggest({ tool_name: tool, session_id: session, cwd: REPO, tool_input: { file_path: fp } }, { throttleDir: THR });
+  const call = (fp, session, tool) => suggest({ tool_name: tool, session_id: session, cwd: REPO, tool_input: { file_path: fp } }, { throttleDir: THR });
+  const read = (fp, session = 's1') => call(fp, session, 'Read');
+  const edit = (fp, session = 's1') => call(fp, session, 'Edit');
   const grp = (r) => { try { return JSON.parse(r.stdout)?.hookSpecificOutput?.additionalContext; } catch { return null; } };
 
+  // Read → info-skill; Edit → mutator-skill (same group, distinct nudge).
   const rMeta = read(join(SYNTH, 'Catalogs', 'Locked.xml'), 'A');
-  check('suggest Catalogs/X.xml → meta nudge', /meta-info/.test(grp(rMeta) || ''), rMeta.stdout);
-  const rMeta2 = read(join(SYNTH, 'Catalogs', 'Editable.xml'), 'A'); // same session+group
-  check('suggest second meta same session → silent (throttle)', rMeta2.stdout === '', rMeta2.stdout);
+  check('Read Catalogs/X.xml → meta-info', /meta-info/.test(grp(rMeta) || ''), rMeta.stdout);
+  const rMetaEdit = edit(join(SYNTH, 'Catalogs', 'Editable.xml'), 'A'); // same session+group, write action
+  check('Edit Catalogs/X.xml → meta-edit (not throttled by the read)', /meta-edit/.test(grp(rMetaEdit) || ''), rMetaEdit.stdout);
+  const rMeta2 = read(join(SYNTH, 'Catalogs', 'Editable.xml'), 'A'); // same session+group+action → throttled
+  check('second Read meta same session → silent (throttle)', rMeta2.stdout === '', rMeta2.stdout);
   const rForm = read(join(SYNTH, 'Catalogs', 'Obj', 'Forms', 'F', 'Ext', 'Form.xml'), 'A');
-  check('suggest Form.xml (diff group, same session) → form nudge', /form-info/.test(grp(rForm) || ''), rForm.stdout);
+  check('Read Form.xml (diff group) → form-info', /form-info/.test(grp(rForm) || ''), rForm.stdout);
 
   const rMxl = read(join(SYNTH, 'Catalogs', 'Obj', 'Templates', 'Print', 'Ext', 'Template.xml'), 'B');
-  check('suggest spreadsheet Template → mxl', /mxl-/.test(grp(rMxl) || ''), rMxl.stdout);
-  const rSkd = read(join(SYNTH, 'Catalogs', 'Obj', 'Templates', 'Scheme', 'Ext', 'Template.xml'), 'B');
-  check('suggest DCS Template → skd', /skd-/.test(grp(rSkd) || ''), rSkd.stdout);
+  check('Read spreadsheet Template → mxl-info', /mxl-info/.test(grp(rMxl) || ''), rMxl.stdout);
+  const rSkd = edit(join(SYNTH, 'Catalogs', 'Obj', 'Templates', 'Scheme', 'Ext', 'Template.xml'), 'B');
+  check('Edit DCS Template → skd-edit', /skd-edit/.test(grp(rSkd) || ''), rSkd.stdout);
   const rRole = read(join(SYNTH, 'Roles', 'R', 'Ext', 'Rights.xml'), 'B');
-  check('suggest Rights.xml → role', /role-/.test(grp(rRole) || ''), rRole.stdout);
+  check('Read Rights.xml → role-info', /role-info/.test(grp(rRole) || ''), rRole.stdout);
 
   const rCf = read(join(ACC, 'Configuration.xml'), 'C');
-  check('suggest base Configuration.xml → cf', /cf-info/.test(grp(rCf) || ''), rCf.stdout);
+  check('Read base Configuration.xml → cf-info', /cf-info/.test(grp(rCf) || ''), rCf.stdout);
   const rCfe = read(join(SYNTH, 'ext', 'Configuration.xml'), 'C');
-  check('suggest extension Configuration.xml → cfe', /cfe-/.test(grp(rCfe) || ''), rCfe.stdout);
+  check('Read extension Configuration.xml → cfe/cf-info', /cfe-diff|cf-info/.test(grp(rCfe) || ''), rCfe.stdout);
+  const rCfeEdit = edit(join(SYNTH, 'ext', 'Configuration.xml'), 'C');
+  check('Edit extension Configuration.xml → cfe-borrow/patch', /cfe-borrow|cfe-patch-method/.test(grp(rCfeEdit) || ''), rCfeEdit.stdout);
 
   // blind spots
   const rBsl = read(join(SYNTH, 'Catalogs', 'Obj', 'Ext', 'ObjectModule.bsl'), 'D');
-  check('suggest .bsl → silent', rBsl.stdout === '', rBsl.stdout);
+  check('Read .bsl → silent', rBsl.stdout === '', rBsl.stdout);
   const rReadme = read(join(REPO, 'README.md'), 'D');
-  check('suggest non-1C file → silent', rReadme.stdout === '', rReadme.stdout);
+  check('Read non-1C file → silent', rReadme.stdout === '', rReadme.stdout);
 
-  // Grep/Glob search
+  // search tools no longer nudge
   const rGrep = suggest({ tool_name: 'Grep', session_id: 'E', cwd: REPO, tool_input: { path: join(ACC, 'Catalogs'), pattern: 'foo' } }, { throttleDir: THR });
-  check('suggest Grep under Catalogs → search nudge', /\*-info/.test(grp(rGrep) || ''), rGrep.stdout);
+  check('Grep → silent (search trigger removed)', rGrep.stdout === '', rGrep.stdout);
+  const rGlob = suggest({ tool_name: 'Glob', session_id: 'E', cwd: REPO, tool_input: { pattern: '**/Catalogs/*.xml' } }, { throttleDir: THR });
+  check('Glob → silent (search trigger removed)', rGlob.stdout === '', rGlob.stdout);
 
   // skillSuggester off
   writeFileSync(join(SYNTH, '.v8-project.json'), JSON.stringify({ skillSuggester: 'off' }));

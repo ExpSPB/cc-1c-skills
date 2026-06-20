@@ -7,28 +7,24 @@
 // Throttled to 1×/session/skill-group via marker files. Switch: skillSuggester (on|off)
 // in .v8-project.json. Never throws.
 
-import { classifyFile, classifySearch } from './common/object-class.mjs';
+import { classifyFile } from './common/object-class.mjs';
 import { findConfigRoot } from './common/support-state.mjs';
 import { getSuggesterMode } from './common/project.mjs';
 import { resolve, isAbsolute, join } from 'node:path';
 import { existsSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 
+// Only file-targeting tools — these are where a skill genuinely substitutes the raw action.
+// Content search (Grep/Glob) is intentionally NOT nudged: *-info skills help understand a
+// located object, not find one by content.
 function pickTarget(input, cwd) {
   const ti = input.tool_input || {};
   const tool = input.tool_name;
-  let raw = null, kind = 'file';
-  if (tool === 'Read' || tool === 'Edit' || tool === 'Write' || tool === 'MultiEdit') {
-    raw = typeof ti.file_path === 'string' ? ti.file_path
-      : (Array.isArray(ti.file_edits) && ti.file_edits[0]?.file_path) || null;
-  } else if (tool === 'Grep') {
-    raw = typeof ti.path === 'string' ? ti.path : null; kind = 'search';
-  } else if (tool === 'Glob') {
-    raw = typeof ti.path === 'string' ? ti.path : (typeof ti.pattern === 'string' ? ti.pattern : null); kind = 'search';
-  }
+  if (tool !== 'Read' && tool !== 'Edit' && tool !== 'Write' && tool !== 'MultiEdit') return null;
+  const raw = typeof ti.file_path === 'string' ? ti.file_path
+    : (Array.isArray(ti.file_edits) && ti.file_edits[0]?.file_path) || null;
   if (!raw) return null;
-  const path = isAbsolute(raw) ? raw : resolve(cwd, raw);
-  return { path, kind };
+  return isAbsolute(raw) ? raw : resolve(cwd, raw);
 }
 
 function sanitize(s) {
@@ -40,24 +36,31 @@ export function processInput(input, opts = {}) {
   const empty = { stdout: '', stderr: '', exitCode: 0 };
   try {
     const cwd = typeof input.cwd === 'string' ? input.cwd : process.cwd();
-    const t = pickTarget(input, cwd);
-    if (!t) return empty;
+    const path = pickTarget(input, cwd);
+    if (!path) return empty;
 
-    const hit = t.kind === 'search' ? classifySearch(t.path) : classifyFile(t.path);
+    const hit = classifyFile(path);
     if (!hit) return empty;
 
-    const { cfgDir } = findConfigRoot(t.path);
+    // Read → info-skill; Edit/Write/MultiEdit → mutator-skill.
+    const action = input.tool_name === 'Read' ? 'read' : 'write';
+    const message = hit[action];
+    if (!message) return empty;
+
+    const { cfgDir } = findConfigRoot(path);
     if (getSuggesterMode(cfgDir, cwd) === 'off') return empty;
 
+    // Throttle per (session, group, action): at most one read-nudge and one write-nudge
+    // per skill-group per session.
     const dir = opts.throttleDir || tmpdir();
-    const marker = join(dir, `cc-1c-suggest-${sanitize(input.session_id)}-${hit.group}`);
-    if (existsSync(marker)) return empty; // already nudged this group this session
+    const marker = join(dir, `cc-1c-suggest-${sanitize(input.session_id)}-${hit.group}-${action}`);
+    if (existsSync(marker)) return empty;
     try { writeFileSync(marker, ''); } catch { /* throttle best-effort */ }
 
     const decision = {
       hookSpecificOutput: {
         hookEventName: 'PostToolUse',
-        additionalContext: `[1c-skills] ${hit.message}`,
+        additionalContext: `[1c-skills] ${message}`,
       },
     };
     return { stdout: JSON.stringify(decision), stderr: '', exitCode: 0 };

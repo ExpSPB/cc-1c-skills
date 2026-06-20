@@ -1,7 +1,7 @@
 // object-class.mjs v1.0 — classify a 1C source path → relevant skill group (suggester)
 // Source: https://github.com/Nikolay-Shirokov/cc-1c-skills
 //
-// Conservative path→skill map for the skill-suggester hook. Returns { group, message }
+// Conservative path→skill map for the skill-suggester hook. Returns { group, read, write }
 // or null (stay silent) when the path is not a recognizable 1C artifact. Distinguishes
 // cf vs cfe (extension) by sniffing <ConfigurationExtensionPurpose> in Configuration.xml,
 // and mxl vs skd templates by the root namespace. Never throws.
@@ -21,17 +21,45 @@ const META_COLLECTIONS = new Set([
   'Sequences', 'ExternalDataSources', 'IntegrationServices',
 ]);
 
+// Per-group nudges, split by action: `read` → info-skill (понять структуру),
+// `write` → mutator-skill (безопасно изменить). Подсказка зависит от того, что делает модель.
 const MESSAGES = {
-  meta: 'Структуру объекта 1С быстрее даёт навык `meta-info` (одна сводка вместо сырого XML), а структурные правки — `meta-edit` (реквизиты/ТЧ/измерения/ресурсы).',
-  form: 'Для управляемой формы 1С есть `form-info` (анализ элементов/реквизитов/команд) и `form-edit` (точечные правки).',
-  mxl: 'Это табличный документ 1С: `mxl-info`/`mxl-decompile` дают редактируемое описание, `mxl-compile` собирает обратно.',
-  skd: 'Это схема компоновки данных (СКД): `skd-info` для анализа, `skd-edit` для точечных правок.',
-  role: 'Для прав роли 1С есть `role-info` (сводка прав/RLS) и `role-compile` (создание из DSL).',
-  cf: 'Корень конфигурации 1С: `cf-info` (обзор состава/свойств) и `cf-edit` (правки настроек/состава).',
-  cfe: 'Это расширение конфигурации (CFE): `cfe-diff` для анализа, а доработку безопаснее вести через `cfe-borrow`/`cfe-patch-method`.',
-  subsystem: 'Подсистема 1С: `subsystem-info` (состав/дерево) и `subsystem-edit` (правки состава/свойств).',
-  template: 'Это макет объекта 1С: для табличного документа — навыки `mxl-*`, для СКД — `skd-*`.',
-  search: 'Для навигации по метаданным 1С есть структурированные навыки `*-info` (meta-info/cf-info/form-info/…) — обычно быстрее сырого поиска по XML.',
+  meta: {
+    read: 'Структуру объекта 1С быстрее даёт навык `meta-info` (одна сводка вместо сырого XML).',
+    write: 'Структурные правки объекта (реквизиты/ТЧ/измерения/ресурсы) безопаснее через `meta-edit` — он следит за uuid, порядком и валидностью.',
+  },
+  form: {
+    read: 'Управляемую форму 1С удобнее разбирать навыком `form-info` (элементы/реквизиты/команды/события).',
+    write: 'Правки формы (добавить элементы/реквизиты/команды) — через `form-edit`, а не ручной правкой XML.',
+  },
+  mxl: {
+    read: 'Это табличный документ 1С: `mxl-info` показывает области/параметры, `mxl-decompile` даёт редактируемое описание.',
+    write: 'Табличный документ правят не вручную: `mxl-decompile` → правка JSON → `mxl-compile`.',
+  },
+  skd: {
+    read: 'Это схема компоновки данных (СКД): `skd-info` показывает наборы/поля/параметры.',
+    write: 'Точечные правки СКД — через `skd-edit` (поля/итоги/фильтры/текст запроса).',
+  },
+  role: {
+    read: 'Права роли удобнее смотреть навыком `role-info` (объекты/права/RLS).',
+    write: 'Роль создают и правят из DSL навыком `role-compile`.',
+  },
+  cf: {
+    read: 'Корень конфигурации удобнее смотреть навыком `cf-info` (свойства/состав/счётчики объектов).',
+    write: 'Правки корня (свойства/состав/роли по умолчанию/интерфейс) — через `cf-edit`.',
+  },
+  cfe: {
+    read: 'Это расширение конфигурации (CFE): свойства и состав читает `cf-info`, специфику (заимствования/перехватчики/проверку переноса) — `cfe-diff`.',
+    write: 'Доработку в расширении безопаснее вести навыками `cfe-borrow`/`cfe-patch-method`, а не ручной правкой XML.',
+  },
+  subsystem: {
+    read: 'Подсистему удобнее смотреть навыком `subsystem-info` (состав/дерево/командный интерфейс).',
+    write: 'Правки подсистемы (состав/дочерние/свойства) — через `subsystem-edit`.',
+  },
+  template: {
+    read: 'Это макет объекта 1С: для табличного документа — `mxl-info`, для СКД — `skd-info`.',
+    write: 'Макет правят навыками: табличный документ — `mxl-*`, СКД — `skd-*`.',
+  },
 };
 
 function segments(p) {
@@ -48,7 +76,7 @@ function sniffRoot(path) {
   }
 }
 
-// Classify a concrete file path. Returns { group, message } or null.
+// Classify a concrete file path. Returns { group, read, write } (action-specific nudges) or null.
 export function classifyFile(path) {
   try {
     const segs = segments(path);
@@ -90,19 +118,6 @@ export function classifyFile(path) {
   }
 }
 
-// Classify a Grep/Glob search target: if it points inside a 1C config tree (or a known
-// collection appears in the path/pattern) → suggest the info-skills. Best-effort, lean silent.
-export function classifySearch(target) {
-  try {
-    if (!target) return null;
-    const segs = segments(target);
-    if (segs.some((s) => META_COLLECTIONS.has(s) || s === 'Roles' || s === 'Subsystems')) return mk('search');
-    return null;
-  } catch {
-    return null;
-  }
-}
-
 function mk(group) {
-  return { group, message: MESSAGES[group] };
+  return { group, read: MESSAGES[group].read, write: MESSAGES[group].write };
 }
