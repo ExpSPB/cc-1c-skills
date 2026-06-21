@@ -1,4 +1,4 @@
-﻿# db-dump-cf v1.2 — Dump 1C configuration to CF file
+﻿# db-dump-cf v1.3 — Dump 1C configuration to CF file
 # Source: https://github.com/Nikolay-Shirokov/cc-1c-skills
 <#
 .SYNOPSIS
@@ -152,6 +152,7 @@ try {
         $arguments = @("infobase", "config", "save", "--db-path=$InfoBasePath")
         if ($Extension) { $arguments += "--extension=$Extension" }
         $arguments += "$OutputFile"
+        $arguments += "--data=$tempDir"
         Write-Host "Running: ibcmd $($arguments -join ' ')"
         $output = & $V8Path @arguments 2>&1
         $exitCode = $LASTEXITCODE

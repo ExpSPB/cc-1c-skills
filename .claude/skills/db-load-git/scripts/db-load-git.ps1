@@ -1,4 +1,4 @@
-﻿# db-load-git v1.6 — Load Git changes into 1C database
+﻿# db-load-git v1.7 — Load Git changes into 1C database
 # Source: https://github.com/Nikolay-Shirokov/cc-1c-skills
 <#
 .SYNOPSIS
@@ -339,6 +339,7 @@ try {
         $arguments = @("infobase", "config", "import", "files") + $configFiles
         $arguments += "--base-dir=$ConfigDir", "--db-path=$InfoBasePath"
         if ($Extension) { $arguments += "--extension=$Extension" }
+        $arguments += "--data=$tempDir"
         Write-Host "Running: ibcmd $($arguments -join ' ')"
         $output = & $V8Path @arguments 2>&1
         $exitCode = $LASTEXITCODE
@@ -351,6 +352,7 @@ try {
         if ($output) { Write-Host ($output | Out-String) }
         if ($UpdateDB) {
             $applyArgs = @("infobase", "config", "apply", "--db-path=$InfoBasePath", "--force")
+            $applyArgs += "--data=$tempDir"
             Write-Host "Running: ibcmd $($applyArgs -join ' ')"
             $applyOut = & $V8Path @applyArgs 2>&1
             $exitCode = $LASTEXITCODE

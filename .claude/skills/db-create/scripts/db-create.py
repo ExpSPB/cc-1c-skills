@@ -1,8 +1,9 @@
 #!/usr/bin/env python3
-# db-create v1.2 — Create 1C information base
+# db-create v1.3 — Create 1C information base
 # Source: https://github.com/Nikolay-Shirokov/cc-1c-skills
 
 import argparse
+import atexit
 import glob
 import json
 import os
@@ -106,6 +107,9 @@ def main():
                 arguments.append(f"--restore={args.UseTemplate}")
             else:
                 arguments.extend([f"--load={args.UseTemplate}", "--apply"])
+        ib_data = tempfile.mkdtemp(prefix="ibcmd_data_")
+        atexit.register(shutil.rmtree, ib_data, ignore_errors=True)
+        arguments.append(f"--data={ib_data}")
         print(f"Running: ibcmd {' '.join(arguments)}")
         result = subprocess.run([v8path] + arguments, capture_output=True, encoding="utf-8", errors="replace")
         if result.returncode == 0:

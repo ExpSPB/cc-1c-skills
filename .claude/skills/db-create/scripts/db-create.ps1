@@ -1,4 +1,4 @@
-﻿# db-create v1.2 — Create 1C information base
+﻿# db-create v1.3 — Create 1C information base
 # Source: https://github.com/Nikolay-Shirokov/cc-1c-skills
 <#
 .SYNOPSIS
@@ -144,6 +144,7 @@ try {
                 $arguments += "--load=$UseTemplate", "--apply"
             }
         }
+        $arguments += "--data=$tempDir"
         Write-Host "Running: ibcmd $($arguments -join ' ')"
         $output = & $V8Path @arguments 2>&1
         $exitCode = $LASTEXITCODE

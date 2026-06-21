@@ -1,8 +1,9 @@
 #!/usr/bin/env python3
-# db-update v1.2 — Update 1C database configuration
+# db-update v1.3 — Update 1C database configuration
 # Source: https://github.com/Nikolay-Shirokov/cc-1c-skills
 
 import argparse
+import atexit
 import glob
 import json
 import os
@@ -110,6 +111,9 @@ def main():
             arguments.append("--dynamic=disable")
         if args.Extension:
             arguments.append(f"--extension={args.Extension}")
+        ib_data = tempfile.mkdtemp(prefix="ibcmd_data_")
+        atexit.register(shutil.rmtree, ib_data, ignore_errors=True)
+        arguments.append(f"--data={ib_data}")
         print(f"Running: ibcmd {' '.join(arguments)}")
         result = subprocess.run([v8path] + arguments, capture_output=True, encoding="utf-8", errors="replace")
         if result.returncode == 0:

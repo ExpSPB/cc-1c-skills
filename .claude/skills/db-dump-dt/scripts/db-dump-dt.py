@@ -1,8 +1,9 @@
 #!/usr/bin/env python3
-# db-dump-dt v1.2 — Dump 1C information base to DT file
+# db-dump-dt v1.3 — Dump 1C information base to DT file
 # Source: https://github.com/Nikolay-Shirokov/cc-1c-skills
 
 import argparse
+import atexit
 import glob
 import json
 import os
@@ -106,6 +107,9 @@ def main():
         if args.Password:
             arguments.append(f"--password={args.Password}")
         arguments.append(args.OutputFile)
+        ib_data = tempfile.mkdtemp(prefix="ibcmd_data_")
+        atexit.register(shutil.rmtree, ib_data, ignore_errors=True)
+        arguments.append(f"--data={ib_data}")
         print(f"Running: ibcmd {' '.join(arguments)}")
         result = subprocess.run([v8path] + arguments, capture_output=True, encoding="utf-8", errors="replace")
         if result.returncode == 0:

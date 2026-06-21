@@ -1,4 +1,4 @@
-﻿# db-update v1.2 — Update 1C database configuration
+﻿# db-update v1.3 — Update 1C database configuration
 # Source: https://github.com/Nikolay-Shirokov/cc-1c-skills
 <#
 .SYNOPSIS
@@ -160,6 +160,7 @@ try {
         if ($Dynamic -eq "+") { $arguments += "--dynamic=auto" }
         elseif ($Dynamic -eq "-") { $arguments += "--dynamic=disable" }
         if ($Extension) { $arguments += "--extension=$Extension" }
+        $arguments += "--data=$tempDir"
         Write-Host "Running: ibcmd $($arguments -join ' ')"
         $output = & $V8Path @arguments 2>&1
         $exitCode = $LASTEXITCODE

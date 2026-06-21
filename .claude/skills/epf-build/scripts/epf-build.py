@@ -1,8 +1,9 @@
 #!/usr/bin/env python3
-# epf-build v1.2 — Build external data processor or report (EPF/ERF) from XML sources
+# epf-build v1.3 — Build external data processor or report (EPF/ERF) from XML sources
 # Source: https://github.com/Nikolay-Shirokov/cc-1c-skills
 
 import argparse
+import atexit
 import glob
 import json
 import os
@@ -125,6 +126,9 @@ def main():
             # --- ibcmd branch: build EPF/ERF via config import --out ---
             src_dir = os.path.dirname(os.path.abspath(args.SourceFile))
             arguments = ["infobase", "config", "import", src_dir, f"--out={args.OutputFile}", f"--db-path={args.InfoBasePath}"]
+            ib_data = tempfile.mkdtemp(prefix="ibcmd_data_")
+            atexit.register(shutil.rmtree, ib_data, ignore_errors=True)
+            arguments.append(f"--data={ib_data}")
             print(f"Running: ibcmd {' '.join(arguments)}")
             result = subprocess.run([v8path] + arguments, capture_output=True, encoding="utf-8", errors="replace")
             if result.returncode == 0:

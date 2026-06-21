@@ -1,4 +1,4 @@
-﻿# db-load-dt v1.2 — Load 1C information base from DT file
+﻿# db-load-dt v1.3 — Load 1C information base from DT file
 # Source: https://github.com/Nikolay-Shirokov/cc-1c-skills
 <#
 .SYNOPSIS
@@ -148,6 +148,7 @@ try {
         if ($Password) { $arguments += "--password=$Password" }
         $arguments += "$InputFile"
 
+        $arguments += "--data=$tempDir"
         Write-Host "Running: ibcmd $($arguments -join ' ')"
         $output = & $V8Path @arguments 2>&1
         $exitCode = $LASTEXITCODE
