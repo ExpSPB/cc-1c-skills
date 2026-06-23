@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-# cfe-borrow v1.5 — Borrow objects from configuration into extension (CFE)
+# cfe-borrow v1.6 — Borrow objects from configuration into extension (CFE)
 # Source: https://github.com/Nikolay-Shirokov/cc-1c-skills
 
 import argparse
@@ -1483,12 +1483,16 @@ def main():
         save_text_bom(form_xml_file, "".join(parts))
         info(f"  Created: {form_xml_file}")
 
-        # 6. Create empty Module.bsl
+        # 6. Create empty Module.bsl — but NEVER overwrite an existing one (re-borrow must
+        # not clobber user code added to the form module).
         module_dir = os.path.join(form_xml_dir, "Form")
         os.makedirs(module_dir, exist_ok=True)
         module_bsl_file = os.path.join(module_dir, "Module.bsl")
-        save_text_bom(module_bsl_file, "")
-        info(f"  Created: {module_bsl_file}")
+        if os.path.isfile(module_bsl_file):
+            info("  Preserved existing Module.bsl")
+        else:
+            save_text_bom(module_bsl_file, "")
+            info(f"  Created: {module_bsl_file}")
 
         # 7. Register form in parent object ChildObjects
         register_form_in_object(type_name, obj_name, form_name)

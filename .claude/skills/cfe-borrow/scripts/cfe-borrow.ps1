@@ -1,4 +1,4 @@
-﻿# cfe-borrow v1.5 — Borrow objects from configuration into extension (CFE)
+﻿# cfe-borrow v1.6 — Borrow objects from configuration into extension (CFE)
 # Source: https://github.com/Nikolay-Shirokov/cc-1c-skills
 param(
 	[Parameter(Mandatory)][string]$ExtensionPath,
@@ -882,14 +882,19 @@ function Borrow-Form {
 	[System.IO.File]::WriteAllText($formXmlFile, $formXmlSb.ToString(), $enc)
 	Info "  Created: $formXmlFile"
 
-	# 6. Create empty Module.bsl
+	# 6. Create empty Module.bsl — but NEVER overwrite an existing one (re-borrow must
+	# not clobber user code added to the form module).
 	$moduleDir = Join-Path $formXmlDir "Form"
 	if (-not (Test-Path $moduleDir)) {
 		New-Item -ItemType Directory -Path $moduleDir -Force | Out-Null
 	}
 	$moduleBslFile = Join-Path $moduleDir "Module.bsl"
-	[System.IO.File]::WriteAllText($moduleBslFile, "", $enc)
-	Info "  Created: $moduleBslFile"
+	if (Test-Path $moduleBslFile) {
+		Info "  Preserved existing Module.bsl"
+	} else {
+		[System.IO.File]::WriteAllText($moduleBslFile, "", $enc)
+		Info "  Created: $moduleBslFile"
+	}
 
 	# 7. Register form in parent object ChildObjects
 	Register-FormInObject $typeName $objName $formName
