@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-# cfe-borrow v1.6 — Borrow objects from configuration into extension (CFE)
+# cfe-borrow v1.7 — Borrow objects from configuration into extension (CFE)
 # Source: https://github.com/Nikolay-Shirokov/cc-1c-skills
 
 import argparse
@@ -1198,7 +1198,10 @@ def main():
         src_form_tree = etree.parse(src_form_xml_path, src_form_parser)
         src_form_el = src_form_tree.getroot()
 
-        form_version = src_form_el.get("version", format_version)
+        # Borrowed form uses the extension's format version (not the source form's) — keeps the
+        # extension uniform; otherwise the platform rejects the import on a version mismatch
+        # (e.g. a 2.13 form inside a 2.17 extension). The platform upgrades the form to the root version.
+        form_version = format_version
 
         src_auto_cmd = None
         form_props = []

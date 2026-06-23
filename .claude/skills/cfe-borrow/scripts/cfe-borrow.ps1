@@ -1,4 +1,4 @@
-﻿# cfe-borrow v1.6 — Borrow objects from configuration into extension (CFE)
+﻿# cfe-borrow v1.7 — Borrow objects from configuration into extension (CFE)
 # Source: https://github.com/Nikolay-Shirokov/cc-1c-skills
 param(
 	[Parameter(Mandatory)][string]$ExtensionPath,
@@ -556,8 +556,10 @@ function Borrow-Form {
 	$srcFormDoc.Load($srcFormXmlPath)
 	$srcFormEl = $srcFormDoc.DocumentElement
 
-	$formVersion = $srcFormEl.GetAttribute("version")
-	if (-not $formVersion) { $formVersion = $script:formatVersion }
+	# Borrowed form must use the extension's format version (not the source form's), so the whole
+	# extension stays uniform — otherwise the platform rejects the import on a version mismatch
+	# (e.g. a 2.13 form inside a 2.17 extension). The platform itself upgrades the form to the root version.
+	$formVersion = $script:formatVersion
 
 	# Find direct children: form properties, AutoCommandBar, ChildItems
 	$srcAutoCmd = $null
