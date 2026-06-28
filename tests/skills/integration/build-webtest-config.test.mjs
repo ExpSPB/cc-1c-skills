@@ -469,6 +469,23 @@ export const steps = [
     validate: { script: 'meta-validate/scripts/meta-validate', flag: '-ObjectPath', path: 'DataProcessors/ДеревоНоменклатуры' },
   },
 
+  // Обработка МножественныйВыбор — поля ввода типа «список значений» (ValueList)
+  // для тестов мультивыбора. Основная форма: 4 поля (Организации/Контрагенты —
+  // штатный редактор платформы; ЧерезФлажки/ЧерезПодбор — через StartChoice
+  // открывают вторую форму ФормаВводаЗначений). Вторая форма — обрезанный порт
+  // БСП «ВводЗначенийСпискомСФлажками»: безшапочная таблица Check+Value, Подбор/
+  // Установить-Снять флажки, ОК/Отмена. Режим A (предзагрузка кандидатов + флажки,
+  // без Подбора) vs B (пул + Подбор → каталог) решается по СпособВыбора типа значений.
+  {
+    name: 'meta-compile: Обработка МножественныйВыбор',
+    script: 'meta-compile/scripts/meta-compile',
+    input: {
+      type: 'DataProcessor', name: 'МножественныйВыбор',
+    },
+    args: { '-JsonPath': '{inputFile}', '-OutputDir': '{workDir}' },
+    validate: { script: 'meta-validate/scripts/meta-validate', flag: '-ObjectPath', path: 'DataProcessors/МножественныйВыбор' },
+  },
+
   // Отчёт ОстаткиТоваров
   {
     name: 'meta-compile: Отчёт ОстаткиТоваров',
@@ -1026,6 +1043,294 @@ export const steps = [
 `,
   },
 
+  // Обработка МножественныйВыбор — основная форма с 4 полями типа «список значений».
+  {
+    name: 'form-add: Основная форма МножественныйВыбор',
+    script: 'form-add/scripts/form-add',
+    args: { '-ObjectPath': '{workDir}/DataProcessors/МножественныйВыбор.xml', '-FormName': 'ФормаОбработки' },
+  },
+  {
+    name: 'form-compile: Основная форма МножественныйВыбор',
+    script: 'form-compile/scripts/form-compile',
+    input: {
+      title: 'Множественный выбор',
+      attributes: [
+        { name: 'Объект', type: 'DataProcessorObject.МножественныйВыбор', main: true },
+        // 4 реквизита формы типа «список значений». Тип значений задаётся ДЕКЛАРАТИВНО
+        // через valueType → <Settings xsi:type="v8:TypeDescription"> (form-compile),
+        // без программной установки ТипЗначения в коде.
+        { name: 'ОрганизацииСписок', type: 'ValueList', valueType: 'CatalogRef.Организации' },
+        { name: 'КонтрагентыСписок', type: 'ValueList', valueType: 'CatalogRef.Контрагенты' },
+        { name: 'ЧерезФлажки', type: 'ValueList', valueType: 'CatalogRef.Организации' },
+        { name: 'ЧерезПодбор', type: 'ValueList', valueType: 'CatalogRef.Номенклатура' },
+        // Граничный случай: поле без расширенного редактирования и без переопределения
+        // выбора — чистая платформенная реализация списка значений.
+        { name: 'СписокПлатформенный', type: 'ValueList', valueType: 'CatalogRef.Контрагенты' },
+      ],
+      elements: [
+        // Организации/Контрагенты — без StartChoice → штатный редактор списка значений
+        // платформы (отдельная, ещё не покрытая движком поверхность).
+        // extendedEditMultipleValues:true — «Расширенное редактирование множественных
+        // значений»: поле ввода работает как редактор списка значений (кнопка выбора
+        // открывает форму ввода значений, в свёрнутом виде показывает «знач, +N»).
+        { input: 'ОрганизацииСписок', path: 'ОрганизацииСписок', title: 'Организации (список)', extendedEditMultipleValues: true },
+        { input: 'КонтрагентыСписок', path: 'КонтрагентыСписок', title: 'Контрагенты (список)', extendedEditMultipleValues: true },
+        // ЧерезФлажки/ЧерезПодбор — StartChoice открывает кастомную ФормаВводаЗначений.
+        { input: 'ЧерезФлажки', path: 'ЧерезФлажки', title: 'Через флажки', extendedEditMultipleValues: true, choiceButton: true,
+          on: ['StartChoice'], handlers: { StartChoice: 'ЧерезФлажкиНачалоВыбора' } },
+        { input: 'ЧерезПодбор', path: 'ЧерезПодбор', title: 'Через подбор', extendedEditMultipleValues: true, choiceButton: true,
+          on: ['StartChoice'], handlers: { StartChoice: 'ЧерезПодборНачалоВыбора' } },
+        // Граничный случай — без extendedEditMultipleValues и без StartChoice: как платформа
+        // отрисует и отредактирует список значений «из коробки».
+        { input: 'СписокПлатформенный', path: 'СписокПлатформенный', title: 'Без расширенного (платформ.)' },
+      ],
+    },
+    args: { '-JsonPath': '{inputFile}', '-OutputPath': '{workDir}/DataProcessors/МножественныйВыбор/Forms/ФормаОбработки/Ext/Form.xml' },
+    validate: { script: 'form-validate/scripts/form-validate', flag: '-FormPath', path: 'DataProcessors/МножественныйВыбор/Forms/ФормаОбработки/Ext/Form.xml' },
+  },
+  {
+    name: 'writeFile: МножественныйВыбор основная форма Module.bsl',
+    writeFile: 'DataProcessors/МножественныйВыбор/Forms/ФормаОбработки/Ext/Form/Module.bsl',
+    content: `&НаКлиенте
+Процедура ЧерезФлажкиНачалоВыбора(Элемент, ДанныеВыбора, СтандартнаяОбработка)
+\tСтандартнаяОбработка = Ложь;
+\tОткрытьФормуВыбора("ЧерезФлажки");
+КонецПроцедуры
+
+&НаКлиенте
+Процедура ЧерезПодборНачалоВыбора(Элемент, ДанныеВыбора, СтандартнаяОбработка)
+\tСтандартнаяОбработка = Ложь;
+\tОткрытьФормуВыбора("ЧерезПодбор");
+КонецПроцедуры
+
+&НаКлиенте
+Процедура ОткрытьФормуВыбора(ИмяРеквизита)
+\t// Тип значений берём из самого реквизита (задан декларативно через valueType),
+\t// не хардкодим — единый источник истины.
+\tСписокЗнч = ЭтотОбъект[ИмяРеквизита];
+\tПарам = Новый Структура;
+\tПарам.Вставить("ОписаниеТипов", СписокЗнч.ТипЗначения);
+\tПарам.Вставить("Отмеченные", СписокЗнч);
+\tОпов = Новый ОписаниеОповещения("ПослеВыбораЗначений", ЭтотОбъект, ИмяРеквизита);
+\tОткрытьФорму("Обработка.МножественныйВыбор.Форма.ФормаВводаЗначений", Парам, ЭтотОбъект, , , , Опов, РежимОткрытияОкнаФормы.БлокироватьОкноВладельца);
+КонецПроцедуры
+
+&НаКлиенте
+Процедура ПослеВыбораЗначений(Результат, ИмяРеквизита) Экспорт
+\tЕсли Результат = Неопределено Тогда
+\t\tВозврат;
+\tКонецЕсли;
+\t// Обновляем существующий список поля НА МЕСТЕ, не подменяя объект — иначе теряется
+\t// декларированный ТипЗначения реквизита и повторное открытие уходит в режим B.
+\tСписокПоля = ЭтотОбъект[ИмяРеквизита];
+\tСписокПоля.Очистить();
+\tДля Каждого Эл Из Результат Цикл
+\t\tСписокПоля.Добавить(Эл.Значение, Эл.Представление);
+\tКонецЦикла;
+КонецПроцедуры
+`,
+  },
+
+  // Обработка МножественныйВыбор — форма ввода значений (обрезанный порт БСП-формы
+  // ВводЗначенийСпискомСФлажками): безшапочная таблица Check+Value, режим A/B по СпособВыбора.
+  {
+    name: 'form-add: ФормаВводаЗначений МножественныйВыбор',
+    script: 'form-add/scripts/form-add',
+    args: { '-ObjectPath': '{workDir}/DataProcessors/МножественныйВыбор.xml', '-FormName': 'ФормаВводаЗначений' },
+  },
+  {
+    name: 'form-compile: ФормаВводаЗначений МножественныйВыбор',
+    script: 'form-compile/scripts/form-compile',
+    // Структура получена через /form-decompile titan-формы ВводЗначенийСпискомСФлажками
+    // и обрезана: убраны только БСП-специфика («Вставить из буфера обмена» + её команда/
+    // картинка) и обработчики событий таблицы (их БСП-процедуры не портируются). Командная
+    // панель с группами кнопок, безшапочная таблица (Header=false, CommandBarLocation=None,
+    // ColumnGroup InCell: Пометка+Значение), подвал (гиперссылка «Подобрать ещё» + ОК/Отмена)
+    // — как в оригинале. main-реквизит form-compile не требует (как у CommonForm-оригинала).
+    input: {
+      title: 'Выбор значений',
+      properties: { autoTitle: false, windowOpeningMode: 'LockOwnerWindow' },
+      events: { OnCreateAtServer: 'ПриСозданииНаСервере' },
+      elements: [
+        {
+          autoCmdBar: 'ФормаКоманднаяПанель', autofill: false,
+          children: [
+            { buttonGroup: 'СписокДобавлениеУдаление', title: { ru: 'Добавление удаление', en: 'Add delete' }, children: [
+              { button: 'СписокПодбор', stdCommand: 'Список.Pickup', type: 'commandBar' },
+              { button: 'СписокДобавить', stdCommand: 'Список.Add', type: 'commandBar', locationInCommandBar: 'InAdditionalSubmenu' },
+              { button: 'СписокУдалить', stdCommand: 'Список.Delete', type: 'commandBar' },
+            ]},
+            { buttonGroup: 'СписокВключениеОтключениеФлажков', title: { ru: 'Включение отключение флажков', en: 'Select clear check boxes' }, representation: 'Compact', children: [
+              { button: 'СписокУстановитьФлажки', stdCommand: 'Список.CheckAll', type: 'commandBar', locationInCommandBar: 'InCommandBarAndInAdditionalSubmenu' },
+              { button: 'СписокСнятьФлажки', stdCommand: 'Список.UncheckAll', type: 'commandBar', locationInCommandBar: 'InCommandBarAndInAdditionalSubmenu' },
+            ]},
+            { buttonGroup: 'СписокСортировка', title: { ru: 'Сортировка', en: 'Sort' }, representation: 'Compact', children: [
+              { button: 'СписокСортироватьПоВозрастанию', stdCommand: 'Список.SortListAsc', type: 'commandBar' },
+              { button: 'СписокСортироватьПоУбыванию', stdCommand: 'Список.SortListDesc', type: 'commandBar' },
+            ]},
+            { buttonGroup: 'СписокПеремещение', title: { ru: 'Перемещение', en: 'Move' }, representation: 'Compact', children: [
+              { button: 'СписокПереместитьВверх', stdCommand: 'Список.MoveUp', type: 'commandBar' },
+              { button: 'СписокПереместитьВниз', stdCommand: 'Список.MoveDown', type: 'commandBar' },
+            ]},
+            { searchString: 'СтрокаПоиска', source: 'Список', title: { ru: 'Поиск', en: 'Search' } },
+            { button: 'ФормаИзменитьФорму', stdCommand: 'CustomizeForm', type: 'commandBar' },
+            { button: 'ФормаСправка', stdCommand: 'Help', type: 'commandBar' },
+          ],
+        },
+        {
+          table: 'Список', path: 'Список', title: { ru: 'Список', en: 'List' },
+          excludedCommands: ['Change', 'Copy', 'EndEdit'],
+          representation: 'List', autoInsertNewRow: true, header: false, commandBarLocation: 'None',
+          verticalLines: false, horizontalLines: false, rowPictureDataPath: 'Список.Picture',
+          fileDragMode: 'AsFile', commandBar: { autofill: false },
+          // ChoiceProcessing — подобранные через Подбор значения добавляются с Пометка=Истина
+          // (как в БСП-оригинале), иначе они вернутся неотмеченными и выпадут из результата.
+          events: { ChoiceProcessing: 'СписокОбработкаВыбора' },
+          columns: [
+            { columnGroup: 'inCell', name: 'Колонки', title: { ru: 'Колонки', en: 'Columns' }, children: [
+              { check: 'СписокПометка', path: 'Список.Check', title: { ru: 'Пометка', en: 'Checkbox' }, editMode: 'EnterOnInput', titleLocation: '' },
+              { input: 'СписокЗначение', path: 'Список.Value', title: { ru: 'Значение', en: 'Value' }, editMode: 'EnterOnInput' },
+            ]},
+          ],
+        },
+        {
+          group: '', behavior: 'usual', name: 'Подвал', title: { ru: 'Подвал', en: 'Footer' },
+          representation: 'none', showTitle: false,
+          children: [
+            { button: 'СписокПодборПодвал', stdCommand: 'Список.Pickup', title: { ru: 'Подобрать еще', en: 'Pick more' }, type: 'hyperlink' },
+            { cmdBar: 'НижняяКоманднаяПанель', title: { ru: 'Нижняя командная панель', en: 'Bottom command bar' }, horizontalLocation: 'right', children: [
+              { button: 'КомандаОК', command: 'ЗавершитьРедактирование', title: { ru: 'ОК', en: 'OK' }, type: 'commandBar', defaultButton: true },
+              { button: 'ФормаОтмена', stdCommand: 'Cancel', type: 'commandBar' },
+            ]},
+          ],
+        },
+      ],
+      attributes: [
+        { name: 'Список', type: 'ValueList', title: { ru: 'Список', en: 'List' } },
+      ],
+      parameters: [
+        { name: 'ОписаниеТипов' },
+        { name: 'ЗначенияДляВыбора', type: 'ValueList' },
+        { name: 'Отмеченные', type: 'ValueList' },
+        { name: 'Представление', type: 'string' },
+      ],
+      commands: [
+        { name: 'ЗавершитьРедактирование', action: 'ЗавершитьРедактирование', title: { ru: 'ОК', en: 'OK' },
+          tooltip: { ru: 'Завершить редактирование', en: 'Finish editing' }, currentRowUse: 'DontUse' },
+      ],
+    },
+    args: { '-JsonPath': '{inputFile}', '-OutputPath': '{workDir}/DataProcessors/МножественныйВыбор/Forms/ФормаВводаЗначений/Ext/Form.xml' },
+    validate: { script: 'form-validate/scripts/form-validate', flag: '-FormPath', path: 'DataProcessors/МножественныйВыбор/Forms/ФормаВводаЗначений/Ext/Form.xml' },
+  },
+  {
+    name: 'writeFile: ФормаВводаЗначений Module.bsl',
+    writeFile: 'DataProcessors/МножественныйВыбор/Forms/ФормаВводаЗначений/Ext/Form/Module.bsl',
+    content: `&НаСервере
+Процедура ПриСозданииНаСервере(Отказ, СтандартнаяОбработка)
+\tЕсли Параметры.ОписаниеТипов <> Неопределено Тогда
+\t\tСписок.ТипЗначения = Параметры.ОписаниеТипов;
+\tКонецЕсли;
+\tБыстрыйВыбор = ВсеТипыСБыстрымВыбором(Список.ТипЗначения);
+\tЕсли БыстрыйВыбор Тогда
+\t\tЗагрузитьВсехКандидатов(Список.ТипЗначения);
+\t\tЭлементы.СписокПодбор.Видимость = Ложь;
+\t\tЭлементы.СписокПодборПодвал.Видимость = Ложь;
+\tКонецЕсли;
+\tЕсли ТипЗнч(Параметры.Отмеченные) = Тип("СписокЗначений") Тогда
+\t\tДля Каждого Эл Из Параметры.Отмеченные Цикл
+\t\t\tНайден = Список.НайтиПоЗначению(Эл.Значение);
+\t\t\tЕсли Найден = Неопределено Тогда
+\t\t\t\tНайден = Список.Добавить(Эл.Значение);
+\t\t\tКонецЕсли;
+\t\t\tНайден.Пометка = Истина;
+\t\tКонецЦикла;
+\tКонецЕсли;
+КонецПроцедуры
+
+&НаСервере
+Функция ВсеТипыСБыстрымВыбором(Описание)
+\tЕсли Описание = Неопределено Тогда
+\t\tВозврат Ложь;
+\tКонецЕсли;
+\tТипы = Описание.Типы();
+\tЕсли Типы.Количество() = 0 Тогда
+\t\tВозврат Ложь;
+\tКонецЕсли;
+\tДля Каждого Тип Из Типы Цикл
+\t\tМО = Метаданные.НайтиПоТипу(Тип);
+\t\tЕсли МО = Неопределено Тогда
+\t\t\tВозврат Ложь;
+\t\tКонецЕсли;
+\t\t// БыстрыйВыбор (свойство QuickChoice) — даёт режим A. Не путать со СпособВыбора
+\t\t// (ChoiceMode); meta-compile quickChoice:true пишет именно <QuickChoice>true</QuickChoice>.
+\t\tПопытка
+\t\t\tЕсли НЕ МО.БыстрыйВыбор Тогда
+\t\t\t\tВозврат Ложь;
+\t\t\tКонецЕсли;
+\t\tИсключение
+\t\t\tВозврат Ложь;
+\t\tКонецПопытки;
+\tКонецЦикла;
+\tВозврат Истина;
+КонецФункции
+
+&НаСервере
+Процедура ЗагрузитьВсехКандидатов(Описание)
+\tДля Каждого Тип Из Описание.Типы() Цикл
+\t\tМО = Метаданные.НайтиПоТипу(Тип);
+\t\tЕсли МО = Неопределено Тогда
+\t\t\tПродолжить;
+\t\tКонецЕсли;
+\t\tЗапрос = Новый Запрос("ВЫБРАТЬ Ссылка КАК Ссылка ИЗ " + МО.ПолноеИмя());
+\t\tВыборка = Запрос.Выполнить().Выбрать();
+\t\tПока Выборка.Следующий() Цикл
+\t\t\tЕсли Список.НайтиПоЗначению(Выборка.Ссылка) = Неопределено Тогда
+\t\t\t\tСписок.Добавить(Выборка.Ссылка);
+\t\t\tКонецЕсли;
+\t\tКонецЦикла;
+\tКонецЦикла;
+КонецПроцедуры
+
+&НаКлиенте
+Процедура СписокОбработкаВыбора(Элемент, РезультатВыбора, СтандартнаяОбработка)
+\tСтандартнаяОбработка = Ложь;
+\tЕсли ТипЗнч(РезультатВыбора) = Тип("Массив") Тогда
+\t\tДля Каждого ЗначениеВыбора Из РезультатВыбора Цикл
+\t\t\tДобавитьСОтметкой(ЗначениеВыбора);
+\t\tКонецЦикла;
+\tИначеЕсли ТипЗнч(РезультатВыбора) = Тип("СписокЗначений") Тогда
+\t\tДля Каждого ЭлСписка Из РезультатВыбора Цикл
+\t\t\tДобавитьСОтметкой(ЭлСписка.Значение);
+\t\tКонецЦикла;
+\tИначе
+\t\tДобавитьСОтметкой(РезультатВыбора);
+\tКонецЕсли;
+КонецПроцедуры
+
+&НаКлиенте
+Процедура ДобавитьСОтметкой(ЗначениеВыбора)
+\tНайден = Список.НайтиПоЗначению(ЗначениеВыбора);
+\tЕсли Найден = Неопределено Тогда
+\t\tНайден = Список.Добавить(ЗначениеВыбора);
+\tКонецЕсли;
+\tНайден.Пометка = Истина;
+КонецПроцедуры
+
+&НаКлиенте
+Процедура ЗавершитьРедактирование(Команда)
+\t// Возвращаем только отмеченные значения (а не весь рабочий список).
+\tРезультат = Новый СписокЗначений;
+\tРезультат.ТипЗначения = Список.ТипЗначения;
+\tДля Каждого Эл Из Список Цикл
+\t\tЕсли Эл.Пометка Тогда
+\t\t\tРезультат.Добавить(Эл.Значение, Эл.Представление);
+\t\tКонецЕсли;
+\tКонецЦикла;
+\tЗакрыть(Результат);
+КонецПроцедуры
+`,
+  },
+
   // ── 4. DCS for report ──
   // Сначала добавляем макет ОсновнаяСхемаКомпоновкиДанных к отчёту (регистрируется
   // в Reports/ОстаткиТоваров.xml + автоматически выставляется MainDataCompositionSchema),
@@ -1087,6 +1392,7 @@ export const steps = [
         'Enum.СпособыУчёта',
         'Document.ПриходнаяНакладная',
         'Report.ОстаткиТоваров',
+        'DataProcessor.МножественныйВыбор',
       ],
     },
     args: { '-DefinitionFile': '{inputFile}', '-OutputDir': '{workDir}' },
@@ -1124,6 +1430,7 @@ export const steps = [
         'InformationRegister.КурсыВалют: Read View Add Update Delete',
         'Report.ОстаткиТоваров: Use View',
         'DataProcessor.ДеревоНоменклатуры: Use View',
+        'DataProcessor.МножественныйВыбор: Use View',
       ],
     },
     args: { '-JsonPath': '{inputFile}', '-OutputDir': '{workDir}' },
