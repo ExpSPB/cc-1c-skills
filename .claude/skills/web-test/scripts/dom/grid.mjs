@@ -1,5 +1,6 @@
-// web-test dom/grid v1.10 — grid resolution + table reading + edit-time helpers
+// web-test dom/grid v1.11 — grid resolution + table reading + edit-time helpers
 // Source: https://github.com/Nikolay-Shirokov/cc-1c-skills
+import { ROW_CLICK_POINT_FN } from './_shared.mjs';
 
 /**
  * Resolve a specific grid by semantic name (table parameter).
@@ -427,6 +428,7 @@ export function getSelectedOrLastRowIndexScript(gridSelector) {
  */
 export function scanGridRowsScript(formNum, search) {
   return `(() => {
+    ${ROW_CLICK_POINT_FN}
     const p = 'form${formNum}_';
     const grid = document.querySelector('[id^="' + p + '"].grid, [id^="' + p + '"] .grid');
     if (!grid) return null;
@@ -513,21 +515,18 @@ export function scanGridRowsScript(formNum, search) {
 
     if (!sel) return { rowCount: lines.length, visibleSample };
 
-    // Click point: first visible text cell of the row (mirror findFocusCellScript)
-    // — skip checkboxes; on tree grids skip the first (expand-toggle) column.
-    // Clamp X near the left so a wide first column still lands in the viewport.
-    const isTree = !!body.querySelector('.gridBoxTree');
-    let cells = visCells(sel).map(b => ({ r: b.getBoundingClientRect(), checkbox: !!b.querySelector('.checkbox'), hasText: !!b.querySelector('.gridBoxText') }));
-    if (isTree && cells.length > 1) cells = cells.slice(1);
-    const pick = cells.find(c => !c.checkbox && c.hasText) || cells.find(c => !c.checkbox) || cells[0];
-    if (!pick) return { rowCount: lines.length, visibleSample };
+    // Click point: first visible text cell of the row (skip checkboxes; on tree grids
+    // skip the expand-toggle column; clamp X near the left). Shared with the
+    // clickElement row-select path — see ROW_CLICK_POINT_FN.
+    const pt = rowClickPoint(sel, body);
+    if (!pt) return { rowCount: lines.length, visibleSample };
 
     const imgBox = sel.querySelector('.gridBoxImg');
     const isGroup = imgBox ? !!imgBox.querySelector('.gridListH') : false;
     return {
       rowCount: lines.length,
-      x: Math.round(pick.r.x + Math.min(pick.r.width / 2, 60)),
-      y: Math.round(pick.r.y + pick.r.height / 2),
+      x: pt.x,
+      y: pt.y,
       isGroup, matchKind, visibleSample
     };
   })()`;

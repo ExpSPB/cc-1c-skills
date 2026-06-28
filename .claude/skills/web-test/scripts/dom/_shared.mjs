@@ -1,4 +1,4 @@
-// web-test dom shared v1.0 — embedded JS function constants
+// web-test dom shared v1.1 — embedded JS function constants
 // Source: https://github.com/Nikolay-Shirokov/cc-1c-skills
 /**
  * Shared function strings embedded into page.evaluate() generators.
@@ -12,6 +12,35 @@ export const HAS_VISIBLE_MODAL_FN = `function hasVisibleModal() {
   const all = document.querySelectorAll('#modalSurface');
   for (const el of all) { if (el.offsetWidth > 0) return true; }
   return false;
+}`;
+
+/**
+ * Click point INSIDE a grid row's first visible text cell — NOT the row-line centre.
+ *
+ * A wide multi-column row's centre `x = line.x + line.width/2` lands far beyond the
+ * form's horizontal viewport (the `.gridLine` spans ALL columns, frozen + scrollable),
+ * so `mouse.click` at that X falls on an overlay outside the visible grid and the row
+ * is never hit — the click silently does nothing. Seen on narrow modal selection forms
+ * with many columns (множественный выбор) and the `not_selectable` bug on selection forms.
+ *
+ * Picks the first visible non-checkbox cell that HAS text (so center-clicking never
+ * toggles a checkbox/picture mark), skips the first column on tree grids (it holds the
+ * expand toggle), and clamps X near the left edge (`min(width/2, 60)`) so a wide first
+ * column still lands in the viewport.
+ *
+ * @param line  a `.gridLine` element
+ * @param body  the grid's `.gridBody` (for tree detection); may be null
+ * @returns `{ x, y }` rounded, or `null` when the row has no usable cell.
+ */
+export const ROW_CLICK_POINT_FN = `function rowClickPoint(line, body) {
+  const isTree = !!(body && body.querySelector('.gridBoxTree'));
+  let cells = [...line.children]
+    .filter(b => b.offsetWidth > 0)
+    .map(b => ({ r: b.getBoundingClientRect(), checkbox: !!b.querySelector('.checkbox'), hasText: !!b.querySelector('.gridBoxText') }));
+  if (isTree && cells.length > 1) cells = cells.slice(1);
+  const pick = cells.find(c => !c.checkbox && c.hasText) || cells.find(c => !c.checkbox) || cells[0];
+  if (!pick) return null;
+  return { x: Math.round(pick.r.x + Math.min(pick.r.width / 2, 60)), y: Math.round(pick.r.y + pick.r.height / 2) };
 }`;
 
 /** Detect active form number. Picks form with most visible elements, skipping form0.
