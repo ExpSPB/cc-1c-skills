@@ -1,4 +1,4 @@
-// web-test forms/select-value v1.28 — Reference & composite-type value selection: selectValue (+ array multi-select), fillReferenceField, selection/type-dialog pickers.
+// web-test forms/select-value v1.30 — Reference & composite-type value selection: selectValue (+ array multi-select), fillReferenceField, selection/type-dialog pickers.
 // Source: https://github.com/Nikolay-Shirokov/cc-1c-skills
 
 import {
@@ -682,12 +682,13 @@ async function selectValuesMulti(fieldName, values, { type } = {}) {
   const cloudDDVisible = () => page.evaluate(`!![...document.querySelectorAll('.cloudDD')].find(p => p.offsetWidth > 0 && p.offsetHeight > 0)`);
 
   // ── Open + detect (F4-first) ──
+  // clickElement already stabilizes the page internally (and leaves the field focused) — so we
+  // detect a new form right away, and on the F4 branch press F4 directly with NO re-focus click.
+  // (A page.click on the field input here can intermittently hang ~30s on Playwright's
+  // actionability timeout when DLB/CB buttons or a .surface overlay cover the input.)
   await clickElement(fieldName).catch(() => {});
-  await waitForStable(baseForm);
   let formNum = await helperDetectNewForm(baseForm);
   if (formNum === null) {
-    const inputId = await findFieldInputId(baseForm, btn.fieldName);
-    if (inputId) { await page.click(`[id="${inputId}"]`).catch(() => {}); await page.waitForTimeout(200); }
     await page.keyboard.press('F4');
     await page.waitForTimeout(ACTION_WAIT);
     await waitForStable(baseForm);
