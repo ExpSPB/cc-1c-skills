@@ -1,4 +1,4 @@
-// web-test dom/grid-edit v1.1 — DOM scripts for row-fill (grid edit-time operations)
+// web-test dom/grid-edit v1.2 — DOM scripts for row-fill (grid edit-time operations)
 // Source: https://github.com/Nikolay-Shirokov/cc-1c-skills
 //
 import { HEADERLESS_GRID_FN } from './_shared.mjs';
@@ -281,9 +281,16 @@ export function readActiveGridCellScript() {
             }
           }
           if (!head) {
-            // Headerless: resolve the editing column name from the cell's colindex via synth.
-            let box = f; while (box && !box.classList?.contains('gridBox')) box = box.parentElement;
-            const ci = box?.getAttribute('colindex');
+            // Headerless: the editing INPUT is rendered in an overlay (.inputs) OUTSIDE
+            // the .gridBox, so walking ancestors for colindex fails. Resolve colindex by
+            // matching the input's x against the body cells (same idea as the headed branch).
+            const bl = grid.querySelector('.gridBody .gridLine');
+            let ci = null;
+            if (bl) for (const b of bl.children) {
+              if (b.offsetWidth === 0) continue;
+              const br = b.getBoundingClientRect();
+              if (fr.x >= br.x && fr.x < br.x + br.width) { ci = b.getAttribute('colindex'); break; }
+            }
             if (ci != null) {
               const sc = synthHeaderlessColumns(grid).find(c => c.kind === 'data' && c.colindex === ci);
               if (sc) headerText = sc.name;
