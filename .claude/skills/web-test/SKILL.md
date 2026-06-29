@@ -348,6 +348,8 @@ actually selected; any value the field doesn't offer goes to `notSelected: [{ va
 await selectValue('Наименование компании', ['Альфа ООО', 'Бета АО']);
 // selected: { field: 'Наименование компании', values: ['Альфа ООО', 'Бета АО'] }
 ```
+A **single** value works too — `selectValue('Поле', 'Альфа ООО')` or `fillFields({ 'Поле': 'Альфа ООО' })`
+on a value-list field is auto-routed to the same mechanism (no need to know the field is a value-list).
 
 #### `fillTableRow(fields, opts)` → form state with `filled` (+ optional `notFilled`)
 Fill table row cells via Tab navigation. Value is a plain string, `{ value, type }` for composite-type cells, or `''`/`null` to clear (Shift+F4).

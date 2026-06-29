@@ -9,7 +9,7 @@ export const timeout = 420000;
 
 const sortq = a => [...a].sort();
 
-export default async function({ navigateLink, selectValue, getFormState, wait, assert, step, log }) {
+export default async function({ navigateLink, selectValue, fillFields, getFormState, wait, assert, step, log }) {
 
   const fieldValue = async (name) => {
     const fs = await getFormState();
@@ -82,5 +82,34 @@ export default async function({ navigateLink, selectValue, getFormState, wait, a
     log(`E selected: ${JSON.stringify(r.selected)}`);
     assert.deepEqual(sortq(r.selected.values), sortq(['ООО Север', 'ООО Юг']), 'оба контрагента подобраны');
     assert.ok(!r.selected.notSelected, 'notSelected отсутствует');
+  });
+
+  // ── Делегирование через fillFields / одиночный selectValue (поведенческая детекция) ──
+  await step('fillFields одиночное на поле-списке (DLB) → делегирует, не виснет', async () => {
+    const f = await fillFields({ 'Через флажки': 'Альфа' });
+    log(`fillFields single: ${JSON.stringify(f.filled)}`);
+    assert.ok(f.filled?.[0]?.ok, 'значение проставлено без зависания');
+    assert.equal(await fieldValue('ЧерезФлажки'), 'Альфа', 'поле = Альфа');
+  });
+
+  await step('fillFields массивом на поле-списке → делегирует в мультивыбор', async () => {
+    const f = await fillFields({ 'Через флажки': ['Альфа', 'Бета'] });
+    log(`fillFields array: ${JSON.stringify(f.filled)}`);
+    assert.deepEqual(sortq(f.filled?.[0]?.values || []), sortq(['Альфа', 'Бета']), 'оба выбраны');
+    assert.equal(await fieldValue('ЧерезФлажки'), 'Альфа, Бета', 'поле = набор');
+  });
+
+  await step('fillFields одиночное на платформенном (CB) → не throw type-dialog (replace непустого пула)', async () => {
+    const f = await fillFields({ 'Без расширенного': 'АО Запад' });
+    log(`fillFields CB single: ${JSON.stringify(f.filled)}`);
+    assert.ok(f.filled?.[0]?.ok, 'значение проставлено (без ошибки type dialog)');
+    assert.equal(await fieldValue('СписокПлатформенный'), 'АО Запад', 'поле = АО Запад');
+  });
+
+  await step('одиночный selectValue на поле-списке → делегирует', async () => {
+    const r = await selectValue('Через флажки', 'Бета');
+    log(`selectValue single: ${JSON.stringify(r.selected)}`);
+    assert.deepEqual(r.selected.values, ['Бета'], 'одно значение выбрано');
+    assert.equal(await fieldValue('ЧерезФлажки'), 'Бета', 'поле = Бета');
   });
 }

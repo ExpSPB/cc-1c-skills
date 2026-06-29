@@ -1,4 +1,4 @@
-// web-test forms/select-value v1.30 — Reference & composite-type value selection: selectValue (+ array multi-select), fillReferenceField, selection/type-dialog pickers.
+// web-test forms/select-value v1.33 — Reference & composite-type value selection: selectValue (+ array multi-select), fillReferenceField, selection/type-dialog pickers.
 // Source: https://github.com/Nikolay-Shirokov/cc-1c-skills
 
 import {
@@ -453,6 +453,16 @@ export async function fillReferenceField(selector, fieldName, value, formNum) {
     if (dlbVisible) {
       await page.click(dlbSelector);
       await page.waitForTimeout(1000);
+      // Value-list field: DLB opened a FORM (a normal reference's DLB opens an inline dropdown,
+      // not a form) → delegate to the multi handler on the already-open form (single value =
+      // 1-element set). This avoids hanging on the safeClick below over the modal .surface.
+      const openedForm = await detectNewForm();
+      if (openedForm !== null) {
+        const res = await dispatchMultiSurface(fieldName, [text], { formNum: openedForm, baseForm: formNum });
+        const sel = res.selected || {};
+        return { field: fieldName, ok: !sel.error, value: text, method: 'multi-select',
+          ...(sel.notSelected ? { notSelected: sel.notSelected } : {}) };
+      }
       const eddState = await readEdd();
       if (eddState.visible && eddState.items?.length > 0) {
         const target = normYo(text.toLowerCase());
@@ -659,18 +669,12 @@ async function selectValuesMulti(fieldName, values, { type } = {}) {
   const baseForm = await page.evaluate(detectFormScript());
   if (baseForm === null) throw new Error('selectValue(multi): no form found');
 
-  const valStr = (el) => typeof el === 'string' ? el : String(Object.values(el)[0]);
-  const targets = values.map(v => ({ raw: v, str: valStr(v) }));
-  const selected = [], notSelected = [];
-  const eqYo = (a, b) => normYo(String(a).toLowerCase()) === normYo(String(b).toLowerCase());
-  const incYo = (hay, needle) => normYo(String(hay).toLowerCase()).includes(normYo(String(needle).toLowerCase()));
-
   // Resolve field button (DLB→CB) + DCS-checkbox auto-enable (mirror selectValue).
   let btn = await page.evaluate(findFieldButtonScript(baseForm, fieldName, 'DLB'));
   if (btn?.error === 'button_not_found') btn = await page.evaluate(findFieldButtonScript(baseForm, fieldName, 'CB'));
   if (btn?.error) {
-    return returnFormState({ selected: { field: fieldName, values: [], error: 'field_not_found',
-      notSelected: targets.map(t => ({ value: t.str, reason: 'field_not_found' })) } });
+    return returnFormState({ selected: { field: fieldName, values: [],
+      error: 'field_not_found', notSelected: values.map(v => ({ value: String(v), reason: 'field_not_found' })) } });
   }
   if (btn.dcsCheckbox) {
     const cbSel = `[id="${btn.dcsCheckbox.inputId}"]`;
@@ -679,9 +683,7 @@ async function selectValuesMulti(fieldName, values, { type } = {}) {
     if (!isChecked) { await page.click(cbSel).catch(() => {}); await waitForStable(); }
   }
 
-  const cloudDDVisible = () => page.evaluate(`!![...document.querySelectorAll('.cloudDD')].find(p => p.offsetWidth > 0 && p.offsetHeight > 0)`);
-
-  // ── Open + detect (F4-first) ──
+  // ── Open (F4-first) ──
   // clickElement already stabilizes the page internally (and leaves the field focused) — so we
   // detect a new form right away, and on the F4 branch press F4 directly with NO re-focus click.
   // (A page.click on the field input here can intermittently hang ~30s on Playwright's
@@ -694,22 +696,58 @@ async function selectValuesMulti(fieldName, values, { type } = {}) {
     await waitForStable(baseForm);
     formNum = await helperDetectNewForm(baseForm);
   }
-
-  let surface = null;
-  if (formNum !== null) {
-    const fs = await getFormState();
-    const buttons = fs.buttons || [];
-    const hasButton = (label) => buttons.some(b => (b.name || '').includes(label) || (b.tooltip || '').includes(label));
-    if (hasButton(MULTI_BTN.podbor)) surface = MULTI_SURFACE.poolPodbor;
-    else if (hasButton(MULTI_BTN.choose) && !hasButton(MULTI_BTN.confirm)) surface = MULTI_SURFACE.catalogMultiRow;
-    else if (hasButton(MULTI_BTN.uncheckAll) || hasButton(MULTI_BTN.confirm)) surface = MULTI_SURFACE.checkboxForm;
-  } else if (await cloudDDVisible()) {
-    surface = MULTI_SURFACE.cloudDropdown;
+  const isCloudDD = (formNum === null) && await cloudDDVisible();
+  if (formNum === null && !isCloudDD) {
+    return returnFormState({ selected: { field: fieldName, values: [],
+      error: 'surface_unrecognized', notSelected: values.map(v => ({ value: String(v), reason: 'open_failed' })) } });
   }
+  return dispatchMultiSurface(fieldName, values, { formNum, isCloudDD, baseForm });
+}
 
+const cloudDDVisible = () => page.evaluate(`!![...document.querySelectorAll('.cloudDD')].find(p => p.offsetWidth > 0 && p.offsetHeight > 0)`);
+
+/** Classify an already-open form as a value-list multi-surface (or null). For our own dispatch —
+ *  here the field is already known to be a value-list, so the broad Выбрать/ОК signals are safe. */
+async function detectMultiSurface(formNum) {
+  if (formNum === null) return null;
+  const fs = await getFormState();
+  const buttons = fs.buttons || [];
+  const hasButton = (label) => buttons.some(b => (b.name || '').includes(label) || (b.tooltip || '').includes(label));
+  if (hasButton(MULTI_BTN.podbor)) return MULTI_SURFACE.poolPodbor;
+  if (hasButton(MULTI_BTN.choose) && !hasButton(MULTI_BTN.confirm)) return MULTI_SURFACE.catalogMultiRow;
+  if (hasButton(MULTI_BTN.uncheckAll) || hasButton(MULTI_BTN.confirm)) return MULTI_SURFACE.checkboxForm;
+  return null;
+}
+
+/** CONSERVATIVE check used by the single-value selectValue delegation: only the UNAMBIGUOUS
+ *  value-list signals (Подбор / СнятьФлажки) — a normal single-reference selection form has
+ *  "Выбрать" (no ОК/Подбор/СнятьФлажки), so it is NOT misclassified as a value-list surface. */
+async function isValueListSurface(formNum) {
+  if (formNum === null) return false;
+  const fs = await getFormState();
+  const buttons = fs.buttons || [];
+  const hasButton = (label) => buttons.some(b => (b.name || '').includes(label) || (b.tooltip || '').includes(label));
+  return hasButton(MULTI_BTN.podbor) || hasButton(MULTI_BTN.uncheckAll);
+}
+
+/**
+ * Run the multi-select for a value-list field whose selection surface is ALREADY OPEN
+ * (`formNum` form, or `isCloudDD` inline dropdown). Detects which of the 4 surfaces it is
+ * and applies `values` (always replace). Shared by selectValuesMulti (after it opens) and by
+ * the single-value delegation in selectValue / fillReferenceField (reuses the open form — no
+ * reopen, no flicker). Returns flat state + `selected:{field,values,notSelected?}`.
+ */
+async function dispatchMultiSurface(fieldName, values, { formNum, isCloudDD, baseForm }) {
+  const valStr = (el) => typeof el === 'string' ? el : String(Object.values(el)[0]);
+  const targets = values.map(v => ({ raw: v, str: valStr(v) }));
+  const selected = [], notSelected = [];
+  const eqYo = (a, b) => normYo(String(a).toLowerCase()) === normYo(String(b).toLowerCase());
+  const incYo = (hay, needle) => normYo(String(hay).toLowerCase()).includes(normYo(String(needle).toLowerCase()));
+
+  const surface = isCloudDD ? MULTI_SURFACE.cloudDropdown : await detectMultiSurface(formNum);
   if (!surface) {
-    return returnFormState({ selected: { field: fieldName, values: [], error: 'surface_unrecognized',
-      notSelected: targets.map(t => ({ value: t.str, reason: 'open_failed' })) } });
+    return returnFormState({ selected: { field: fieldName, values: [],
+      error: 'surface_unrecognized', notSelected: targets.map(t => ({ value: t.str, reason: 'open_failed' })) } });
   }
 
   // ── Per-surface handlers ──
@@ -797,15 +835,29 @@ async function selectValuesMulti(fieldName, values, { type } = {}) {
 
   // Empty the pool by selecting every row (Ctrl+A covers off-screen rows) and deleting.
   async function clearPool() {
-    const t0 = await readTable({ maxRows: 200 });
-    if (!(t0.rows || []).length) return;
-    try { await clickElement({ row: 0, column: 'Колонка1' }); } catch {}   // focus grid (make list active)
+    let t = await readTable({ maxRows: 200 });
+    if (!(t.rows || []).length) return;
+    // Custom pool: rows are checkboxes (membership = checked) → just uncheck all (rows persist).
+    if ((t.columns || []).includes('(checkbox)')) {
+      await clickElement(MULTI_BTN.uncheckAll).catch(() => {});
+      return;
+    }
+    // Platform pool (plain rows, membership = presence) → delete every row. Ctrl+A does NOT
+    // select all here (only the focused row), so: one select-all+Delete, then delete the first
+    // row repeatedly until the pool is empty (guard against an unexpected non-shrinking grid).
+    const colKey = t.columns?.[0] || 'Колонка1';
+    try { await clickElement({ row: 0, column: colKey }); } catch {}
     await page.keyboard.press('Control+a');
-    await page.waitForTimeout(200);
+    await page.waitForTimeout(150);
     await page.keyboard.press('Delete');
     await waitForStable(formNum);
-    const t1 = await readTable({ maxRows: 50 });
-    if ((t1.rows || []).length) await clickElement(MULTI_BTN.uncheckAll).catch(() => {});   // fallback
+    for (let guard = 0; guard < 100; guard++) {
+      t = await readTable({ maxRows: 200 });
+      if (!(t.rows || []).length) return;
+      try { await clickElement({ row: 0, column: colKey }); } catch {}
+      await page.keyboard.press('Delete');
+      await waitForStable(formNum);
+    }
   }
 
   // Surface: inline .cloudDD quick-choice dropdown. Coordinate clicks (a .surface
@@ -987,6 +1039,10 @@ export async function selectValue(fieldName, searchText, { type } = {}) {
     await waitForStable(formNum);
     const selFormNum = await detectSelectionForm();
     if (selFormNum !== null) {
+      // Value-list field — delegate to the multi handler on the already-open form.
+      if (await isValueListSurface(selFormNum)) {
+        return dispatchMultiSurface(btn.fieldName, [searchText], { formNum: selFormNum, baseForm: formNum });
+      }
       const pickResult = await pickFromSelectionForm(selFormNum, btn.fieldName, searchText || '', formNum);
       const selected = { field: btn.fieldName, search: searchText || null, method: 'form' };
       if (pickResult.error) selected.error = pickResult.error;
@@ -1081,6 +1137,12 @@ export async function selectValue(fieldName, searchText, { type } = {}) {
   // 3B. Check if a new selection form opened directly (use broad detection to also catch type dialogs)
   const selFormNum = await detectNewForm();
   if (selFormNum !== null) {
+    // Value-list field (Подбор/СнятьФлажки surface) — delegate to the multi handler on the
+    // already-open form (a single value = a 1-element set). MUST precede isTypeDialog: the platform
+    // "Список значений" form has a ValueList grid + ОК and would be misclassified as a type dialog.
+    if (await isValueListSurface(selFormNum)) {
+      return dispatchMultiSurface(btn.fieldName, [searchText], { formNum: selFormNum, baseForm: formNum });
+    }
     // Auto-detect type selection dialog when `type` was not specified
     if (await isTypeDialog(selFormNum)) {
       await page.keyboard.press('Escape');
