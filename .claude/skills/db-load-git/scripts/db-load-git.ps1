@@ -1,4 +1,4 @@
-﻿# db-load-git v1.9 — Load Git changes into 1C database
+﻿# db-load-git v1.10 — Load Git changes into 1C database
 # Source: https://github.com/Nikolay-Shirokov/cc-1c-skills
 # NB: *nix-раскладку платформы (/opt/1cv8/<ver>/1cv8, без .exe) знает только .py-порт — PS на *nix не исполняется.
 <#
@@ -167,6 +167,33 @@ if (-not $DryRun) {
 # --- Detect engine + validate connection (skip if DryRun) ---
 $engine = "1cv8"
 if (-not $DryRun) {
+function Invoke-IbcmdProcess {
+    # Run ibcmd non-interactively: a closed stdin pipe (EOF) makes ibcmd's auth prompt
+    # fast-fail instead of hanging. Returns @{ Output; ExitCode }. cp866 decodes ibcmd's
+    # native OEM output. The 1cv8/DESIGNER branch keeps using Start-Process.
+    param([string]$Exe, [string[]]$IbArgs)
+    $psi = New-Object System.Diagnostics.ProcessStartInfo
+    $psi.FileName = $Exe
+    $psi.Arguments = ($IbArgs | ForEach-Object { if ($_ -match '[\s"]') { '"' + ($_ -replace '"', '\"') + '"' } else { $_ } }) -join ' '
+    $psi.UseShellExecute = $false
+    $psi.CreateNoWindow = $true
+    $psi.RedirectStandardInput = $true
+    $psi.RedirectStandardOutput = $true
+    $psi.RedirectStandardError = $true
+    try {
+        $psi.StandardOutputEncoding = [System.Text.Encoding]::GetEncoding(866)
+        $psi.StandardErrorEncoding = [System.Text.Encoding]::GetEncoding(866)
+    } catch {}
+    $p = [System.Diagnostics.Process]::Start($psi)
+    $p.StandardInput.Close()
+    $out = $p.StandardOutput.ReadToEnd()
+    $err = $p.StandardError.ReadToEnd()
+    $p.WaitForExit()
+    if ($err) { $out += $err }
+    return [pscustomobject]@{ Output = $out; ExitCode = $p.ExitCode }
+}
+
+
     $engine = if ((Split-Path $V8Path -Leaf) -match '^ibcmd') { "ibcmd" } else { "1cv8" }
     if ($engine -eq "ibcmd") {
         if (-not $InfoBasePath) {
@@ -344,8 +371,9 @@ try {
         if ($Password) { $arguments += "--password=$Password" }
         $arguments += "--data=$tempDir"
         Write-Host "Running: ibcmd $($arguments -join ' ')"
-        $output = & $V8Path @arguments 2>&1
-        $exitCode = $LASTEXITCODE
+        $__ib = Invoke-IbcmdProcess $V8Path $arguments
+        $output = $__ib.Output
+        $exitCode = $__ib.ExitCode
         if ($exitCode -ne 0) {
             Write-Host "Error loading changes (code: $exitCode)" -ForegroundColor Red
             if ($output) { Write-Host ($output | Out-String) }
@@ -359,8 +387,9 @@ try {
             if ($Password) { $applyArgs += "--password=$Password" }
             $applyArgs += "--data=$tempDir"
             Write-Host "Running: ibcmd $($applyArgs -join ' ')"
-            $applyOut = & $V8Path @applyArgs 2>&1
-            $exitCode = $LASTEXITCODE
+            $__ib = Invoke-IbcmdProcess $V8Path $applyArgs
+            $applyOut = $__ib.Output
+            $exitCode = $__ib.ExitCode
             if ($exitCode -eq 0) {
                 Write-Host "Database configuration updated successfully" -ForegroundColor Green
             } else {

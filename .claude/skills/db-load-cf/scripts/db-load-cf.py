@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-# db-load-cf v1.5 — Load 1C configuration from CF file
+# db-load-cf v1.6 — Load 1C configuration from CF file
 # Source: https://github.com/Nikolay-Shirokov/cc-1c-skills
 
 import argparse
@@ -78,6 +78,27 @@ def resolve_v8path(v8path):
     return v8path
 
 
+IBCMD_NOUSER_HINT = (
+    "[ibcmd] No -UserName/-Password given; the infobase may require authentication. "
+    "On Windows ibcmd reads credentials from the console (stdin is ignored), so this "
+    "call may block instead of failing. If it does not return promptly, abort and "
+    "re-run with -UserName and -Password.\n"
+)
+
+
+def run_ibcmd(cmd, has_username=False, warn_no_user=True):
+    """Run an ibcmd command non-interactively.
+
+    input="" closes stdin (EOF) so ibcmd's auth prompt fast-fails instead of hanging.
+    On Windows without -UserName ibcmd reads the console directly and may still block —
+    that residual case is flagged via IBCMD_NOUSER_HINT (model-facing).
+    """
+    if warn_no_user and os.name == "nt" and not has_username:
+        sys.stderr.write(IBCMD_NOUSER_HINT)
+        sys.stderr.flush()
+    return subprocess.run(cmd, input="", capture_output=True, encoding="utf-8", errors="replace")
+
+
 def main():
     sys.stdout.reconfigure(encoding="utf-8")
     sys.stderr.reconfigure(encoding="utf-8")
@@ -130,7 +151,7 @@ def main():
             arguments.append(f"--password={args.Password}")
         arguments.append(f"--data={ib_data}")
         print(f"Running: ibcmd {' '.join(arguments)}")
-        result = subprocess.run([v8path] + arguments, capture_output=True, encoding="utf-8", errors="replace")
+        result = run_ibcmd([v8path] + arguments, bool(args.UserName))
         if result.returncode == 0:
             print(f"Configuration loaded successfully from: {args.InputFile}")
         else:

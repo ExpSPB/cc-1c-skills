@@ -1,4 +1,4 @@
-﻿# db-dump-xml v1.7 — Dump 1C configuration to XML files
+﻿# db-dump-xml v1.8 — Dump 1C configuration to XML files
 # Source: https://github.com/Nikolay-Shirokov/cc-1c-skills
 # NB: *nix-раскладку платформы (/opt/1cv8/<ver>/1cv8, без .exe) знает только .py-порт — PS на *nix не исполняется.
 <#
@@ -143,6 +143,33 @@ if (-not (Test-Path $V8Path)) {
 }
 
 # --- Detect engine (ibcmd vs 1cv8) by exe name ---
+function Invoke-IbcmdProcess {
+    # Run ibcmd non-interactively: a closed stdin pipe (EOF) makes ibcmd's auth prompt
+    # fast-fail instead of hanging. Returns @{ Output; ExitCode }. cp866 decodes ibcmd's
+    # native OEM output. The 1cv8/DESIGNER branch keeps using Start-Process.
+    param([string]$Exe, [string[]]$IbArgs)
+    $psi = New-Object System.Diagnostics.ProcessStartInfo
+    $psi.FileName = $Exe
+    $psi.Arguments = ($IbArgs | ForEach-Object { if ($_ -match '[\s"]') { '"' + ($_ -replace '"', '\"') + '"' } else { $_ } }) -join ' '
+    $psi.UseShellExecute = $false
+    $psi.CreateNoWindow = $true
+    $psi.RedirectStandardInput = $true
+    $psi.RedirectStandardOutput = $true
+    $psi.RedirectStandardError = $true
+    try {
+        $psi.StandardOutputEncoding = [System.Text.Encoding]::GetEncoding(866)
+        $psi.StandardErrorEncoding = [System.Text.Encoding]::GetEncoding(866)
+    } catch {}
+    $p = [System.Diagnostics.Process]::Start($psi)
+    $p.StandardInput.Close()
+    $out = $p.StandardOutput.ReadToEnd()
+    $err = $p.StandardError.ReadToEnd()
+    $p.WaitForExit()
+    if ($err) { $out += $err }
+    return [pscustomobject]@{ Output = $out; ExitCode = $p.ExitCode }
+}
+
+
 $engine = if ((Split-Path $V8Path -Leaf) -match '^ibcmd') { "ibcmd" } else { "1cv8" }
 
 # --- Validate connection ---
@@ -198,8 +225,9 @@ try {
         if ($Password) { $arguments += "--password=$Password" }
         $arguments += "--data=$tempDir"
         Write-Host "Running: ibcmd $($arguments -join ' ')"
-        $output = & $V8Path @arguments 2>&1
-        $exitCode = $LASTEXITCODE
+        $__ib = Invoke-IbcmdProcess $V8Path $arguments
+        $output = $__ib.Output
+        $exitCode = $__ib.ExitCode
         if ($exitCode -eq 0) {
             Write-Host "Configuration exported successfully to: $ConfigDir" -ForegroundColor Green
         } else {

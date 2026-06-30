@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-# db-load-xml v1.11 — Load 1C configuration from XML files
+# db-load-xml v1.12 — Load 1C configuration from XML files
 # Source: https://github.com/Nikolay-Shirokov/cc-1c-skills
 
 import argparse
@@ -76,6 +76,27 @@ def resolve_v8path(v8path):
         print(f"Error: 1C executable not found at {v8path}", file=sys.stderr)
         sys.exit(1)
     return v8path
+
+
+IBCMD_NOUSER_HINT = (
+    "[ibcmd] No -UserName/-Password given; the infobase may require authentication. "
+    "On Windows ibcmd reads credentials from the console (stdin is ignored), so this "
+    "call may block instead of failing. If it does not return promptly, abort and "
+    "re-run with -UserName and -Password.\n"
+)
+
+
+def run_ibcmd(cmd, has_username=False, warn_no_user=True):
+    """Run an ibcmd command non-interactively.
+
+    input="" closes stdin (EOF) so ibcmd's auth prompt fast-fails instead of hanging.
+    On Windows without -UserName ibcmd reads the console directly and may still block —
+    that residual case is flagged via IBCMD_NOUSER_HINT (model-facing).
+    """
+    if warn_no_user and os.name == "nt" and not has_username:
+        sys.stderr.write(IBCMD_NOUSER_HINT)
+        sys.stderr.flush()
+    return subprocess.run(cmd, input="", capture_output=True, encoding="utf-8", errors="replace")
 
 
 def main():
@@ -179,7 +200,7 @@ def main():
             arguments.append(f"--password={args.Password}")
         arguments.append(f"--data={ib_data}")
         print(f"Running: ibcmd {' '.join(arguments)}")
-        result = subprocess.run([v8path] + arguments, capture_output=True, encoding="utf-8", errors="replace")
+        result = run_ibcmd([v8path] + arguments, bool(args.UserName))
         if result.returncode != 0:
             print(f"Error loading configuration from files (code: {result.returncode})", file=sys.stderr)
             if result.stdout:
@@ -199,7 +220,7 @@ def main():
                 apply_args.append(f"--password={args.Password}")
             apply_args.append(f"--data={ib_data}")
             print(f"Running: ibcmd {' '.join(apply_args)}")
-            ar = subprocess.run([v8path] + apply_args, capture_output=True, encoding="utf-8", errors="replace")
+            ar = run_ibcmd([v8path] + apply_args, bool(args.UserName))
             exit_code = ar.returncode
             if exit_code == 0:
                 print("Database configuration updated successfully")

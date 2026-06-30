@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-# stub-db-create v1.2 — Create temp 1C infobase with metadata stubs for EPF/ERF build
+# stub-db-create v1.3 — Create temp 1C infobase with metadata stubs for EPF/ERF build
 # Source: https://github.com/Nikolay-Shirokov/cc-1c-skills
 
 import argparse
@@ -10,6 +10,27 @@ import subprocess
 import sys
 import tempfile
 import uuid
+
+
+IBCMD_NOUSER_HINT = (
+    "[ibcmd] No -UserName/-Password given; the infobase may require authentication. "
+    "On Windows ibcmd reads credentials from the console (stdin is ignored), so this "
+    "call may block instead of failing. If it does not return promptly, abort and "
+    "re-run with -UserName and -Password.\n"
+)
+
+
+def run_ibcmd(cmd, has_username=False, warn_no_user=True):
+    """Run an ibcmd command non-interactively.
+
+    input="" closes stdin (EOF) so ibcmd's auth prompt fast-fails instead of hanging.
+    On Windows without -UserName ibcmd reads the console directly and may still block —
+    that residual case is flagged via IBCMD_NOUSER_HINT (model-facing).
+    """
+    if warn_no_user and os.name == "nt" and not has_username:
+        sys.stderr.write(IBCMD_NOUSER_HINT)
+        sys.stderr.flush()
+    return subprocess.run(cmd, input="", capture_output=True, encoding="utf-8", errors="replace")
 
 
 def new_uuid():
@@ -1044,7 +1065,7 @@ def main():
         if has_ref_types:
             ib_args += [f'--import={os.path.join(temp_base, "cfg")}', '--apply', '--force']
         ib_args.append(f'--data={ib_data}')
-        result = subprocess.run(ib_args, capture_output=True, encoding='utf-8', errors='replace')
+        result = run_ibcmd(ib_args, warn_no_user=False)
         shutil.rmtree(ib_data, ignore_errors=True)
         if result.returncode != 0:
             if result.stdout:
